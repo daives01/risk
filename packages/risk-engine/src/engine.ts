@@ -1,11 +1,19 @@
 import type {
   Action,
+  AttackAction,
+  AttackResolved,
   GameEvent,
   GameState,
+  PendingOccupy,
   PlayerId,
   PlaceReinforcements,
   ReinforcementsPlaced,
+  TerritoryCaptured,
+  TerritoryId,
 } from "./types.js";
+import type { GraphMap } from "./map.js";
+import type { CombatConfig } from "./config.js";
+import { createRng } from "./rng.js";
 
 // ── Action result ─────────────────────────────────────────────────────
 
@@ -106,18 +114,205 @@ function handlePlaceReinforcements(
   return { state: newState, events: [event] };
 }
 
+// ── Attack handler ────────────────────────────────────────────────────
+
+function handleAttack(
+  state: GameState,
+  playerId: PlayerId,
+  action: AttackAction,
+  map: GraphMap,
+  combat: CombatConfig,
+): ActionResult {
+  // Phase check
+  if (state.turn.phase !== "Attack") {
+    throw new ActionError(
+      `Cannot attack: current phase is ${state.turn.phase}, expected Attack`,
+    );
+  }
+
+  // Current player check
+  if (state.turn.currentPlayerId !== playerId) {
+    throw new ActionError(
+      `Not your turn: current player is ${state.turn.currentPlayerId}`,
+    );
+  }
+
+  // No pending occupy
+  if (state.pending) {
+    throw new ActionError(
+      `Cannot attack while an Occupy is pending`,
+    );
+  }
+
+  // Territory existence
+  const fromTerritory = state.territories[action.from];
+  if (!fromTerritory) {
+    throw new ActionError(`Territory ${action.from} does not exist`);
+  }
+  const toTerritory = state.territories[action.to];
+  if (!toTerritory) {
+    throw new ActionError(`Territory ${action.to} does not exist`);
+  }
+
+  // Ownership: from must be owned by actor
+  if (fromTerritory.ownerId !== playerId) {
+    throw new ActionError(
+      `Territory ${action.from} is not owned by ${playerId}`,
+    );
+  }
+
+  // Target must not be owned by actor
+  if (toTerritory.ownerId === playerId) {
+    throw new ActionError(
+      `Cannot attack your own territory ${action.to}`,
+    );
+  }
+
+  // Adjacency check
+  const neighbors = map.adjacency[action.from];
+  if (!neighbors || !neighbors.includes(action.to)) {
+    throw new ActionError(
+      `Territory ${action.from} is not adjacent to ${action.to}`,
+    );
+  }
+
+  // From must have >= 2 armies
+  if (fromTerritory.armies < 2) {
+    throw new ActionError(
+      `Territory ${action.from} must have at least 2 armies to attack, has ${fromTerritory.armies}`,
+    );
+  }
+
+  // Determine attacker dice count
+  const maxAttackerCanRoll = Math.min(combat.maxAttackDice, fromTerritory.armies - 1);
+  let attackerDice: number;
+  if (action.attackerDice !== undefined) {
+    if (!combat.allowAttackerDiceChoice) {
+      throw new ActionError(`Attacker dice choice is not allowed by ruleset`);
+    }
+    if (!Number.isInteger(action.attackerDice) || action.attackerDice < 1) {
+      throw new ActionError(
+        `Invalid attacker dice: must be a positive integer, got ${action.attackerDice}`,
+      );
+    }
+    if (action.attackerDice > maxAttackerCanRoll) {
+      throw new ActionError(
+        `Cannot roll ${action.attackerDice} dice: maximum is ${maxAttackerCanRoll}`,
+      );
+    }
+    attackerDice = action.attackerDice;
+  } else {
+    attackerDice = maxAttackerCanRoll;
+  }
+
+  // Determine defender dice count (auto-defend: always max)
+  const defenderDice = Math.min(combat.maxDefendDice, toTerritory.armies);
+
+  // Roll dice using RNG
+  const rng = createRng(state.rng);
+  const attackRolls = rng.rollDice(attackerDice);
+  const defendRolls = rng.rollDice(defenderDice);
+
+  // Compare pairs (both sorted descending), ties go to defender
+  const pairs = Math.min(attackRolls.length, defendRolls.length);
+  let attackerLosses = 0;
+  let defenderLosses = 0;
+  for (let i = 0; i < pairs; i++) {
+    if (attackRolls[i]! > defendRolls[i]!) {
+      defenderLosses++;
+    } else {
+      attackerLosses++;
+    }
+  }
+
+  // Apply losses
+  const newFromArmies = fromTerritory.armies - attackerLosses;
+  const newToArmies = toTerritory.armies - defenderLosses;
+
+  const events: GameEvent[] = [];
+
+  const attackEvent: AttackResolved = {
+    type: "AttackResolved",
+    from: action.from,
+    to: action.to,
+    attackDice: attackerDice,
+    defendDice: defenderDice,
+    attackRolls,
+    defendRolls,
+    attackerLosses,
+    defenderLosses,
+  };
+  events.push(attackEvent);
+
+  // Build new territories
+  let newTerritories = {
+    ...state.territories,
+    [action.from]: { ...fromTerritory, armies: newFromArmies },
+    [action.to]: { ...toTerritory, armies: newToArmies },
+  };
+
+  let pending: PendingOccupy | undefined = state.pending;
+  let newCapturedThisTurn = state.capturedThisTurn;
+
+  // Check if territory captured (defender reaches 0 armies)
+  if (newToArmies === 0) {
+    // Territory captured: transfer ownership to attacker (0 armies for now, occupy will move)
+    newTerritories = {
+      ...newTerritories,
+      [action.to]: { ownerId: playerId, armies: 0 },
+    };
+
+    const captureEvent: TerritoryCaptured = {
+      type: "TerritoryCaptured",
+      from: action.from,
+      to: action.to,
+      newOwnerId: playerId,
+    };
+    events.push(captureEvent);
+
+    // Set pending occupy: must move at least attackerDice armies (the dice used), max is from.armies - 1
+    const minMove = attackerDice;
+    const maxMove = newFromArmies - 1;
+    pending = {
+      type: "Occupy",
+      from: action.from,
+      to: action.to,
+      minMove,
+      maxMove,
+    };
+
+    newCapturedThisTurn = true;
+  }
+
+  const newState: GameState = {
+    ...state,
+    territories: newTerritories,
+    pending,
+    capturedThisTurn: newCapturedThisTurn,
+    rng: rng.state,
+    stateVersion: state.stateVersion + 1,
+  };
+
+  return { state: newState, events };
+}
+
 // ── Dispatcher ────────────────────────────────────────────────────────
 
 export function applyAction(
   state: GameState,
   playerId: PlayerId,
   action: Action,
+  map?: GraphMap,
+  combat?: CombatConfig,
 ): ActionResult {
   switch (action.type) {
     case "PlaceReinforcements":
       return handlePlaceReinforcements(state, playerId, action);
-    case "TradeCards":
     case "Attack":
+      if (!map) throw new ActionError("GraphMap is required for Attack actions");
+      if (!combat) throw new ActionError("CombatConfig is required for Attack actions");
+      return handleAttack(state, playerId, action, map, combat);
+    case "TradeCards":
     case "Occupy":
     case "Fortify":
     case "EndAttackPhase":
