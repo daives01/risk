@@ -4,6 +4,7 @@ import type {
   AttackAction,
   AttackResolved,
   EndAttackPhase,
+  EndTurn,
   Fortify,
   FortifyResolved,
   GameEnded,
@@ -13,9 +14,12 @@ import type {
   PlayerEliminated,
   PlayerId,
   PlaceReinforcements,
+  ReinforcementsGranted,
   ReinforcementsPlaced,
   TerritoryCaptured,
   TerritoryId,
+  TurnAdvanced,
+  TurnEnded,
 } from "./types.js";
 import type { GraphMap } from "./map.js";
 import type { CombatConfig, FortifyConfig } from "./config.js";
@@ -1306,5 +1310,238 @@ describe("Fortify", () => {
     expect(state.territories[T1].armies).toBe(originalT1Armies);
     expect(state.territories[T2].armies).toBe(originalT2Armies);
     expect(state.stateVersion).toBe(0);
+  });
+});
+
+// ── EndTurn tests ──────────────────────────────────────────────────
+
+const endTurnMap: GraphMap = {
+  territories: {
+    [T1]: {},
+    [T2]: {},
+    [T3]: {},
+    [T4]: {},
+    [T5]: {},
+    [T6]: {},
+  },
+  adjacency: {
+    [T1]: [T2],
+    [T2]: [T1, T3],
+    [T3]: [T2, T4],
+    [T4]: [T3, T5],
+    [T5]: [T4, T6],
+    [T6]: [T5],
+  },
+};
+
+function endTurn(): EndTurn {
+  return { type: "EndTurn" };
+}
+
+function makeEndTurnState(overrides?: Partial<GameState>): GameState {
+  return makeState({
+    players: { p1: { status: "alive" }, p2: { status: "alive" } },
+    turnOrder: [P1, P2],
+    turn: { currentPlayerId: P1, phase: "Fortify", round: 1 },
+    reinforcements: undefined,
+    territories: {
+      [T1]: { ownerId: P1, armies: 5 },
+      [T2]: { ownerId: P1, armies: 3 },
+      [T3]: { ownerId: P1, armies: 2 },
+      [T4]: { ownerId: P2, armies: 4 },
+      [T5]: { ownerId: P2, armies: 3 },
+      [T6]: { ownerId: P2, armies: 2 },
+    },
+    capturedThisTurn: true,
+    ...overrides,
+  });
+}
+
+describe("EndTurn", () => {
+  test("advances turn to next player with Reinforcement phase", () => {
+    const state = makeEndTurnState();
+    const result = applyAction(state, P1, endTurn(), endTurnMap);
+
+    expect(result.state.turn.currentPlayerId).toBe(P2);
+    expect(result.state.turn.phase).toBe("Reinforcement");
+    expect(result.state.turn.round).toBe(1); // same round
+  });
+
+  test("clears capturedThisTurn flag", () => {
+    const state = makeEndTurnState({ capturedThisTurn: true });
+    const result = applyAction(state, P1, endTurn(), endTurnMap);
+
+    expect(result.state.capturedThisTurn).toBe(false);
+  });
+
+  test("computes reinforcements for next player", () => {
+    const state = makeEndTurnState();
+    const result = applyAction(state, P1, endTurn(), endTurnMap);
+
+    // P2 owns 3 territories → max(3, floor(3/3)) = 3
+    expect(result.state.reinforcements).toBeDefined();
+    expect(result.state.reinforcements!.remaining).toBe(3);
+  });
+
+  test("emits TurnEnded, TurnAdvanced, and ReinforcementsGranted events", () => {
+    const state = makeEndTurnState();
+    const result = applyAction(state, P1, endTurn(), endTurnMap);
+
+    expect(result.events).toHaveLength(3);
+
+    const turnEnded = result.events[0] as TurnEnded;
+    expect(turnEnded.type).toBe("TurnEnded");
+    expect(turnEnded.playerId).toBe(P1);
+
+    const turnAdvanced = result.events[1] as TurnAdvanced;
+    expect(turnAdvanced.type).toBe("TurnAdvanced");
+    expect(turnAdvanced.nextPlayerId).toBe(P2);
+    expect(turnAdvanced.round).toBe(1);
+
+    const reinforcements = result.events[2] as ReinforcementsGranted;
+    expect(reinforcements.type).toBe("ReinforcementsGranted");
+    expect(reinforcements.playerId).toBe(P2);
+    expect(reinforcements.amount).toBe(3);
+  });
+
+  test("increments round when wrapping back to first player", () => {
+    const state = makeEndTurnState({
+      turn: { currentPlayerId: P2, phase: "Fortify", round: 1 },
+    });
+    const result = applyAction(state, P2, endTurn(), endTurnMap);
+
+    expect(result.state.turn.currentPlayerId).toBe(P1);
+    expect(result.state.turn.round).toBe(2);
+
+    // TurnAdvanced event reflects the new round
+    const turnAdvanced = result.events[1] as TurnAdvanced;
+    expect(turnAdvanced.round).toBe(2);
+  });
+
+  test("skips defeated players when advancing turn", () => {
+    const state = makeEndTurnState({
+      players: {
+        p1: { status: "alive" },
+        p2: { status: "defeated" },
+        p3: { status: "alive" },
+      },
+      turnOrder: [P1, P2, P3],
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 3 },
+        [T3]: { ownerId: P1, armies: 2 },
+        [T4]: { ownerId: P1, armies: 4 },
+        [T5]: { ownerId: P3, armies: 3 },
+        [T6]: { ownerId: P3, armies: 2 },
+      },
+    });
+
+    const result = applyAction(state, P1, endTurn(), endTurnMap);
+
+    // Should skip P2 (defeated) and go to P3
+    expect(result.state.turn.currentPlayerId).toBe(P3);
+    expect(result.state.turn.round).toBe(1); // same round
+  });
+
+  test("increments round when wrapping past defeated players", () => {
+    // P3's turn, P1 alive, P2 defeated → wraps to P1 with round increment
+    const state = makeEndTurnState({
+      players: {
+        p1: { status: "alive" },
+        p2: { status: "defeated" },
+        p3: { status: "alive" },
+      },
+      turnOrder: [P1, P2, P3],
+      turn: { currentPlayerId: P3, phase: "Fortify", round: 3 },
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 3 },
+        [T3]: { ownerId: P1, armies: 2 },
+        [T4]: { ownerId: P1, armies: 4 },
+        [T5]: { ownerId: P3, armies: 3 },
+        [T6]: { ownerId: P3, armies: 2 },
+      },
+    });
+
+    const result = applyAction(state, P3, endTurn(), endTurnMap);
+
+    expect(result.state.turn.currentPlayerId).toBe(P1);
+    expect(result.state.turn.round).toBe(4);
+  });
+
+  test("increments stateVersion", () => {
+    const state = makeEndTurnState();
+    const result = applyAction(state, P1, endTurn(), endTurnMap);
+    expect(result.state.stateVersion).toBe(1);
+  });
+
+  test("does not mutate original state", () => {
+    const state = makeEndTurnState();
+    applyAction(state, P1, endTurn(), endTurnMap);
+
+    expect(state.turn.phase).toBe("Fortify");
+    expect(state.turn.currentPlayerId).toBe(P1);
+    expect(state.capturedThisTurn).toBe(true);
+    expect(state.stateVersion).toBe(0);
+  });
+
+  // ── Validation errors ────────────────────────────────────────────
+
+  test("rejects when not in Fortify phase", () => {
+    const state = makeEndTurnState({
+      turn: { currentPlayerId: P1, phase: "Attack", round: 1 },
+    });
+    expect(() => applyAction(state, P1, endTurn(), endTurnMap)).toThrow(
+      /current phase is Attack/,
+    );
+  });
+
+  test("rejects when not current player", () => {
+    const state = makeEndTurnState();
+    expect(() => applyAction(state, P2, endTurn(), endTurnMap)).toThrow(
+      /Not your turn/,
+    );
+  });
+
+  test("throws when map is not provided", () => {
+    const state = makeEndTurnState();
+    expect(() => applyAction(state, P1, endTurn())).toThrow(
+      /GraphMap is required/,
+    );
+  });
+
+  // ── Full turn cycle e2e ──────────────────────────────────────────
+
+  test("full turn cycle: Reinforcement → Attack → Fortify → EndTurn → next player Reinforcement", () => {
+    // Start with P1 in Reinforcement phase
+    const state = makeState({
+      players: { p1: { status: "alive" }, p2: { status: "alive" } },
+      turnOrder: [P1, P2],
+      territories: {
+        [T1]: { ownerId: P1, armies: 3 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 4 },
+        [T4]: { ownerId: P2, armies: 3 },
+        [T5]: { ownerId: P2, armies: 2 },
+        [T6]: { ownerId: P2, armies: 1 },
+      },
+      reinforcements: { remaining: 3 },
+    });
+
+    // Place all reinforcements
+    const r1 = applyAction(state, P1, place(T1, 3));
+    expect(r1.state.turn.phase).toBe("Attack");
+
+    // Skip attack
+    const r2 = applyAction(r1.state, P1, endAttack());
+    expect(r2.state.turn.phase).toBe("Fortify");
+
+    // End turn (skip fortify)
+    const r3 = applyAction(r2.state, P1, endTurn(), endTurnMap);
+    expect(r3.state.turn.phase).toBe("Reinforcement");
+    expect(r3.state.turn.currentPlayerId).toBe(P2);
+    expect(r3.state.reinforcements).toBeDefined();
+    expect(r3.state.reinforcements!.remaining).toBeGreaterThanOrEqual(3);
+    expect(r3.state.capturedThisTurn).toBe(false);
   });
 });

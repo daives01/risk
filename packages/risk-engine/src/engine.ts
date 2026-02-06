@@ -15,13 +15,17 @@ import type {
   PlayerState,
   PlayerId,
   PlaceReinforcements,
+  ReinforcementsGranted,
   ReinforcementsPlaced,
   TerritoryCaptured,
   TerritoryId,
+  TurnAdvanced,
+  TurnEnded,
 } from "./types.js";
 import type { GraphMap } from "./map.js";
 import type { CombatConfig, FortifyConfig } from "./config.js";
 import { createRng } from "./rng.js";
+import { calculateReinforcements } from "./reinforcements.js";
 
 // ── Action result ─────────────────────────────────────────────────────
 
@@ -579,6 +583,93 @@ function handleFortify(
   return { state: newState, events: [event] };
 }
 
+// ── EndTurn handler ──────────────────────────────────────────────────
+
+function handleEndTurn(
+  state: GameState,
+  playerId: PlayerId,
+  map: GraphMap,
+): ActionResult {
+  // Phase check: valid in Fortify phase
+  if (state.turn.phase !== "Fortify") {
+    throw new ActionError(
+      `Cannot end turn: current phase is ${state.turn.phase}, expected Fortify`,
+    );
+  }
+
+  // Current player check
+  if (state.turn.currentPlayerId !== playerId) {
+    throw new ActionError(
+      `Not your turn: current player is ${state.turn.currentPlayerId}`,
+    );
+  }
+
+  const events: GameEvent[] = [];
+
+  // TurnEnded event
+  const turnEndedEvent: TurnEnded = {
+    type: "TurnEnded",
+    playerId,
+  };
+  events.push(turnEndedEvent);
+
+  // Find next alive player in turnOrder
+  const { turnOrder } = state;
+  const currentIndex = turnOrder.indexOf(playerId);
+  let nextIndex = currentIndex;
+  let wrapped = false;
+
+  do {
+    nextIndex = (nextIndex + 1) % turnOrder.length;
+    if (nextIndex <= currentIndex && nextIndex !== currentIndex) {
+      wrapped = true;
+    }
+    // If we wrapped past index 0, we've completed a round
+    if (nextIndex === 0 && currentIndex !== 0) {
+      wrapped = true;
+    }
+  } while (state.players[turnOrder[nextIndex]!]!.status !== "alive");
+
+  const nextPlayerId = turnOrder[nextIndex]!;
+  const newRound = wrapped ? state.turn.round + 1 : state.turn.round;
+
+  // TurnAdvanced event
+  const turnAdvancedEvent: TurnAdvanced = {
+    type: "TurnAdvanced",
+    nextPlayerId,
+    round: newRound,
+  };
+  events.push(turnAdvancedEvent);
+
+  // Calculate reinforcements for next player
+  const reinforcementResult = calculateReinforcements(state, nextPlayerId, map);
+
+  const reinforcementsGrantedEvent: ReinforcementsGranted = {
+    type: "ReinforcementsGranted",
+    playerId: nextPlayerId,
+    amount: reinforcementResult.total,
+    sources: reinforcementResult.sources,
+  };
+  events.push(reinforcementsGrantedEvent);
+
+  const newState: GameState = {
+    ...state,
+    turn: {
+      currentPlayerId: nextPlayerId,
+      phase: "Reinforcement",
+      round: newRound,
+    },
+    capturedThisTurn: false,
+    reinforcements: {
+      remaining: reinforcementResult.total,
+      sources: reinforcementResult.sources,
+    },
+    stateVersion: state.stateVersion + 1,
+  };
+
+  return { state: newState, events };
+}
+
 // ── Dispatcher ────────────────────────────────────────────────────────
 
 export function applyAction(
@@ -604,8 +695,10 @@ export function applyAction(
       if (!map) throw new ActionError("GraphMap is required for Fortify actions");
       if (!fortifyConfig) throw new ActionError("FortifyConfig is required for Fortify actions");
       return handleFortify(state, playerId, action, map, fortifyConfig);
-    case "TradeCards":
     case "EndTurn":
+      if (!map) throw new ActionError("GraphMap is required for EndTurn actions");
+      return handleEndTurn(state, playerId, map);
+    case "TradeCards":
       throw new ActionError(`Action ${action.type} is not yet implemented`);
   }
 }
