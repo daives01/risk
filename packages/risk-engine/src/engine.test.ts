@@ -3,9 +3,12 @@ import { applyAction, ActionError } from "./engine.js";
 import type {
   AttackAction,
   AttackResolved,
+  EndAttackPhase,
+  GameEnded,
   GameState,
   OccupyAction,
   OccupyResolved,
+  PlayerEliminated,
   PlayerId,
   PlaceReinforcements,
   ReinforcementsPlaced,
@@ -19,6 +22,7 @@ import type { CombatConfig } from "./config.js";
 
 const P1 = "p1" as PlayerId;
 const P2 = "p2" as PlayerId;
+const P3 = "p3" as PlayerId;
 const T1 = "t1" as TerritoryId;
 const T2 = "t2" as TerritoryId;
 const T3 = "t3" as TerritoryId;
@@ -89,6 +93,10 @@ function attack(from: TerritoryId, to: TerritoryId, attackerDice?: number): Atta
 
 function occupy(moveArmies: number): OccupyAction {
   return { type: "Occupy", moveArmies };
+}
+
+function endAttack(): EndAttackPhase {
+  return { type: "EndAttackPhase" };
 }
 
 function makeOccupyState(overrides?: Partial<GameState>): GameState {
@@ -731,11 +739,13 @@ describe("Occupy", () => {
 
   test("works in end-to-end attack → occupy flow", () => {
     // Set up a scenario where capture happens, then resolve the occupy
+    // P2 must have another territory so game doesn't end on elimination
     const state = makeAttackState({
       territories: {
         [T1]: { ownerId: P1, armies: 5 },
         [T2]: { ownerId: P1, armies: 2 },
         [T3]: { ownerId: P2, armies: 1 },
+        [T4]: { ownerId: P2, armies: 3 },
       },
     });
 
@@ -771,5 +781,252 @@ describe("Occupy", () => {
       }
     }
     throw new Error("No capture occurred in 100 seeds");
+  });
+});
+
+// ── EndAttackPhase tests ────────────────────────────────────────────
+
+describe("EndAttackPhase", () => {
+  test("transitions from Attack to Fortify phase", () => {
+    const state = makeAttackState();
+    const result = applyAction(state, P1, endAttack());
+
+    expect(result.state.turn.phase).toBe("Fortify");
+    expect(result.state.stateVersion).toBe(1);
+  });
+
+  test("emits no events", () => {
+    const state = makeAttackState();
+    const result = applyAction(state, P1, endAttack());
+
+    expect(result.events).toHaveLength(0);
+  });
+
+  test("does not mutate original state", () => {
+    const state = makeAttackState();
+    applyAction(state, P1, endAttack());
+
+    expect(state.turn.phase).toBe("Attack");
+    expect(state.stateVersion).toBe(0);
+  });
+
+  test("rejects when not in Attack phase", () => {
+    const state = makeState(); // Reinforcement phase
+    expect(() => applyAction(state, P1, endAttack())).toThrow(
+      /current phase is Reinforcement/,
+    );
+  });
+
+  test("rejects when not current player", () => {
+    const state = makeAttackState();
+    expect(() => applyAction(state, P2, endAttack())).toThrow(
+      /Not your turn/,
+    );
+  });
+
+  test("rejects when occupy is pending", () => {
+    const state = makeOccupyState();
+    expect(() => applyAction(state, P1, endAttack())).toThrow(
+      /Occupy is pending/,
+    );
+  });
+});
+
+// ── Player elimination tests ────────────────────────────────────────
+
+describe("Player elimination", () => {
+  test("marks defender as defeated when they lose their last territory", () => {
+    // P2 owns only T3, which has 1 army — if captured, P2 is eliminated
+    const state = makeAttackState({
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 1 },
+      },
+    });
+
+    // Find a seed that captures
+    for (let seed = 0; seed < 100; seed++) {
+      const s = { ...state, rng: { seed, index: 0 } };
+      const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat);
+      const attackEvent = result.events[0] as AttackResolved;
+
+      if (attackEvent.defenderLosses === 1) {
+        // P2 should be defeated
+        expect(result.state.players["p2"]!.status).toBe("defeated");
+
+        // PlayerEliminated event emitted
+        const elimEvent = result.events.find(
+          (e) => e.type === "PlayerEliminated",
+        ) as PlayerEliminated;
+        expect(elimEvent).toBeDefined();
+        expect(elimEvent.eliminatedId).toBe(P2);
+        expect(elimEvent.byId).toBe(P1);
+        expect(elimEvent.cardsTransferred).toEqual([]);
+        return;
+      }
+    }
+    throw new Error("No capture occurred in 100 seeds");
+  });
+
+  test("does not mark defender as defeated when they have other territories", () => {
+    // P2 owns T3 and T4, losing T3 should not eliminate them
+    const state = makeAttackState({
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 1 },
+        [T4]: { ownerId: P2, armies: 3 },
+      },
+    });
+
+    for (let seed = 0; seed < 100; seed++) {
+      const s = { ...state, rng: { seed, index: 0 } };
+      const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat);
+      const attackEvent = result.events[0] as AttackResolved;
+
+      if (attackEvent.defenderLosses === 1) {
+        // P2 should still be alive
+        expect(result.state.players["p2"]!.status).toBe("alive");
+
+        // No PlayerEliminated event
+        const elimEvent = result.events.find(
+          (e) => e.type === "PlayerEliminated",
+        );
+        expect(elimEvent).toBeUndefined();
+        return;
+      }
+    }
+    throw new Error("No capture occurred in 100 seeds");
+  });
+
+  test("does not emit elimination for neutral territories", () => {
+    const state = makeAttackState({
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: "neutral", armies: 1 },
+      },
+    });
+
+    for (let seed = 0; seed < 100; seed++) {
+      const s = { ...state, rng: { seed, index: 0 } };
+      const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat);
+      const attackEvent = result.events[0] as AttackResolved;
+
+      if (attackEvent.defenderLosses === 1) {
+        // No PlayerEliminated event for neutral
+        const elimEvent = result.events.find(
+          (e) => e.type === "PlayerEliminated",
+        );
+        expect(elimEvent).toBeUndefined();
+        return;
+      }
+    }
+    throw new Error("No capture occurred in 100 seeds");
+  });
+});
+
+// ── Win condition tests ─────────────────────────────────────────────
+
+describe("Win condition", () => {
+  test("game ends when only 1 alive player remains (2-player game)", () => {
+    // P2 owns only T3 — capturing it eliminates P2 and P1 wins
+    const state = makeAttackState({
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 1 },
+      },
+    });
+
+    for (let seed = 0; seed < 100; seed++) {
+      const s = { ...state, rng: { seed, index: 0 } };
+      const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat);
+      const attackEvent = result.events[0] as AttackResolved;
+
+      if (attackEvent.defenderLosses === 1) {
+        // Game should be over
+        expect(result.state.turn.phase).toBe("GameOver");
+
+        // GameEnded event
+        const gameEndedEvent = result.events.find(
+          (e) => e.type === "GameEnded",
+        ) as GameEnded;
+        expect(gameEndedEvent).toBeDefined();
+        expect(gameEndedEvent.winningPlayerId).toBe(P1);
+
+        // Event order: AttackResolved, TerritoryCaptured, PlayerEliminated, GameEnded
+        const types = result.events.map((e) => e.type);
+        expect(types).toEqual([
+          "AttackResolved",
+          "TerritoryCaptured",
+          "PlayerEliminated",
+          "GameEnded",
+        ]);
+        return;
+      }
+    }
+    throw new Error("No capture occurred in 100 seeds");
+  });
+
+  test("game does not end when 2+ players remain alive (3-player game)", () => {
+    // P2 owns only T3, but P3 is alive with T4
+    const state = makeAttackState({
+      players: {
+        p1: { status: "alive" },
+        p2: { status: "alive" },
+        p3: { status: "alive" },
+      },
+      turnOrder: [P1, P2, P3],
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 1 },
+        [T4]: { ownerId: P3, armies: 3 },
+      },
+    });
+
+    for (let seed = 0; seed < 100; seed++) {
+      const s = { ...state, rng: { seed, index: 0 } };
+      const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat);
+      const attackEvent = result.events[0] as AttackResolved;
+
+      if (attackEvent.defenderLosses === 1) {
+        // P2 eliminated but game continues — P3 still alive
+        expect(result.state.players["p2"]!.status).toBe("defeated");
+        expect(result.state.turn.phase).toBe("Attack"); // not GameOver
+
+        const gameEndedEvent = result.events.find(
+          (e) => e.type === "GameEnded",
+        );
+        expect(gameEndedEvent).toBeUndefined();
+        return;
+      }
+    }
+    throw new Error("No capture occurred in 100 seeds");
+  });
+
+  test("game does not end when already-defeated player has 0 territories", () => {
+    // P2 already defeated, P3 alive — eliminating nobody new
+    const state = makeAttackState({
+      players: {
+        p1: { status: "alive" },
+        p2: { status: "defeated" },
+        p3: { status: "alive" },
+      },
+      turnOrder: [P1, P2, P3],
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P3, armies: 10 }, // P3 has lots of armies, won't be captured
+      },
+    });
+
+    const result = applyAction(state, P1, attack(T1, T3), testMap, defaultCombat);
+    // No elimination should happen since T3 won't be captured (10 armies)
+    expect(result.state.turn.phase).toBe("Attack");
+    const elimEvent = result.events.find((e) => e.type === "PlayerEliminated");
+    expect(elimEvent).toBeUndefined();
   });
 });

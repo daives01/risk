@@ -2,11 +2,15 @@ import type {
   Action,
   AttackAction,
   AttackResolved,
+  GameEnded,
   GameEvent,
   GameState,
   OccupyAction,
   OccupyResolved,
+  Phase,
   PendingOccupy,
+  PlayerEliminated,
+  PlayerState,
   PlayerId,
   PlaceReinforcements,
   ReinforcementsPlaced,
@@ -255,6 +259,8 @@ function handleAttack(
 
   let pending: PendingOccupy | undefined = state.pending;
   let newCapturedThisTurn = state.capturedThisTurn;
+  let newPlayers: Record<string, PlayerState> | undefined;
+  let newPhase: Phase | undefined;
 
   // Check if territory captured (defender reaches 0 armies)
   if (newToArmies === 0) {
@@ -284,13 +290,52 @@ function handleAttack(
     };
 
     newCapturedThisTurn = true;
+
+    // Check if defender is eliminated (has 0 territories remaining)
+    const defenderId = toTerritory.ownerId;
+    if (defenderId !== "neutral") {
+      const defenderHasTerritories = Object.values(newTerritories).some(
+        (t) => t.ownerId === defenderId,
+      );
+      if (!defenderHasTerritories) {
+        // Player eliminated
+        newPlayers = {
+          ...(newPlayers ?? state.players),
+          [defenderId]: { ...state.players[defenderId]!, status: "defeated" },
+        };
+
+        const eliminatedEvent: PlayerEliminated = {
+          type: "PlayerEliminated",
+          eliminatedId: defenderId,
+          byId: playerId,
+          cardsTransferred: [], // no-op until cards milestone
+        };
+        events.push(eliminatedEvent);
+
+        // Check win condition: only 1 alive player remaining
+        const playersRecord = newPlayers;
+        const alivePlayers = state.turnOrder.filter(
+          (pid) => playersRecord[pid]!.status === "alive",
+        );
+        if (alivePlayers.length === 1) {
+          newPhase = "GameOver";
+          const gameEndedEvent: GameEnded = {
+            type: "GameEnded",
+            winningPlayerId: alivePlayers[0],
+          };
+          events.push(gameEndedEvent);
+        }
+      }
+    }
   }
 
   const newState: GameState = {
     ...state,
+    players: newPlayers ?? state.players,
     territories: newTerritories,
     pending,
     capturedThisTurn: newCapturedThisTurn,
+    turn: newPhase ? { ...state.turn, phase: newPhase } : state.turn,
     rng: rng.state,
     stateVersion: state.stateVersion + 1,
   };
@@ -363,6 +408,42 @@ function handleOccupy(
   return { state: newState, events: [event] };
 }
 
+// ── EndAttackPhase handler ────────────────────────────────────────────
+
+function handleEndAttackPhase(
+  state: GameState,
+  playerId: PlayerId,
+): ActionResult {
+  // Phase check
+  if (state.turn.phase !== "Attack") {
+    throw new ActionError(
+      `Cannot end attack phase: current phase is ${state.turn.phase}, expected Attack`,
+    );
+  }
+
+  // Current player check
+  if (state.turn.currentPlayerId !== playerId) {
+    throw new ActionError(
+      `Not your turn: current player is ${state.turn.currentPlayerId}`,
+    );
+  }
+
+  // No pending occupy
+  if (state.pending) {
+    throw new ActionError(
+      `Cannot end attack phase while an Occupy is pending`,
+    );
+  }
+
+  const newState: GameState = {
+    ...state,
+    turn: { ...state.turn, phase: "Fortify" },
+    stateVersion: state.stateVersion + 1,
+  };
+
+  return { state: newState, events: [] };
+}
+
 // ── Dispatcher ────────────────────────────────────────────────────────
 
 export function applyAction(
@@ -381,9 +462,10 @@ export function applyAction(
       return handleAttack(state, playerId, action, map, combat);
     case "Occupy":
       return handleOccupy(state, playerId, action);
+    case "EndAttackPhase":
+      return handleEndAttackPhase(state, playerId);
     case "TradeCards":
     case "Fortify":
-    case "EndAttackPhase":
     case "EndTurn":
       throw new ActionError(`Action ${action.type} is not yet implemented`);
   }
