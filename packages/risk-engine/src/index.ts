@@ -18,3 +18,5 @@ export type { ActionResult } from "./engine.js";
 export { createDeck, drawCard } from "./cards.js";
 export type { DeckCreationResult, DrawResult } from "./cards.js";
 export { canPlace, canAttack, canFortifyFrom, canFortifyTo, canTraverse } from "./permissions.js";
+export { getLegalActions } from "./legal-actions.js";
+export type { LegalActionsConfig } from "./legal-actions.js";
