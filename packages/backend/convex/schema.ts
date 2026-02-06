@@ -33,6 +33,8 @@ export default defineSchema({
     createdAt: v.number(),
     startedAt: v.optional(v.number()),
     finishedAt: v.optional(v.number()),
+    state: v.optional(v.any()),
+    stateVersion: v.optional(v.number()),
   }),
   gamePlayers: defineTable({
     gameId: v.id("games"),
@@ -40,6 +42,7 @@ export default defineSchema({
     displayName: v.string(),
     role: v.union(v.literal("host"), v.literal("player")),
     joinedAt: v.number(),
+    enginePlayerId: v.optional(v.string()),
   })
     .index("by_gameId", ["gameId"])
     .index("by_userId", ["userId"])
