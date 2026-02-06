@@ -17,10 +17,14 @@ import type {
 import { anyApi, componentsGeneric } from "convex/server";
 import type * as games from "../games.js";
 import type * as http from "../http.js";
+import type * as maps from "../maps.js";
+import type * as seed from "../seed.js";
 
 const fullApi: ApiFromModules<{
   games: typeof games;
   http: typeof http;
+  maps: typeof maps;
+  seed: typeof seed;
 }> = anyApi as any;
 
 /**
