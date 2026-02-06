@@ -4,6 +4,8 @@ import type {
   AttackAction,
   AttackResolved,
   GameState,
+  OccupyAction,
+  OccupyResolved,
   PlayerId,
   PlaceReinforcements,
   ReinforcementsPlaced,
@@ -83,6 +85,25 @@ function attack(from: TerritoryId, to: TerritoryId, attackerDice?: number): Atta
   return attackerDice !== undefined
     ? { type: "Attack", from, to, attackerDice }
     : { type: "Attack", from, to };
+}
+
+function occupy(moveArmies: number): OccupyAction {
+  return { type: "Occupy", moveArmies };
+}
+
+function makeOccupyState(overrides?: Partial<GameState>): GameState {
+  return makeState({
+    turn: { currentPlayerId: P1, phase: "Attack", round: 1 },
+    reinforcements: undefined,
+    territories: {
+      [T1]: { ownerId: P1, armies: 5 },
+      [T2]: { ownerId: P1, armies: 2 },
+      [T3]: { ownerId: P1, armies: 0 }, // just captured, 0 armies
+    },
+    pending: { type: "Occupy", from: T1, to: T3, minMove: 2, maxMove: 4 },
+    capturedThisTurn: true,
+    ...overrides,
+  });
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────
@@ -588,5 +609,167 @@ describe("Attack", () => {
     expect(() =>
       applyAction(state, P1, attack(T1, T3), testMap),
     ).toThrow(/CombatConfig is required/);
+  });
+});
+
+// ── Occupy tests ─────────────────────────────────────────────────────
+
+describe("Occupy", () => {
+  test("moves armies from source to captured territory", () => {
+    const state = makeOccupyState();
+    const result = applyAction(state, P1, occupy(3));
+
+    expect(result.state.territories[T1].armies).toBe(2); // 5 - 3
+    expect(result.state.territories[T3].armies).toBe(3); // 0 + 3
+  });
+
+  test("emits OccupyResolved event", () => {
+    const state = makeOccupyState();
+    const result = applyAction(state, P1, occupy(2));
+
+    expect(result.events).toHaveLength(1);
+    const event = result.events[0] as OccupyResolved;
+    expect(event.type).toBe("OccupyResolved");
+    expect(event.from).toBe(T1);
+    expect(event.to).toBe(T3);
+    expect(event.moved).toBe(2);
+  });
+
+  test("clears pending state after occupy", () => {
+    const state = makeOccupyState();
+    const result = applyAction(state, P1, occupy(2));
+
+    expect(result.state.pending).toBeUndefined();
+  });
+
+  test("stays in Attack phase after occupy", () => {
+    const state = makeOccupyState();
+    const result = applyAction(state, P1, occupy(2));
+
+    expect(result.state.turn.phase).toBe("Attack");
+  });
+
+  test("increments stateVersion", () => {
+    const state = makeOccupyState();
+    const result = applyAction(state, P1, occupy(2));
+
+    expect(result.state.stateVersion).toBe(1);
+  });
+
+  test("accepts minMove exactly", () => {
+    const state = makeOccupyState();
+    const result = applyAction(state, P1, occupy(2)); // minMove = 2
+
+    expect(result.state.territories[T1].armies).toBe(3); // 5 - 2
+    expect(result.state.territories[T3].armies).toBe(2); // 0 + 2
+  });
+
+  test("accepts maxMove exactly", () => {
+    const state = makeOccupyState();
+    const result = applyAction(state, P1, occupy(4)); // maxMove = 4
+
+    expect(result.state.territories[T1].armies).toBe(1); // 5 - 4
+    expect(result.state.territories[T3].armies).toBe(4); // 0 + 4
+  });
+
+  test("preserves capturedThisTurn flag", () => {
+    const state = makeOccupyState();
+    const result = applyAction(state, P1, occupy(2));
+
+    expect(result.state.capturedThisTurn).toBe(true);
+  });
+
+  test("does not mutate original state", () => {
+    const state = makeOccupyState();
+    const originalT1Armies = state.territories[T1].armies;
+    const originalT3Armies = state.territories[T3].armies;
+
+    applyAction(state, P1, occupy(3));
+
+    expect(state.territories[T1].armies).toBe(originalT1Armies);
+    expect(state.territories[T3].armies).toBe(originalT3Armies);
+    expect(state.pending).toBeDefined();
+    expect(state.stateVersion).toBe(0);
+  });
+
+  // ── Validation error tests ──────────────────────────────────────────
+
+  test("rejects occupy when no pending occupy", () => {
+    const state = makeAttackState();
+    expect(() => applyAction(state, P1, occupy(1))).toThrow(
+      /No pending Occupy/,
+    );
+  });
+
+  test("rejects occupy when not current player", () => {
+    const state = makeOccupyState();
+    expect(() => applyAction(state, P2, occupy(2))).toThrow(
+      /Not your turn/,
+    );
+  });
+
+  test("rejects moveArmies below minMove", () => {
+    const state = makeOccupyState(); // minMove = 2
+    expect(() => applyAction(state, P1, occupy(1))).toThrow(
+      /at least 2/,
+    );
+  });
+
+  test("rejects moveArmies above maxMove", () => {
+    const state = makeOccupyState(); // maxMove = 4
+    expect(() => applyAction(state, P1, occupy(5))).toThrow(
+      /more than 4/,
+    );
+  });
+
+  test("rejects non-integer moveArmies", () => {
+    const state = makeOccupyState();
+    expect(() => applyAction(state, P1, occupy(2.5))).toThrow(
+      /must be an integer/,
+    );
+  });
+
+  test("works in end-to-end attack → occupy flow", () => {
+    // Set up a scenario where capture happens, then resolve the occupy
+    const state = makeAttackState({
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 1 },
+      },
+    });
+
+    // Find a seed that produces a capture
+    for (let seed = 0; seed < 100; seed++) {
+      const s = { ...state, rng: { seed, index: 0 } };
+      const attackResult = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat);
+      const attackEvent = attackResult.events[0] as AttackResolved;
+
+      if (attackEvent.defenderLosses === 1) {
+        // Territory captured → pending occupy set
+        expect(attackResult.state.pending).toBeDefined();
+
+        const pending = attackResult.state.pending!;
+        // Resolve the occupy with minimum move
+        const occupyResult = applyAction(attackResult.state, P1, occupy(pending.minMove));
+
+        // Verify armies moved correctly
+        expect(occupyResult.state.territories[T3].armies).toBe(pending.minMove);
+        expect(occupyResult.state.territories[T1].armies).toBe(
+          attackResult.state.territories[T1].armies - pending.minMove,
+        );
+
+        // Pending cleared, still in Attack phase
+        expect(occupyResult.state.pending).toBeUndefined();
+        expect(occupyResult.state.turn.phase).toBe("Attack");
+
+        // OccupyResolved event
+        const occupyEvent = occupyResult.events[0] as OccupyResolved;
+        expect(occupyEvent.type).toBe("OccupyResolved");
+        expect(occupyEvent.moved).toBe(pending.minMove);
+        return;
+      }
+    }
+    throw new Error("No capture occurred in 100 seeds");
   });
 });

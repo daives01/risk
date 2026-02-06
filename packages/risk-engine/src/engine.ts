@@ -4,6 +4,8 @@ import type {
   AttackResolved,
   GameEvent,
   GameState,
+  OccupyAction,
+  OccupyResolved,
   PendingOccupy,
   PlayerId,
   PlaceReinforcements,
@@ -296,6 +298,71 @@ function handleAttack(
   return { state: newState, events };
 }
 
+// ── Occupy handler ───────────────────────────────────────────────────
+
+function handleOccupy(
+  state: GameState,
+  playerId: PlayerId,
+  action: OccupyAction,
+): ActionResult {
+  // Must have a pending occupy
+  if (!state.pending || state.pending.type !== "Occupy") {
+    throw new ActionError("No pending Occupy to resolve");
+  }
+
+  // Current player check
+  if (state.turn.currentPlayerId !== playerId) {
+    throw new ActionError(
+      `Not your turn: current player is ${state.turn.currentPlayerId}`,
+    );
+  }
+
+  const { from, to, minMove, maxMove } = state.pending;
+
+  // moveArmies validation
+  if (!Number.isInteger(action.moveArmies)) {
+    throw new ActionError(
+      `Invalid moveArmies: must be an integer, got ${action.moveArmies}`,
+    );
+  }
+  if (action.moveArmies < minMove) {
+    throw new ActionError(
+      `Must move at least ${minMove} armies, got ${action.moveArmies}`,
+    );
+  }
+  if (action.moveArmies > maxMove) {
+    throw new ActionError(
+      `Cannot move more than ${maxMove} armies, got ${action.moveArmies}`,
+    );
+  }
+
+  // Apply: move armies from source to captured territory
+  const fromTerritory = state.territories[from]!;
+  const toTerritory = state.territories[to]!;
+
+  const newTerritories = {
+    ...state.territories,
+    [from]: { ...fromTerritory, armies: fromTerritory.armies - action.moveArmies },
+    [to]: { ...toTerritory, armies: toTerritory.armies + action.moveArmies },
+  };
+
+  const event: OccupyResolved = {
+    type: "OccupyResolved",
+    from,
+    to,
+    moved: action.moveArmies,
+  };
+
+  const newState: GameState = {
+    ...state,
+    territories: newTerritories,
+    pending: undefined,
+    stateVersion: state.stateVersion + 1,
+  };
+
+  return { state: newState, events: [event] };
+}
+
 // ── Dispatcher ────────────────────────────────────────────────────────
 
 export function applyAction(
@@ -312,8 +379,9 @@ export function applyAction(
       if (!map) throw new ActionError("GraphMap is required for Attack actions");
       if (!combat) throw new ActionError("CombatConfig is required for Attack actions");
       return handleAttack(state, playerId, action, map, combat);
-    case "TradeCards":
     case "Occupy":
+      return handleOccupy(state, playerId, action);
+    case "TradeCards":
     case "Fortify":
     case "EndAttackPhase":
     case "EndTurn":
