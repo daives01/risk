@@ -13,3 +13,5 @@ export { defaultRuleset } from "./config.js";
 export type { RulesetConfig, SetupConfig, CombatConfig, FortifyConfig, CardsConfig, TeamsConfig } from "./config.js";
 export { calculateReinforcements } from "./reinforcements.js";
 export type { ReinforcementResult } from "./reinforcements.js";
+export { applyAction, ActionError } from "./engine.js";
+export type { ActionResult } from "./engine.js";
