@@ -28,10 +28,11 @@ import type {
   TurnEnded,
 } from "./types.js";
 import type { GraphMap } from "./map.js";
-import type { CombatConfig, CardsConfig, FortifyConfig } from "./config.js";
+import type { CombatConfig, CardsConfig, FortifyConfig, TeamsConfig } from "./config.js";
 import { createRng } from "./rng.js";
 import { calculateReinforcements } from "./reinforcements.js";
 import { drawCard } from "./cards.js";
+import { canPlace, canAttack, canFortifyFrom, canFortifyTo, canTraverse } from "./permissions.js";
 
 // ── Action result ─────────────────────────────────────────────────────
 
@@ -56,6 +57,7 @@ function handlePlaceReinforcements(
   playerId: PlayerId,
   action: PlaceReinforcements,
   cardsConfig?: CardsConfig,
+  teamsConfig?: TeamsConfig,
 ): ActionResult {
   // Phase check
   if (state.turn.phase !== "Reinforcement") {
@@ -78,7 +80,7 @@ function handlePlaceReinforcements(
       `Territory ${action.territoryId} does not exist`,
     );
   }
-  if (territory.ownerId !== playerId) {
+  if (!canPlace(playerId, territory.ownerId, state.players, teamsConfig)) {
     throw new ActionError(
       `Territory ${action.territoryId} is not owned by ${playerId}`,
     );
@@ -151,6 +153,7 @@ function handleAttack(
   action: AttackAction,
   map: GraphMap,
   combat: CombatConfig,
+  teamsConfig?: TeamsConfig,
 ): ActionResult {
   // Phase check
   if (state.turn.phase !== "Attack") {
@@ -190,10 +193,15 @@ function handleAttack(
     );
   }
 
-  // Target must not be owned by actor
-  if (toTerritory.ownerId === playerId) {
+  // Target must be attackable (not self, not teammate if prevented)
+  if (!canAttack(playerId, toTerritory.ownerId, state.players, teamsConfig)) {
+    if (toTerritory.ownerId === playerId) {
+      throw new ActionError(
+        `Cannot attack your own territory ${action.to}`,
+      );
+    }
     throw new ActionError(
-      `Cannot attack your own territory ${action.to}`,
+      `Cannot attack teammate territory ${action.to}`,
     );
   }
 
@@ -486,6 +494,7 @@ function isConnected(
   playerId: PlayerId,
   state: GameState,
   map: GraphMap,
+  teamsConfig?: TeamsConfig,
 ): boolean {
   const visited = new Set<string>();
   const queue: TerritoryId[] = [from];
@@ -500,7 +509,7 @@ function isConnected(
     for (const neighbor of neighbors) {
       if (visited.has(neighbor)) continue;
       const territory = state.territories[neighbor];
-      if (territory && territory.ownerId === playerId) {
+      if (territory && canTraverse(playerId, territory.ownerId, state.players, teamsConfig)) {
         visited.add(neighbor);
         queue.push(neighbor);
       }
@@ -515,6 +524,7 @@ function handleFortify(
   action: Fortify,
   map: GraphMap,
   fortify: FortifyConfig,
+  teamsConfig?: TeamsConfig,
 ): ActionResult {
   // Phase check
   if (state.turn.phase !== "Fortify") {
@@ -540,13 +550,13 @@ function handleFortify(
     throw new ActionError(`Territory ${action.to} does not exist`);
   }
 
-  // Both territories must be owned by the player
-  if (fromTerritory.ownerId !== playerId) {
+  // Both territories must be accessible by the player
+  if (!canFortifyFrom(playerId, fromTerritory.ownerId, state.players, teamsConfig)) {
     throw new ActionError(
       `Territory ${action.from} is not owned by ${playerId}`,
     );
   }
-  if (toTerritory.ownerId !== playerId) {
+  if (!canFortifyTo(playerId, toTerritory.ownerId, state.players, teamsConfig)) {
     throw new ActionError(
       `Territory ${action.to} is not owned by ${playerId}`,
     );
@@ -580,8 +590,8 @@ function handleFortify(
       );
     }
   } else {
-    // connected mode: BFS through player-owned territories
-    if (!isConnected(action.from, action.to, playerId, state, map)) {
+    // connected mode: BFS through player-owned/team territories
+    if (!isConnected(action.from, action.to, playerId, state, map, teamsConfig)) {
       throw new ActionError(
         `No connected path from ${action.from} to ${action.to} through your territories`,
       );
@@ -892,14 +902,15 @@ export function applyAction(
   combat?: CombatConfig,
   fortifyConfig?: FortifyConfig,
   cardsConfig?: CardsConfig,
+  teamsConfig?: TeamsConfig,
 ): ActionResult {
   switch (action.type) {
     case "PlaceReinforcements":
-      return handlePlaceReinforcements(state, playerId, action, cardsConfig);
+      return handlePlaceReinforcements(state, playerId, action, cardsConfig, teamsConfig);
     case "Attack":
       if (!map) throw new ActionError("GraphMap is required for Attack actions");
       if (!combat) throw new ActionError("CombatConfig is required for Attack actions");
-      return handleAttack(state, playerId, action, map, combat);
+      return handleAttack(state, playerId, action, map, combat, teamsConfig);
     case "Occupy":
       return handleOccupy(state, playerId, action);
     case "EndAttackPhase":
@@ -907,7 +918,7 @@ export function applyAction(
     case "Fortify":
       if (!map) throw new ActionError("GraphMap is required for Fortify actions");
       if (!fortifyConfig) throw new ActionError("FortifyConfig is required for Fortify actions");
-      return handleFortify(state, playerId, action, map, fortifyConfig);
+      return handleFortify(state, playerId, action, map, fortifyConfig, teamsConfig);
     case "EndTurn":
       if (!map) throw new ActionError("GraphMap is required for EndTurn actions");
       return handleEndTurn(state, playerId, map, cardsConfig);

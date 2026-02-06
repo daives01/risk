@@ -24,7 +24,7 @@ import type {
   TurnEnded,
 } from "./types.js";
 import type { GraphMap } from "./map.js";
-import type { CombatConfig, CardsConfig, FortifyConfig } from "./config.js";
+import type { CombatConfig, CardsConfig, FortifyConfig, TeamsConfig } from "./config.js";
 import { defaultRuleset } from "./config.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -1827,5 +1827,240 @@ describe("Card transfer on elimination", () => {
       }
     }
     throw new Error("No capture occurred in 100 seeds");
+  });
+});
+
+// ── Team integration tests ──────────────────────────────────────────
+
+import type { TeamId } from "./types.js";
+
+const TEAM_A = "teamA" as TeamId;
+const TEAM_B = "teamB" as TeamId;
+
+const teamsFullAccess: TeamsConfig = {
+  teamsEnabled: true,
+  preventAttackingTeammates: true,
+  allowPlaceOnTeammate: true,
+  allowFortifyWithTeammate: true,
+  allowFortifyThroughTeammates: true,
+  winCondition: "lastTeamStanding",
+  continentBonusRecipient: "majorityHolderOnTeam",
+};
+
+const teamsRestricted: TeamsConfig = {
+  teamsEnabled: true,
+  preventAttackingTeammates: true,
+  allowPlaceOnTeammate: false,
+  allowFortifyWithTeammate: false,
+  allowFortifyThroughTeammates: false,
+  winCondition: "lastTeamStanding",
+  continentBonusRecipient: "majorityHolderOnTeam",
+};
+
+describe("Team: PlaceReinforcements", () => {
+  test("allows placing on teammate territory when enabled", () => {
+    const state = makeState({
+      players: {
+        p1: { status: "alive", teamId: TEAM_A },
+        p2: { status: "alive", teamId: TEAM_A },
+      },
+      territories: {
+        [T1]: { ownerId: P1, armies: 3 },
+        [T2]: { ownerId: P2, armies: 2 },
+        [T3]: { ownerId: P2, armies: 4 },
+      },
+    });
+
+    // Place on P2's territory (teammate)
+    const result = applyAction(state, P1, place(T2, 2), undefined, undefined, undefined, undefined, teamsFullAccess);
+    expect(result.state.territories[T2].armies).toBe(4); // 2 + 2
+  });
+
+  test("rejects placing on teammate territory when disabled", () => {
+    const state = makeState({
+      players: {
+        p1: { status: "alive", teamId: TEAM_A },
+        p2: { status: "alive", teamId: TEAM_A },
+      },
+      territories: {
+        [T1]: { ownerId: P1, armies: 3 },
+        [T2]: { ownerId: P2, armies: 2 },
+        [T3]: { ownerId: P2, armies: 4 },
+      },
+    });
+
+    expect(() =>
+      applyAction(state, P1, place(T2, 2), undefined, undefined, undefined, undefined, teamsRestricted),
+    ).toThrow(/not owned by/);
+  });
+
+  test("rejects placing on enemy team territory", () => {
+    const state = makeState({
+      players: {
+        p1: { status: "alive", teamId: TEAM_A },
+        p2: { status: "alive", teamId: TEAM_B },
+      },
+      territories: {
+        [T1]: { ownerId: P1, armies: 3 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 4 },
+      },
+    });
+
+    expect(() =>
+      applyAction(state, P1, place(T3, 2), undefined, undefined, undefined, undefined, teamsFullAccess),
+    ).toThrow(/not owned by/);
+  });
+});
+
+describe("Team: Attack", () => {
+  test("prevents attacking teammate territory", () => {
+    const state = makeAttackState({
+      players: {
+        p1: { status: "alive", teamId: TEAM_A },
+        p2: { status: "alive", teamId: TEAM_A },
+      },
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 4 },
+      },
+    });
+
+    expect(() =>
+      applyAction(state, P1, attack(T1, T3), testMap, defaultCombat, undefined, undefined, teamsFullAccess),
+    ).toThrow(/Cannot attack teammate territory/);
+  });
+
+  test("allows attacking enemy team territory", () => {
+    const state = makeAttackState({
+      players: {
+        p1: { status: "alive", teamId: TEAM_A },
+        p2: { status: "alive", teamId: TEAM_B },
+      },
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 4 },
+      },
+    });
+
+    // Should not throw
+    const result = applyAction(state, P1, attack(T1, T3), testMap, defaultCombat, undefined, undefined, teamsFullAccess);
+    expect(result.events[0]!.type).toBe("AttackResolved");
+  });
+
+  test("allows attacking neutral with teams enabled", () => {
+    const state = makeAttackState({
+      players: {
+        p1: { status: "alive", teamId: TEAM_A },
+        p2: { status: "alive", teamId: TEAM_B },
+      },
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: "neutral", armies: 1 },
+      },
+    });
+
+    const result = applyAction(state, P1, attack(T1, T3), testMap, defaultCombat, undefined, undefined, teamsFullAccess);
+    expect(result.events[0]!.type).toBe("AttackResolved");
+  });
+});
+
+describe("Team: Fortify", () => {
+  test("allows fortifying to teammate territory when enabled", () => {
+    const state = makeFortifyState({
+      players: {
+        p1: { status: "alive", teamId: TEAM_A },
+        p2: { status: "alive", teamId: TEAM_A },
+      },
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P2, armies: 3 },
+        [T3]: { ownerId: P1, armies: 2 },
+        [T4]: { ownerId: P2, armies: 4 },
+        [T5]: { ownerId: P1, armies: 1 },
+        [T6]: { ownerId: P1, armies: 2 },
+      },
+    });
+
+    // Fortify from P1's T1 to P2's T2 (teammate, adjacent)
+    const result = applyAction(
+      state, P1, fortify(T1, T2, 2), fortifyMap, undefined, connectedFortify, undefined, teamsFullAccess,
+    );
+    expect(result.state.territories[T1].armies).toBe(3);
+    expect(result.state.territories[T2].armies).toBe(5);
+  });
+
+  test("rejects fortifying to teammate territory when disabled", () => {
+    const state = makeFortifyState({
+      players: {
+        p1: { status: "alive", teamId: TEAM_A },
+        p2: { status: "alive", teamId: TEAM_A },
+      },
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P2, armies: 3 },
+        [T3]: { ownerId: P1, armies: 2 },
+        [T4]: { ownerId: P2, armies: 4 },
+        [T5]: { ownerId: P1, armies: 1 },
+        [T6]: { ownerId: P1, armies: 2 },
+      },
+    });
+
+    expect(() =>
+      applyAction(
+        state, P1, fortify(T1, T2, 2), fortifyMap, undefined, connectedFortify, undefined, teamsRestricted,
+      ),
+    ).toThrow(/not owned by/);
+  });
+
+  test("allows traversing teammate territory in connected mode when enabled", () => {
+    // T1(P1) — T2(P2 teammate) — T3(P1): should be able to fortify T1→T3 through T2
+    const state = makeFortifyState({
+      players: {
+        p1: { status: "alive", teamId: TEAM_A },
+        p2: { status: "alive", teamId: TEAM_A },
+      },
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P2, armies: 3 },
+        [T3]: { ownerId: P1, armies: 2 },
+        [T4]: { ownerId: P2, armies: 4 },
+        [T5]: { ownerId: P1, armies: 1 },
+        [T6]: { ownerId: P1, armies: 2 },
+      },
+    });
+
+    const result = applyAction(
+      state, P1, fortify(T1, T3, 2), fortifyMap, undefined, connectedFortify, undefined, teamsFullAccess,
+    );
+    expect(result.state.territories[T1].armies).toBe(3);
+    expect(result.state.territories[T3].armies).toBe(4);
+  });
+
+  test("rejects traversing teammate territory when disabled", () => {
+    // T1(P1) — T2(P2 teammate) — T3(P1): cannot traverse through T2
+    const state = makeFortifyState({
+      players: {
+        p1: { status: "alive", teamId: TEAM_A },
+        p2: { status: "alive", teamId: TEAM_A },
+      },
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P2, armies: 3 },
+        [T3]: { ownerId: P1, armies: 2 },
+        [T4]: { ownerId: P2, armies: 4 },
+        [T5]: { ownerId: P1, armies: 1 },
+        [T6]: { ownerId: P1, armies: 2 },
+      },
+    });
+
+    expect(() =>
+      applyAction(
+        state, P1, fortify(T1, T3, 2), fortifyMap, undefined, connectedFortify, undefined, teamsRestricted,
+      ),
+    ).toThrow(/No connected path/);
   });
 });
