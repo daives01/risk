@@ -1,8 +1,33 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { GenericDatabaseReader } from "convex/server";
+import type { DataModel } from "./_generated/dataModel";
 import { authComponent } from "./auth.js";
 import { applyAction, ActionError, defaultRuleset } from "risk-engine";
 import type { Action, CardId, GameState, PlayerId, GraphMap } from "risk-engine";
+import type { Id } from "./_generated/dataModel";
+
+const ACTION_RATE_LIMIT_MS = 500;
+
+async function enforceRateLimit(
+  db: GenericDatabaseReader<DataModel>,
+  gameId: Id<"games">,
+  playerId: string,
+) {
+  const lastPlayerAction = await db
+    .query("gameActions")
+    .withIndex("by_gameId_playerId", (q) =>
+      q.eq("gameId", gameId).eq("playerId", playerId),
+    )
+    .order("desc")
+    .first();
+  if (
+    lastPlayerAction &&
+    Date.now() - lastPlayerAction.createdAt < ACTION_RATE_LIMIT_MS
+  ) {
+    throw new Error("Too many actions. Please wait before submitting another.");
+  }
+}
 
 export const submitAction = mutation({
   args: {
@@ -40,6 +65,9 @@ export const submitAction = mutation({
       throw new Error("You are not a player in this game");
     }
     const playerId = playerDoc.enginePlayerId as PlayerId;
+
+    // Rate limit
+    await enforceRateLimit(ctx.db, args.gameId, playerId);
 
     // Fetch map for actions that need it
     const mapDoc = await ctx.db
@@ -85,6 +113,8 @@ export const submitAction = mutation({
       playerId: playerDoc.enginePlayerId,
       action: args.action,
       events: result.events,
+      stateVersionBefore: state.stateVersion,
+      stateVersionAfter: result.state.stateVersion,
       createdAt: Date.now(),
     });
 
@@ -131,6 +161,8 @@ export const resign = mutation({
       throw new Error("You are not a player in this game");
     }
     const playerId = playerDoc.enginePlayerId as PlayerId;
+
+    await enforceRateLimit(ctx.db, gameId, playerId);
 
     // Check player is still alive
     if (state.players[playerId]?.status !== "alive") {
@@ -245,6 +277,8 @@ export const resign = mutation({
       playerId,
       action: { type: "Resign" },
       events,
+      stateVersionBefore: state.stateVersion,
+      stateVersionAfter: newState.stateVersion,
       createdAt: Date.now(),
     });
 
