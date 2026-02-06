@@ -21,14 +21,37 @@ const graphMap = v.object({
 export default defineSchema({
   games: defineTable({
     name: v.string(),
+    mapId: v.string(),
     status: v.union(
       v.literal("lobby"),
       v.literal("active"),
       v.literal("finished"),
     ),
+    visibility: v.union(v.literal("public"), v.literal("unlisted")),
+    maxPlayers: v.number(),
     createdBy: v.string(),
     createdAt: v.number(),
+    startedAt: v.optional(v.number()),
+    finishedAt: v.optional(v.number()),
   }),
+  gamePlayers: defineTable({
+    gameId: v.id("games"),
+    userId: v.string(),
+    displayName: v.string(),
+    role: v.union(v.literal("host"), v.literal("player")),
+    joinedAt: v.number(),
+  })
+    .index("by_gameId", ["gameId"])
+    .index("by_userId", ["userId"])
+    .index("by_gameId_userId", ["gameId", "userId"]),
+  gameInvites: defineTable({
+    gameId: v.id("games"),
+    code: v.string(),
+    createdAt: v.number(),
+    expiresAt: v.optional(v.number()),
+  })
+    .index("by_gameId", ["gameId"])
+    .index("by_code", ["code"]),
   maps: defineTable({
     mapId: v.string(),
     name: v.string(),
