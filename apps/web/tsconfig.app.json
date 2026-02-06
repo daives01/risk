@@ -19,7 +19,8 @@
     /* Paths */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@backend/*": ["../../packages/backend/convex/*"]
     },
 
     /* Linting */
