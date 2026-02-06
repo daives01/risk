@@ -11,3 +11,5 @@ export { validateMap } from "./map.js";
 export type { GraphMap, TerritoryInfo, ContinentInfo, MapValidationResult } from "./map.js";
 export { defaultRuleset } from "./config.js";
 export type { RulesetConfig, SetupConfig, CombatConfig, FortifyConfig, CardsConfig, TeamsConfig } from "./config.js";
+export { calculateReinforcements } from "./reinforcements.js";
+export type { ReinforcementResult } from "./reinforcements.js";
