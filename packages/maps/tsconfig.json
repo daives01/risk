@@ -9,12 +9,13 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "composite": true
+    "composite": true,
+    "outDir": "./dist",
+    "rootDir": "./src"
   },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"],
   "references": [
-    { "path": "packages/risk-engine" },
-    { "path": "packages/maps" },
-    { "path": "apps/web" }
-  ],
-  "files": []
+    { "path": "../risk-engine" }
+  ]
 }
