@@ -2,6 +2,8 @@ import type {
   Action,
   AttackAction,
   AttackResolved,
+  Fortify,
+  FortifyResolved,
   GameEnded,
   GameEvent,
   GameState,
@@ -18,7 +20,7 @@ import type {
   TerritoryId,
 } from "./types.js";
 import type { GraphMap } from "./map.js";
-import type { CombatConfig } from "./config.js";
+import type { CombatConfig, FortifyConfig } from "./config.js";
 import { createRng } from "./rng.js";
 
 // ── Action result ─────────────────────────────────────────────────────
@@ -444,6 +446,139 @@ function handleEndAttackPhase(
   return { state: newState, events: [] };
 }
 
+// ── Fortify handler ──────────────────────────────────────────────────
+
+function isConnected(
+  from: TerritoryId,
+  to: TerritoryId,
+  playerId: PlayerId,
+  state: GameState,
+  map: GraphMap,
+): boolean {
+  const visited = new Set<string>();
+  const queue: TerritoryId[] = [from];
+  visited.add(from);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (current === to) return true;
+
+    const neighbors = map.adjacency[current];
+    if (!neighbors) continue;
+    for (const neighbor of neighbors) {
+      if (visited.has(neighbor)) continue;
+      const territory = state.territories[neighbor];
+      if (territory && territory.ownerId === playerId) {
+        visited.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+  }
+  return false;
+}
+
+function handleFortify(
+  state: GameState,
+  playerId: PlayerId,
+  action: Fortify,
+  map: GraphMap,
+  fortify: FortifyConfig,
+): ActionResult {
+  // Phase check
+  if (state.turn.phase !== "Fortify") {
+    throw new ActionError(
+      `Cannot fortify: current phase is ${state.turn.phase}, expected Fortify`,
+    );
+  }
+
+  // Current player check
+  if (state.turn.currentPlayerId !== playerId) {
+    throw new ActionError(
+      `Not your turn: current player is ${state.turn.currentPlayerId}`,
+    );
+  }
+
+  // Territory existence
+  const fromTerritory = state.territories[action.from];
+  if (!fromTerritory) {
+    throw new ActionError(`Territory ${action.from} does not exist`);
+  }
+  const toTerritory = state.territories[action.to];
+  if (!toTerritory) {
+    throw new ActionError(`Territory ${action.to} does not exist`);
+  }
+
+  // Both territories must be owned by the player
+  if (fromTerritory.ownerId !== playerId) {
+    throw new ActionError(
+      `Territory ${action.from} is not owned by ${playerId}`,
+    );
+  }
+  if (toTerritory.ownerId !== playerId) {
+    throw new ActionError(
+      `Territory ${action.to} is not owned by ${playerId}`,
+    );
+  }
+
+  // Cannot fortify to same territory
+  if (action.from === action.to) {
+    throw new ActionError(`Cannot fortify from a territory to itself`);
+  }
+
+  // Count validation
+  if (!Number.isInteger(action.count) || action.count < 1) {
+    throw new ActionError(
+      `Invalid count: must be a positive integer, got ${action.count}`,
+    );
+  }
+
+  // Must leave at least 1 army
+  if (action.count >= fromTerritory.armies) {
+    throw new ActionError(
+      `Cannot move ${action.count} armies: must leave at least 1 army on ${action.from} (has ${fromTerritory.armies})`,
+    );
+  }
+
+  // Connectivity check based on fortify mode
+  if (fortify.fortifyMode === "adjacent") {
+    const neighbors = map.adjacency[action.from];
+    if (!neighbors || !neighbors.includes(action.to)) {
+      throw new ActionError(
+        `Territory ${action.from} is not adjacent to ${action.to}`,
+      );
+    }
+  } else {
+    // connected mode: BFS through player-owned territories
+    if (!isConnected(action.from, action.to, playerId, state, map)) {
+      throw new ActionError(
+        `No connected path from ${action.from} to ${action.to} through your territories`,
+      );
+    }
+  }
+
+  // Apply: move armies
+  const newTerritories = {
+    ...state.territories,
+    [action.from]: { ...fromTerritory, armies: fromTerritory.armies - action.count },
+    [action.to]: { ...toTerritory, armies: toTerritory.armies + action.count },
+  };
+
+  const event: FortifyResolved = {
+    type: "FortifyResolved",
+    from: action.from,
+    to: action.to,
+    moved: action.count,
+  };
+
+  const newState: GameState = {
+    ...state,
+    territories: newTerritories,
+    stateVersion: state.stateVersion + 1,
+  };
+
+  return { state: newState, events: [event] };
+}
+
 // ── Dispatcher ────────────────────────────────────────────────────────
 
 export function applyAction(
@@ -452,6 +587,7 @@ export function applyAction(
   action: Action,
   map?: GraphMap,
   combat?: CombatConfig,
+  fortifyConfig?: FortifyConfig,
 ): ActionResult {
   switch (action.type) {
     case "PlaceReinforcements":
@@ -464,8 +600,11 @@ export function applyAction(
       return handleOccupy(state, playerId, action);
     case "EndAttackPhase":
       return handleEndAttackPhase(state, playerId);
-    case "TradeCards":
     case "Fortify":
+      if (!map) throw new ActionError("GraphMap is required for Fortify actions");
+      if (!fortifyConfig) throw new ActionError("FortifyConfig is required for Fortify actions");
+      return handleFortify(state, playerId, action, map, fortifyConfig);
+    case "TradeCards":
     case "EndTurn":
       throw new ActionError(`Action ${action.type} is not yet implemented`);
   }

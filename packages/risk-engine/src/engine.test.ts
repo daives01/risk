@@ -4,6 +4,8 @@ import type {
   AttackAction,
   AttackResolved,
   EndAttackPhase,
+  Fortify,
+  FortifyResolved,
   GameEnded,
   GameState,
   OccupyAction,
@@ -16,7 +18,7 @@ import type {
   TerritoryId,
 } from "./types.js";
 import type { GraphMap } from "./map.js";
-import type { CombatConfig } from "./config.js";
+import type { CombatConfig, FortifyConfig } from "./config.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -27,6 +29,8 @@ const T1 = "t1" as TerritoryId;
 const T2 = "t2" as TerritoryId;
 const T3 = "t3" as TerritoryId;
 const T4 = "t4" as TerritoryId;
+const T5 = "t5" as TerritoryId;
+const T6 = "t6" as TerritoryId;
 
 const testMap: GraphMap = {
   territories: {
@@ -1028,5 +1032,279 @@ describe("Win condition", () => {
     expect(result.state.turn.phase).toBe("Attack");
     const elimEvent = result.events.find((e) => e.type === "PlayerEliminated");
     expect(elimEvent).toBeUndefined();
+  });
+});
+
+// ── Fortify tests ──────────────────────────────────────────────────
+
+// Chain map: T1 — T2 — T3 — T5, with T4 isolated, T6 connected to T5
+const fortifyMap: GraphMap = {
+  territories: {
+    [T1]: {},
+    [T2]: {},
+    [T3]: {},
+    [T4]: {},
+    [T5]: {},
+    [T6]: {},
+  },
+  adjacency: {
+    [T1]: [T2],
+    [T2]: [T1, T3],
+    [T3]: [T2, T5],
+    [T4]: [], // isolated
+    [T5]: [T3, T6],
+    [T6]: [T5],
+  },
+};
+
+const connectedFortify: FortifyConfig = {
+  fortifyMode: "connected",
+  allowFortifyWithTeammate: false,
+  allowFortifyThroughTeammates: false,
+};
+
+const adjacentFortify: FortifyConfig = {
+  fortifyMode: "adjacent",
+  allowFortifyWithTeammate: false,
+  allowFortifyThroughTeammates: false,
+};
+
+function makeFortifyState(overrides?: Partial<GameState>): GameState {
+  return makeState({
+    turn: { currentPlayerId: P1, phase: "Fortify", round: 1 },
+    reinforcements: undefined,
+    territories: {
+      [T1]: { ownerId: P1, armies: 5 },
+      [T2]: { ownerId: P1, armies: 3 },
+      [T3]: { ownerId: P1, armies: 2 },
+      [T4]: { ownerId: P2, armies: 4 },
+      [T5]: { ownerId: P1, armies: 1 },
+      [T6]: { ownerId: P1, armies: 2 },
+    },
+    ...overrides,
+  });
+}
+
+function fortify(from: TerritoryId, to: TerritoryId, count: number): Fortify {
+  return { type: "Fortify", from, to, count };
+}
+
+describe("Fortify", () => {
+  // ── Connected mode (default) ─────────────────────────────────────
+
+  test("moves armies between adjacent territories (connected mode)", () => {
+    const state = makeFortifyState();
+    const result = applyAction(state, P1, fortify(T1, T2, 2), fortifyMap, undefined, connectedFortify);
+
+    expect(result.state.territories[T1].armies).toBe(3); // 5 - 2
+    expect(result.state.territories[T2].armies).toBe(5); // 3 + 2
+  });
+
+  test("moves armies through connected path (T1→T3 via T2)", () => {
+    const state = makeFortifyState();
+    const result = applyAction(state, P1, fortify(T1, T3, 3), fortifyMap, undefined, connectedFortify);
+
+    expect(result.state.territories[T1].armies).toBe(2); // 5 - 3
+    expect(result.state.territories[T3].armies).toBe(5); // 2 + 3
+  });
+
+  test("moves armies through long connected path (T1→T5 via T2→T3)", () => {
+    const state = makeFortifyState();
+    const result = applyAction(state, P1, fortify(T1, T5, 2), fortifyMap, undefined, connectedFortify);
+
+    expect(result.state.territories[T1].armies).toBe(3); // 5 - 2
+    expect(result.state.territories[T5].armies).toBe(3); // 1 + 2
+  });
+
+  test("rejects connected fortify when path is broken by enemy territory", () => {
+    const state = makeFortifyState({
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P2, armies: 3 },
+        [T3]: { ownerId: P1, armies: 2 },
+        [T4]: { ownerId: P2, armies: 4 },
+        [T5]: { ownerId: P1, armies: 1 },
+        [T6]: { ownerId: P1, armies: 2 },
+      },
+    });
+
+    expect(() =>
+      applyAction(state, P1, fortify(T1, T3, 1), fortifyMap, undefined, connectedFortify),
+    ).toThrow(/No connected path/);
+  });
+
+  test("rejects fortify to isolated territory (no connection)", () => {
+    const state = makeFortifyState({
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 3 },
+        [T3]: { ownerId: P1, armies: 2 },
+        [T4]: { ownerId: P1, armies: 4 },
+        [T5]: { ownerId: P1, armies: 1 },
+        [T6]: { ownerId: P1, armies: 2 },
+      },
+    });
+
+    expect(() =>
+      applyAction(state, P1, fortify(T1, T4, 1), fortifyMap, undefined, connectedFortify),
+    ).toThrow(/No connected path/);
+  });
+
+  // ── Adjacent mode ────────────────────────────────────────────────
+
+  test("moves armies between adjacent territories (adjacent mode)", () => {
+    const state = makeFortifyState();
+    const result = applyAction(state, P1, fortify(T1, T2, 2), fortifyMap, undefined, adjacentFortify);
+
+    expect(result.state.territories[T1].armies).toBe(3); // 5 - 2
+    expect(result.state.territories[T2].armies).toBe(5); // 3 + 2
+  });
+
+  test("rejects non-adjacent fortify in adjacent mode", () => {
+    const state = makeFortifyState();
+    expect(() =>
+      applyAction(state, P1, fortify(T1, T3, 1), fortifyMap, undefined, adjacentFortify),
+    ).toThrow(/not adjacent/);
+  });
+
+  // ── Event emission ───────────────────────────────────────────────
+
+  test("emits FortifyResolved event", () => {
+    const state = makeFortifyState();
+    const result = applyAction(state, P1, fortify(T1, T2, 2), fortifyMap, undefined, connectedFortify);
+
+    expect(result.events).toHaveLength(1);
+    const event = result.events[0] as FortifyResolved;
+    expect(event.type).toBe("FortifyResolved");
+    expect(event.from).toBe(T1);
+    expect(event.to).toBe(T2);
+    expect(event.moved).toBe(2);
+  });
+
+  test("increments stateVersion", () => {
+    const state = makeFortifyState();
+    const result = applyAction(state, P1, fortify(T1, T2, 2), fortifyMap, undefined, connectedFortify);
+    expect(result.state.stateVersion).toBe(1);
+  });
+
+  // ── Validation errors ────────────────────────────────────────────
+
+  test("rejects when not in Fortify phase", () => {
+    const state = makeAttackState();
+    expect(() =>
+      applyAction(state, P1, fortify(T1, T2, 1), fortifyMap, undefined, connectedFortify),
+    ).toThrow(/current phase is Attack/);
+  });
+
+  test("rejects when not current player", () => {
+    const state = makeFortifyState();
+    expect(() =>
+      applyAction(state, P2, fortify(T1, T2, 1), fortifyMap, undefined, connectedFortify),
+    ).toThrow(/Not your turn/);
+  });
+
+  test("rejects nonexistent source territory", () => {
+    const state = makeFortifyState();
+    expect(() =>
+      applyAction(state, P1, fortify("fake" as TerritoryId, T2, 1), fortifyMap, undefined, connectedFortify),
+    ).toThrow(/does not exist/);
+  });
+
+  test("rejects nonexistent destination territory", () => {
+    const state = makeFortifyState();
+    expect(() =>
+      applyAction(state, P1, fortify(T1, "fake" as TerritoryId, 1), fortifyMap, undefined, connectedFortify),
+    ).toThrow(/does not exist/);
+  });
+
+  test("rejects when source not owned by player", () => {
+    const state = makeFortifyState();
+    expect(() =>
+      applyAction(state, P1, fortify(T4, T1, 1), fortifyMap, undefined, connectedFortify),
+    ).toThrow(/not owned by/);
+  });
+
+  test("rejects when destination not owned by player", () => {
+    const state = makeFortifyState();
+    expect(() =>
+      applyAction(state, P1, fortify(T1, T4, 1), fortifyMap, undefined, connectedFortify),
+    ).toThrow(/not owned by/);
+  });
+
+  test("rejects fortify to same territory", () => {
+    const state = makeFortifyState();
+    expect(() =>
+      applyAction(state, P1, fortify(T1, T1, 1), fortifyMap, undefined, connectedFortify),
+    ).toThrow(/to itself/);
+  });
+
+  test("rejects count of 0", () => {
+    const state = makeFortifyState();
+    expect(() =>
+      applyAction(state, P1, fortify(T1, T2, 0), fortifyMap, undefined, connectedFortify),
+    ).toThrow(/positive integer/);
+  });
+
+  test("rejects negative count", () => {
+    const state = makeFortifyState();
+    expect(() =>
+      applyAction(state, P1, fortify(T1, T2, -1), fortifyMap, undefined, connectedFortify),
+    ).toThrow(/positive integer/);
+  });
+
+  test("rejects non-integer count", () => {
+    const state = makeFortifyState();
+    expect(() =>
+      applyAction(state, P1, fortify(T1, T2, 1.5), fortifyMap, undefined, connectedFortify),
+    ).toThrow(/positive integer/);
+  });
+
+  test("rejects moving all armies (must leave at least 1)", () => {
+    const state = makeFortifyState();
+    expect(() =>
+      applyAction(state, P1, fortify(T1, T2, 5), fortifyMap, undefined, connectedFortify),
+    ).toThrow(/must leave at least 1/);
+  });
+
+  test("rejects moving more armies than available", () => {
+    const state = makeFortifyState();
+    expect(() =>
+      applyAction(state, P1, fortify(T1, T2, 6), fortifyMap, undefined, connectedFortify),
+    ).toThrow(/must leave at least 1/);
+  });
+
+  test("allows moving exactly armies - 1", () => {
+    const state = makeFortifyState();
+    const result = applyAction(state, P1, fortify(T1, T2, 4), fortifyMap, undefined, connectedFortify);
+    expect(result.state.territories[T1].armies).toBe(1);
+    expect(result.state.territories[T2].armies).toBe(7); // 3 + 4
+  });
+
+  test("throws when map is not provided", () => {
+    const state = makeFortifyState();
+    expect(() =>
+      applyAction(state, P1, fortify(T1, T2, 1), undefined, undefined, connectedFortify),
+    ).toThrow(/GraphMap is required/);
+  });
+
+  test("throws when fortify config is not provided", () => {
+    const state = makeFortifyState();
+    expect(() =>
+      applyAction(state, P1, fortify(T1, T2, 1), fortifyMap),
+    ).toThrow(/FortifyConfig is required/);
+  });
+
+  // ── Immutability ─────────────────────────────────────────────────
+
+  test("does not mutate original state", () => {
+    const state = makeFortifyState();
+    const originalT1Armies = state.territories[T1].armies;
+    const originalT2Armies = state.territories[T2].armies;
+
+    applyAction(state, P1, fortify(T1, T2, 2), fortifyMap, undefined, connectedFortify);
+
+    expect(state.territories[T1].armies).toBe(originalT1Armies);
+    expect(state.territories[T2].armies).toBe(originalT2Armies);
+    expect(state.stateVersion).toBe(0);
   });
 });
