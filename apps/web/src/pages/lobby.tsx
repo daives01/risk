@@ -68,19 +68,8 @@ export default function LobbyPage() {
     );
   }
 
-  if (lobby.game.status === "active") {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Card className="w-full max-w-sm">
-          <CardContent className="pt-6 text-center">
-            <p className="mb-4">This game has started!</p>
-            <Button onClick={() => navigate(`/g/${gameId}`)}>
-              Go to game
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
+  if (lobby.game.status === "active" || lobby.game.status === "finished") {
+    return <Navigate to={`/play/${gameId}`} replace />;
   }
 
   const userId = session.user.id;

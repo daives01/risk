@@ -4,12 +4,6 @@ import { ENGINE_VERSION } from "risk-engine";
 import type { GameState, PlayerId } from "risk-engine";
 import { authComponent } from "./auth.js";
 
-export const list = query({
-  handler: async (ctx) => {
-    return await ctx.db.query("games").collect();
-  },
-});
-
 export const engineVersion = query({
   handler: async () => {
     return ENGINE_VERSION;

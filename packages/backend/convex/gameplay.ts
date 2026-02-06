@@ -1,8 +1,33 @@
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { GenericDatabaseReader } from "convex/server";
+import type { DataModel } from "./_generated/dataModel";
 import { authComponent } from "./auth.js";
 import { applyAction, ActionError, defaultRuleset } from "risk-engine";
 import type { Action, CardId, GameState, PlayerId, GraphMap } from "risk-engine";
+import type { Id } from "./_generated/dataModel";
+
+const ACTION_RATE_LIMIT_MS = 500;
+
+async function enforceRateLimit(
+  db: GenericDatabaseReader<DataModel>,
+  gameId: Id<"games">,
+  playerId: string,
+) {
+  const lastPlayerAction = await db
+    .query("gameActions")
+    .withIndex("by_gameId_playerId", (q) =>
+      q.eq("gameId", gameId).eq("playerId", playerId),
+    )
+    .order("desc")
+    .first();
+  if (
+    lastPlayerAction &&
+    Date.now() - lastPlayerAction.createdAt < ACTION_RATE_LIMIT_MS
+  ) {
+    throw new Error("Too many actions. Please wait before submitting another.");
+  }
+}
 
 export const submitAction = mutation({
   args: {
@@ -40,6 +65,9 @@ export const submitAction = mutation({
       throw new Error("You are not a player in this game");
     }
     const playerId = playerDoc.enginePlayerId as PlayerId;
+
+    // Rate limit
+    await enforceRateLimit(ctx.db, args.gameId, playerId);
 
     // Fetch map for actions that need it
     const mapDoc = await ctx.db
@@ -85,6 +113,8 @@ export const submitAction = mutation({
       playerId: playerDoc.enginePlayerId,
       action: args.action,
       events: result.events,
+      stateVersionBefore: state.stateVersion,
+      stateVersionAfter: result.state.stateVersion,
       createdAt: Date.now(),
     });
 
@@ -131,6 +161,8 @@ export const resign = mutation({
       throw new Error("You are not a player in this game");
     }
     const playerId = playerDoc.enginePlayerId as PlayerId;
+
+    await enforceRateLimit(ctx.db, gameId, playerId);
 
     // Check player is still alive
     if (state.players[playerId]?.status !== "alive") {
@@ -245,6 +277,8 @@ export const resign = mutation({
       playerId,
       action: { type: "Resign" },
       events,
+      stateVersionBefore: state.stateVersion,
+      stateVersionAfter: newState.stateVersion,
       createdAt: Date.now(),
     });
 
@@ -255,5 +289,78 @@ export const resign = mutation({
     });
 
     return { events, newVersion: newState.stateVersion };
+  },
+});
+
+type RawEvent = Record<string, unknown>;
+
+function redactEvents(events: RawEvent[]): RawEvent[] {
+  return events.map((e) => {
+    switch (e.type) {
+      case "CardDrawn":
+        return { type: e.type, playerId: e.playerId };
+      case "CardsTraded":
+        return { type: e.type, playerId: e.playerId, value: e.value, tradesCompletedAfter: e.tradesCompletedAfter };
+      case "PlayerEliminated":
+        return { type: e.type, eliminatedId: e.eliminatedId, byId: e.byId, cardsTransferredCount: Array.isArray(e.cardsTransferred) ? e.cardsTransferred.length : 0 };
+      default:
+        return e;
+    }
+  });
+}
+
+function redactAction(action: Record<string, unknown>): Record<string, unknown> {
+  if (action.type === "TradeCards") {
+    return { type: action.type };
+  }
+  return action;
+}
+
+export const listRecentActions = query({
+  args: {
+    gameId: v.id("games"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { gameId, limit }) => {
+    const take = limit ?? 20;
+    const actions = await ctx.db
+      .query("gameActions")
+      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
+      .order("desc")
+      .take(take);
+    return actions.reverse().map((a) => ({
+      _id: a._id,
+      _creationTime: a._creationTime,
+      gameId: a.gameId,
+      index: a.index,
+      playerId: a.playerId,
+      action: redactAction(a.action as Record<string, unknown>),
+      events: redactEvents(a.events as RawEvent[]),
+      createdAt: a.createdAt,
+    }));
+  },
+});
+
+export const listActions = query({
+  args: {
+    gameId: v.id("games"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { gameId, limit }) => {
+    const actions = await ctx.db
+      .query("gameActions")
+      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
+      .order("desc")
+      .take(limit ?? 50);
+    return actions.reverse().map((a) => ({
+      _id: a._id,
+      _creationTime: a._creationTime,
+      gameId: a.gameId,
+      index: a.index,
+      playerId: a.playerId,
+      action: redactAction(a.action as Record<string, unknown>),
+      events: redactEvents(a.events as RawEvent[]),
+      createdAt: a.createdAt,
+    }));
   },
 });
