@@ -1,20 +1,62 @@
-import { Button } from "@/components/ui/button"
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { Toaster } from "@/components/ui/sonner"
-import { toast } from "sonner"
+import { Providers } from "@/lib/providers"
+import { authClient } from "@/lib/auth-client"
+import { Button } from "@/components/ui/button"
+import LoginPage from "@/pages/login"
+import SignUpPage from "@/pages/signup"
+
+function HomePage() {
+  const { data: session, isPending } = authClient.useSession()
+
+  if (isPending) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    )
+  }
+
+  if (!session) {
+    return <Navigate to="/login" replace />
+  }
+
+  return (
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="flex items-center justify-between border-b px-6 py-4">
+        <h1 className="text-xl font-semibold">Risk</h1>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-muted-foreground">
+            {session.user.name}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => authClient.signOut()}
+          >
+            Sign out
+          </Button>
+        </div>
+      </header>
+      <main className="mx-auto max-w-5xl p-6">
+        <p className="text-muted-foreground">Welcome to Risk!</p>
+      </main>
+    </div>
+  )
+}
 
 function App() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b px-6 py-4">
-        <h1 className="text-xl font-semibold">Risk</h1>
-      </header>
-      <main className="mx-auto max-w-5xl p-6">
-        <Button onClick={() => toast("Hello from Risk!")}>
-          Show Toast
-        </Button>
-      </main>
-      <Toaster />
-    </div>
+    <Providers>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignUpPage />} />
+        </Routes>
+        <Toaster />
+      </BrowserRouter>
+    </Providers>
   )
 }
 

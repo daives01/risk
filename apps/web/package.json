@@ -10,12 +10,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@convex-dev/better-auth": "^0.10.10",
+    "better-auth": "1.4.9",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "convex": "^1.31.7",
     "lucide-react": "^0.563.0",
     "radix-ui": "^1.4.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-router-dom": "^7.13.0",
     "risk-engine": "workspace:*",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0"
