@@ -13,6 +13,7 @@ import ResetPasswordPage from "@/pages/reset-password"
 import CreateGamePage from "@/pages/create-game"
 import LobbyPage from "@/pages/lobby"
 import JoinGamePage from "@/pages/join-game"
+import GamePage from "@/pages/game"
 
 function HomePage() {
   const { data: session, isPending } = authClient.useSession()
@@ -104,6 +105,7 @@ function App() {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/games/new" element={<CreateGamePage />} />
           <Route path="/g/:gameId" element={<LobbyPage />} />
+          <Route path="/play/:gameId" element={<GamePage />} />
           <Route path="/join/:code" element={<JoinGamePage />} />
         </Routes>
         <Toaster />

@@ -179,7 +179,17 @@ export const getLobby = query({
       .first();
 
     return {
-      game,
+      game: {
+        _id: game._id,
+        name: game.name,
+        mapId: game.mapId,
+        status: game.status,
+        visibility: game.visibility,
+        maxPlayers: game.maxPlayers,
+        createdBy: game.createdBy,
+        createdAt: game.createdAt,
+        startedAt: game.startedAt ?? null,
+      },
       players: players.map((p) => ({
         userId: p.userId,
         displayName: p.displayName,

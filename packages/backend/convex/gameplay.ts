@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { authComponent } from "./auth.js";
 import { applyAction, ActionError, defaultRuleset } from "risk-engine";
@@ -255,5 +255,78 @@ export const resign = mutation({
     });
 
     return { events, newVersion: newState.stateVersion };
+  },
+});
+
+type RawEvent = Record<string, unknown>;
+
+function redactEvents(events: RawEvent[]): RawEvent[] {
+  return events.map((e) => {
+    switch (e.type) {
+      case "CardDrawn":
+        return { type: e.type, playerId: e.playerId };
+      case "CardsTraded":
+        return { type: e.type, playerId: e.playerId, value: e.value, tradesCompletedAfter: e.tradesCompletedAfter };
+      case "PlayerEliminated":
+        return { type: e.type, eliminatedId: e.eliminatedId, byId: e.byId, cardsTransferredCount: Array.isArray(e.cardsTransferred) ? e.cardsTransferred.length : 0 };
+      default:
+        return e;
+    }
+  });
+}
+
+function redactAction(action: Record<string, unknown>): Record<string, unknown> {
+  if (action.type === "TradeCards") {
+    return { type: action.type };
+  }
+  return action;
+}
+
+export const listRecentActions = query({
+  args: {
+    gameId: v.id("games"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { gameId, limit }) => {
+    const take = limit ?? 20;
+    const actions = await ctx.db
+      .query("gameActions")
+      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
+      .order("desc")
+      .take(take);
+    return actions.reverse().map((a) => ({
+      _id: a._id,
+      _creationTime: a._creationTime,
+      gameId: a.gameId,
+      index: a.index,
+      playerId: a.playerId,
+      action: redactAction(a.action as Record<string, unknown>),
+      events: redactEvents(a.events as RawEvent[]),
+      createdAt: a.createdAt,
+    }));
+  },
+});
+
+export const listActions = query({
+  args: {
+    gameId: v.id("games"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { gameId, limit }) => {
+    const actions = await ctx.db
+      .query("gameActions")
+      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
+      .order("desc")
+      .take(limit ?? 50);
+    return actions.reverse().map((a) => ({
+      _id: a._id,
+      _creationTime: a._creationTime,
+      gameId: a.gameId,
+      index: a.index,
+      playerId: a.playerId,
+      action: redactAction(a.action as Record<string, unknown>),
+      events: redactEvents(a.events as RawEvent[]),
+      createdAt: a.createdAt,
+    }));
   },
 });
