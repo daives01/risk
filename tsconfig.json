@@ -12,7 +12,8 @@
     "composite": true
   },
   "references": [
-    { "path": "packages/risk-engine" }
+    { "path": "packages/risk-engine" },
+    { "path": "apps/web" }
   ],
   "files": []
 }
