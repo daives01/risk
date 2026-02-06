@@ -5,6 +5,12 @@ import { components } from "./_generated/api.js";
 import authConfig from "./auth.config.js";
 import type { DataModel } from "./_generated/dataModel.js";
 import type { GenericCtx } from "@convex-dev/better-auth";
+import {
+  resend,
+  fromAddress,
+  verificationEmailHtml,
+  resetPasswordEmailHtml,
+} from "./emails.js";
 
 const siteUrl = process.env.SITE_URL!;
 
@@ -20,7 +26,27 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
     database: authComponent.adapter(ctx),
     emailAndPassword: {
       enabled: true,
-      requireEmailVerification: false,
+      requireEmailVerification: true,
+      sendResetPassword: async ({ user, url }) => {
+        await resend.sendEmail(ctx as any, {
+          from: fromAddress,
+          to: user.email,
+          subject: "Reset your password",
+          html: resetPasswordEmailHtml(url),
+        });
+      },
+    },
+    emailVerification: {
+      sendVerificationEmail: async ({ user, url }) => {
+        await resend.sendEmail(ctx as any, {
+          from: fromAddress,
+          to: user.email,
+          subject: "Verify your email",
+          html: verificationEmailHtml(url),
+        });
+      },
+      sendOnSignUp: true,
+      autoSignInAfterVerification: true,
     },
     plugins: [convex({ authConfig })],
   });

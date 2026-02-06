@@ -5,6 +5,9 @@ import { authClient } from "@/lib/auth-client"
 import { Button } from "@/components/ui/button"
 import LoginPage from "@/pages/login"
 import SignUpPage from "@/pages/signup"
+import VerifyEmailPage from "@/pages/verify-email"
+import ForgotPasswordPage from "@/pages/forgot-password"
+import ResetPasswordPage from "@/pages/reset-password"
 
 function HomePage() {
   const { data: session, isPending } = authClient.useSession()
@@ -53,6 +56,9 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignUpPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
         </Routes>
         <Toaster />
       </BrowserRouter>

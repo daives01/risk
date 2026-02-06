@@ -13,10 +13,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export default function SignUpPage() {
-  const [name, setName] = useState("");
+export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -26,14 +24,12 @@ export default function SignUpPage() {
     setError(null);
     setLoading(true);
     try {
-      const result = await authClient.signUp.email({
-        name,
+      const result = await authClient.requestPasswordReset({
         email,
-        password,
-        callbackURL: "/verify-email",
+        redirectTo: "/reset-password",
       });
       if (result.error) {
-        setError(result.error.message ?? "Sign up failed");
+        setError(result.error.message ?? "Request failed");
       } else {
         setSubmitted(true);
       }
@@ -51,20 +47,17 @@ export default function SignUpPage() {
           <CardHeader>
             <CardTitle className="text-2xl">Check your email</CardTitle>
             <CardDescription>
-              We sent a verification link to <strong>{email}</strong>. Click the
-              link to activate your account.
+              If an account exists for <strong>{email}</strong>, we sent a
+              password reset link.
             </CardDescription>
           </CardHeader>
           <CardFooter>
-            <p className="text-sm text-muted-foreground">
-              Already verified?{" "}
-              <Link
-                to="/login"
-                className="text-primary underline underline-offset-4"
-              >
-                Sign in
-              </Link>
-            </p>
+            <Link
+              to="/login"
+              className="text-sm text-primary underline underline-offset-4"
+            >
+              Back to sign in
+            </Link>
           </CardFooter>
         </Card>
       </div>
@@ -75,9 +68,9 @@ export default function SignUpPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-2xl">Create account</CardTitle>
+          <CardTitle className="text-2xl">Forgot password</CardTitle>
           <CardDescription>
-            Enter your details to get started
+            Enter your email and we'll send you a reset link
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -85,17 +78,6 @@ export default function SignUpPage() {
             {error && (
               <p className="text-sm text-destructive">{error}</p>
             )}
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="Your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -107,29 +89,17 @@ export default function SignUpPage() {
                 required
               />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="At least 8 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                minLength={8}
-                required
-              />
-            </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Creating account..." : "Sign up"}
+              {loading ? "Sending..." : "Send reset link"}
             </Button>
-            <p className="text-sm text-muted-foreground">
-              Already have an account?{" "}
-              <Link to="/login" className="text-primary underline underline-offset-4">
-                Sign in
-              </Link>
-            </p>
+            <Link
+              to="/login"
+              className="text-sm text-muted-foreground underline underline-offset-4"
+            >
+              Back to sign in
+            </Link>
           </CardFooter>
         </form>
       </Card>
