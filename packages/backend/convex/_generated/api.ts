@@ -12,12 +12,15 @@ import type {
   ApiFromModules,
   FilterApi,
   FunctionReference,
+  AnyComponents,
 } from "convex/server";
-import { anyApi } from "convex/server";
+import { anyApi, componentsGeneric } from "convex/server";
 import type * as games from "../games.js";
+import type * as http from "../http.js";
 
 const fullApi: ApiFromModules<{
   games: typeof games;
+  http: typeof http;
 }> = anyApi as any;
 
 /**
@@ -45,3 +48,5 @@ export const internal: FilterApi<
   typeof fullApi,
   FunctionReference<any, "internal">
 > = anyApi as any;
+
+export const components: AnyComponents = componentsGeneric();
