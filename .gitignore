@@ -2,4 +2,3 @@ node_modules/
 dist/
 bun.lockb
 *.tsbuildinfo
-.overseer/
