@@ -3,7 +3,7 @@
   "private": true,
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
-    "typecheck": "tsc --build",
+    "typecheck": "tsc --build && tsc -p packages/backend/convex/tsconfig.json",
     "test": "bun test"
   },
   "devDependencies": {
