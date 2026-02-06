@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 
 export default function SignUpPage() {
+  const [username, setUsername] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,6 +29,8 @@ export default function SignUpPage() {
     try {
       const result = await authClient.signUp.email({
         name,
+        username,
+        displayUsername: name || username,
         email,
         password,
         callbackURL: "/verify-email",
@@ -85,6 +88,18 @@ export default function SignUpPage() {
             {error && (
               <p className="text-sm text-destructive">{error}</p>
             )}
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                type="text"
+                placeholder="your_handle"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                minLength={3}
+                required
+              />
+            </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="name">Name</Label>
               <Input

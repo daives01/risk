@@ -1,4 +1,7 @@
 {
+  "codegen": {
+    "legacyComponentApi": false
+  },
   "$schema": "./node_modules/convex/schemas/convex.schema.json",
-  "functions": "convex/"
+  "functions": "convex"
 }

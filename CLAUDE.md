@@ -1,1 +1,0 @@
-this is a bun monorepo for a risk game (or will be). a vite frontend and convex backend share the same risk-engine typescript lib. we use overseer mcp/skill to track our progress. before marking a task complete we confirm the relevant typecheck and build pass (you are charge of maintaining/initializing this too)

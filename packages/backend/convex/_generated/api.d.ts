@@ -16,6 +16,7 @@ import type * as http from "../http.js";
 import type * as lobby from "../lobby.js";
 import type * as maps from "../maps.js";
 import type * as seed from "../seed.js";
+import type * as sendEmail from "../sendEmail.js";
 
 import type {
   ApiFromModules,
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   lobby: typeof lobby;
   maps: typeof maps;
   seed: typeof seed;
+  sendEmail: typeof sendEmail;
 }>;
 
 /**
@@ -60,4 +62,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
+};

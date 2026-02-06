@@ -61,10 +61,13 @@ export default defineSchema({
     playerId: v.string(),
     action: v.any(),
     events: v.any(),
+    stateVersionBefore: v.optional(v.number()),
+    stateVersionAfter: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_gameId", ["gameId"])
-    .index("by_gameId_index", ["gameId", "index"]),
+    .index("by_gameId_index", ["gameId", "index"])
+    .index("by_gameId_playerId", ["gameId", "playerId"]),
   maps: defineTable({
     mapId: v.string(),
     name: v.string(),
