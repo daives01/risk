@@ -9,7 +9,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "@backend": path.resolve(__dirname, "../../packages/backend/convex"),
+      "@backend": path.resolve(__dirname, "../convex"),
     },
   },
 })

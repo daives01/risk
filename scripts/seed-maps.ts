@@ -6,8 +6,8 @@
  * Convex internal action `seed:seedMaps` to upsert them into the database.
  *
  * Usage:
- *   bun packages/backend/scripts/seed-maps.ts
- *   # or from packages/backend:
+ *   bun scripts/seed-maps.ts
+ *   # or from repo root:
  *   npx convex run seed:seedMaps
  */
 
