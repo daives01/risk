@@ -55,6 +55,16 @@ export default defineSchema({
   })
     .index("by_gameId", ["gameId"])
     .index("by_code", ["code"]),
+  gameActions: defineTable({
+    gameId: v.id("games"),
+    index: v.number(),
+    playerId: v.string(),
+    action: v.any(),
+    events: v.any(),
+    createdAt: v.number(),
+  })
+    .index("by_gameId", ["gameId"])
+    .index("by_gameId_index", ["gameId", "index"]),
   maps: defineTable({
     mapId: v.string(),
     name: v.string(),
