@@ -3,6 +3,8 @@ import { applyAction, ActionError } from "./engine.js";
 import type {
   AttackAction,
   AttackResolved,
+  CardDrawn,
+  CardId,
   EndAttackPhase,
   EndTurn,
   Fortify,
@@ -22,7 +24,8 @@ import type {
   TurnEnded,
 } from "./types.js";
 import type { GraphMap } from "./map.js";
-import type { CombatConfig, FortifyConfig } from "./config.js";
+import type { CombatConfig, CardsConfig, FortifyConfig } from "./config.js";
+import { defaultRuleset } from "./config.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -1543,5 +1546,286 @@ describe("EndTurn", () => {
     expect(r3.state.reinforcements).toBeDefined();
     expect(r3.state.reinforcements!.remaining).toBeGreaterThanOrEqual(3);
     expect(r3.state.capturedThisTurn).toBe(false);
+  });
+});
+
+// ── Card draw on EndTurn tests ────────────────────────────────────────
+
+describe("Card draw on EndTurn", () => {
+  const C1 = "c1" as CardId;
+  const C2 = "c2" as CardId;
+  const C3 = "c3" as CardId;
+
+  function makeCardEndTurnState(overrides?: Partial<GameState>): GameState {
+    return makeState({
+      players: { p1: { status: "alive" }, p2: { status: "alive" } },
+      turnOrder: [P1, P2],
+      turn: { currentPlayerId: P1, phase: "Fortify", round: 1 },
+      reinforcements: undefined,
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 3 },
+        [T3]: { ownerId: P1, armies: 2 },
+        [T4]: { ownerId: P2, armies: 4 },
+      },
+      deck: { draw: [C1, C2, C3], discard: [] },
+      cardsById: {
+        c1: { kind: "A" },
+        c2: { kind: "B" },
+        c3: { kind: "C" },
+      },
+      hands: { p1: [], p2: [] },
+      capturedThisTurn: true,
+      ...overrides,
+    });
+  }
+
+  test("draws a card when capturedThisTurn is true and cardsConfig provided", () => {
+    const state = makeCardEndTurnState();
+    const result = applyAction(
+      state, P1, endTurn(), endTurnMap, undefined, undefined, defaultRuleset.cards,
+    );
+
+    // CardDrawn event should be first
+    const cardDrawn = result.events.find((e) => e.type === "CardDrawn") as CardDrawn;
+    expect(cardDrawn).toBeDefined();
+    expect(cardDrawn.playerId).toBe(P1);
+    expect(cardDrawn.cardId).toBe(C1); // first card in draw pile
+
+    // Card added to player's hand
+    expect(result.state.hands[P1 as string]).toContain(C1);
+    expect(result.state.hands[P1 as string]).toHaveLength(1);
+
+    // Deck draw pile reduced
+    expect(result.state.deck.draw).toHaveLength(2);
+    expect(result.state.deck.draw).not.toContain(C1);
+  });
+
+  test("does not draw when capturedThisTurn is false", () => {
+    const state = makeCardEndTurnState({ capturedThisTurn: false });
+    const result = applyAction(
+      state, P1, endTurn(), endTurnMap, undefined, undefined, defaultRuleset.cards,
+    );
+
+    const cardDrawn = result.events.find((e) => e.type === "CardDrawn");
+    expect(cardDrawn).toBeUndefined();
+    expect(result.state.hands[P1 as string]).toHaveLength(0);
+    expect(result.state.deck.draw).toHaveLength(3);
+  });
+
+  test("does not draw when cardsConfig is not provided", () => {
+    const state = makeCardEndTurnState();
+    const result = applyAction(state, P1, endTurn(), endTurnMap);
+
+    const cardDrawn = result.events.find((e) => e.type === "CardDrawn");
+    expect(cardDrawn).toBeUndefined();
+    expect(result.state.hands[P1 as string]).toHaveLength(0);
+  });
+
+  test("does not draw when awardCardOnCapture is false", () => {
+    const noAwardConfig: CardsConfig = {
+      ...defaultRuleset.cards,
+      awardCardOnCapture: false,
+    };
+    const state = makeCardEndTurnState();
+    const result = applyAction(
+      state, P1, endTurn(), endTurnMap, undefined, undefined, noAwardConfig,
+    );
+
+    const cardDrawn = result.events.find((e) => e.type === "CardDrawn");
+    expect(cardDrawn).toBeUndefined();
+  });
+
+  test("does not draw when deck is empty (draw and discard)", () => {
+    const state = makeCardEndTurnState({
+      deck: { draw: [], discard: [] },
+    });
+    const result = applyAction(
+      state, P1, endTurn(), endTurnMap, undefined, undefined, defaultRuleset.cards,
+    );
+
+    const cardDrawn = result.events.find((e) => e.type === "CardDrawn");
+    expect(cardDrawn).toBeUndefined();
+  });
+
+  test("reshuffles discard into draw when draw pile is empty", () => {
+    const state = makeCardEndTurnState({
+      deck: { draw: [], discard: [C1, C2, C3] },
+    });
+    const result = applyAction(
+      state, P1, endTurn(), endTurnMap, undefined, undefined, defaultRuleset.cards,
+    );
+
+    const cardDrawn = result.events.find((e) => e.type === "CardDrawn") as CardDrawn;
+    expect(cardDrawn).toBeDefined();
+    // Card came from the reshuffled discard
+    expect([C1, C2, C3]).toContain(cardDrawn.cardId);
+    // Discard should now be empty (reshuffled)
+    expect(result.state.deck.discard).toHaveLength(0);
+    // 2 remaining in draw after 1 drawn from 3 reshuffled
+    expect(result.state.deck.draw).toHaveLength(2);
+  });
+
+  test("event order: CardDrawn before TurnEnded", () => {
+    const state = makeCardEndTurnState();
+    const result = applyAction(
+      state, P1, endTurn(), endTurnMap, undefined, undefined, defaultRuleset.cards,
+    );
+
+    const types = result.events.map((e) => e.type);
+    expect(types).toEqual([
+      "CardDrawn",
+      "TurnEnded",
+      "TurnAdvanced",
+      "ReinforcementsGranted",
+    ]);
+  });
+
+  test("card count conserved across EndTurn with draw", () => {
+    const state = makeCardEndTurnState();
+    const totalBefore =
+      state.deck.draw.length +
+      state.deck.discard.length +
+      Object.values(state.hands).reduce((sum, h) => sum + h.length, 0);
+
+    const result = applyAction(
+      state, P1, endTurn(), endTurnMap, undefined, undefined, defaultRuleset.cards,
+    );
+
+    const totalAfter =
+      result.state.deck.draw.length +
+      result.state.deck.discard.length +
+      Object.values(result.state.hands).reduce((sum, h) => sum + (h as readonly CardId[]).length, 0);
+
+    expect(totalAfter).toBe(totalBefore);
+  });
+
+  test("appends to existing hand", () => {
+    const state = makeCardEndTurnState({
+      hands: { p1: [C3], p2: [] },
+      deck: { draw: [C1, C2], discard: [] },
+    });
+    const result = applyAction(
+      state, P1, endTurn(), endTurnMap, undefined, undefined, defaultRuleset.cards,
+    );
+
+    expect(result.state.hands[P1 as string]).toEqual([C3, C1]);
+  });
+
+  test("clears capturedThisTurn after draw", () => {
+    const state = makeCardEndTurnState();
+    const result = applyAction(
+      state, P1, endTurn(), endTurnMap, undefined, undefined, defaultRuleset.cards,
+    );
+
+    expect(result.state.capturedThisTurn).toBe(false);
+  });
+});
+
+// ── Card transfer on elimination tests ────────────────────────────────
+
+describe("Card transfer on elimination", () => {
+  const C1 = "c1" as CardId;
+  const C2 = "c2" as CardId;
+  const C3 = "c3" as CardId;
+
+  test("transfers cards from eliminated player to attacker", () => {
+    const state = makeAttackState({
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 1 },
+      },
+      hands: {
+        p1: [C1],
+        p2: [C2, C3],
+      },
+    });
+
+    for (let seed = 0; seed < 100; seed++) {
+      const s = { ...state, rng: { seed, index: 0 } };
+      const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat);
+      const attackEvent = result.events[0] as AttackResolved;
+
+      if (attackEvent.defenderLosses === 1) {
+        // P2 eliminated — cards transferred
+        const elimEvent = result.events.find(
+          (e) => e.type === "PlayerEliminated",
+        ) as PlayerEliminated;
+        expect(elimEvent.cardsTransferred).toEqual([C2, C3]);
+
+        // P1 now has all cards
+        expect(result.state.hands[P1 as string]).toEqual([C1, C2, C3]);
+        // P2 hand is empty
+        expect(result.state.hands[P2 as string]).toEqual([]);
+        return;
+      }
+    }
+    throw new Error("No capture occurred in 100 seeds");
+  });
+
+  test("no card transfer when defender is not eliminated", () => {
+    const state = makeAttackState({
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 1 },
+        [T4]: { ownerId: P2, armies: 3 },
+      },
+      hands: {
+        p1: [],
+        p2: [C1, C2],
+      },
+    });
+
+    for (let seed = 0; seed < 100; seed++) {
+      const s = { ...state, rng: { seed, index: 0 } };
+      const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat);
+      const attackEvent = result.events[0] as AttackResolved;
+
+      if (attackEvent.defenderLosses === 1) {
+        // P2 not eliminated (has T4)
+        const elimEvent = result.events.find(
+          (e) => e.type === "PlayerEliminated",
+        );
+        expect(elimEvent).toBeUndefined();
+        // Hands unchanged
+        expect(result.state.hands[P1 as string]).toEqual([]);
+        expect(result.state.hands[P2 as string]).toEqual([C1, C2]);
+        return;
+      }
+    }
+    throw new Error("No capture occurred in 100 seeds");
+  });
+
+  test("transfers empty hand on elimination (no cards)", () => {
+    const state = makeAttackState({
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 1 },
+      },
+      hands: {
+        p1: [C1],
+        p2: [],
+      },
+    });
+
+    for (let seed = 0; seed < 100; seed++) {
+      const s = { ...state, rng: { seed, index: 0 } };
+      const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat);
+      const attackEvent = result.events[0] as AttackResolved;
+
+      if (attackEvent.defenderLosses === 1) {
+        const elimEvent = result.events.find(
+          (e) => e.type === "PlayerEliminated",
+        ) as PlayerEliminated;
+        expect(elimEvent.cardsTransferred).toEqual([]);
+        expect(result.state.hands[P1 as string]).toEqual([C1]);
+        expect(result.state.hands[P2 as string]).toEqual([]);
+        return;
+      }
+    }
+    throw new Error("No capture occurred in 100 seeds");
   });
 });

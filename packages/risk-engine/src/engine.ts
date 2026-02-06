@@ -2,6 +2,8 @@ import type {
   Action,
   AttackAction,
   AttackResolved,
+  CardDrawn,
+  CardId,
   Fortify,
   FortifyResolved,
   GameEnded,
@@ -23,9 +25,10 @@ import type {
   TurnEnded,
 } from "./types.js";
 import type { GraphMap } from "./map.js";
-import type { CombatConfig, FortifyConfig } from "./config.js";
+import type { CombatConfig, CardsConfig, FortifyConfig } from "./config.js";
 import { createRng } from "./rng.js";
 import { calculateReinforcements } from "./reinforcements.js";
+import { drawCard } from "./cards.js";
 
 // ── Action result ─────────────────────────────────────────────────────
 
@@ -267,6 +270,7 @@ function handleAttack(
   let newCapturedThisTurn = state.capturedThisTurn;
   let newPlayers: Record<string, PlayerState> | undefined;
   let newPhase: Phase | undefined;
+  let newHands = state.hands;
 
   // Check if territory captured (defender reaches 0 armies)
   if (newToArmies === 0) {
@@ -310,11 +314,20 @@ function handleAttack(
           [defenderId]: { ...state.players[defenderId]!, status: "defeated" },
         };
 
+        // Transfer cards from eliminated player to attacker
+        const defenderCards: readonly CardId[] = newHands[defenderId] ?? [];
+        const attackerCards: readonly CardId[] = newHands[playerId] ?? [];
+        newHands = {
+          ...newHands,
+          [defenderId]: [],
+          [playerId]: [...attackerCards, ...defenderCards],
+        };
+
         const eliminatedEvent: PlayerEliminated = {
           type: "PlayerEliminated",
           eliminatedId: defenderId,
           byId: playerId,
-          cardsTransferred: [], // no-op until cards milestone
+          cardsTransferred: defenderCards,
         };
         events.push(eliminatedEvent);
 
@@ -341,6 +354,7 @@ function handleAttack(
     territories: newTerritories,
     pending,
     capturedThisTurn: newCapturedThisTurn,
+    hands: newHands,
     turn: newPhase ? { ...state.turn, phase: newPhase } : state.turn,
     rng: rng.state,
     stateVersion: state.stateVersion + 1,
@@ -589,6 +603,7 @@ function handleEndTurn(
   state: GameState,
   playerId: PlayerId,
   map: GraphMap,
+  cardsConfig?: CardsConfig,
 ): ActionResult {
   // Phase check: valid in Fortify phase
   if (state.turn.phase !== "Fortify") {
@@ -605,6 +620,31 @@ function handleEndTurn(
   }
 
   const events: GameEvent[] = [];
+  let currentDeck = state.deck;
+  let currentHands = state.hands;
+  let rngState = state.rng;
+
+  // Card draw: if player captured a territory this turn and config awards cards
+  if (state.capturedThisTurn && cardsConfig?.awardCardOnCapture) {
+    const rng = createRng(rngState);
+    const result = drawCard(currentDeck, rng);
+    if (result) {
+      currentDeck = result.deck;
+      const playerHand = currentHands[playerId] ?? [];
+      currentHands = {
+        ...currentHands,
+        [playerId]: [...playerHand, result.cardId],
+      };
+      rngState = rng.state;
+
+      const cardDrawnEvent: CardDrawn = {
+        type: "CardDrawn",
+        playerId,
+        cardId: result.cardId,
+      };
+      events.push(cardDrawnEvent);
+    }
+  }
 
   // TurnEnded event
   const turnEndedEvent: TurnEnded = {
@@ -660,6 +700,9 @@ function handleEndTurn(
       round: newRound,
     },
     capturedThisTurn: false,
+    deck: currentDeck,
+    hands: currentHands,
+    rng: rngState,
     reinforcements: {
       remaining: reinforcementResult.total,
       sources: reinforcementResult.sources,
@@ -679,6 +722,7 @@ export function applyAction(
   map?: GraphMap,
   combat?: CombatConfig,
   fortifyConfig?: FortifyConfig,
+  cardsConfig?: CardsConfig,
 ): ActionResult {
   switch (action.type) {
     case "PlaceReinforcements":
@@ -697,7 +741,7 @@ export function applyAction(
       return handleFortify(state, playerId, action, map, fortifyConfig);
     case "EndTurn":
       if (!map) throw new ActionError("GraphMap is required for EndTurn actions");
-      return handleEndTurn(state, playerId, map);
+      return handleEndTurn(state, playerId, map, cardsConfig);
     case "TradeCards":
       throw new ActionError(`Action ${action.type} is not yet implemented`);
   }
