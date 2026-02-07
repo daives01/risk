@@ -2,41 +2,31 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
+  const resetToken = token ?? undefined;
+
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  if (!token) {
+  if (!resetToken) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4">
-        <Card className="w-full max-w-sm">
-          <CardHeader>
-            <CardTitle className="text-2xl">Invalid link</CardTitle>
-            <CardDescription>
-              This password reset link is invalid or has expired.
-            </CardDescription>
+      <div className="page-shell flex items-center justify-center soft-grid">
+        <Card className="glass-panel w-full max-w-md border-0 py-0">
+          <CardHeader className="py-6">
+            <CardTitle className="hero-title text-2xl">Invalid link</CardTitle>
+            <CardDescription>This password reset link is invalid or expired.</CardDescription>
           </CardHeader>
-          <CardFooter>
-            <Link
-              to="/forgot-password"
-              className="text-sm text-primary underline underline-offset-4"
-            >
-              Request a new link
+          <CardFooter className="py-6">
+            <Link to="/forgot-password" className="text-sm text-primary underline underline-offset-4">
+              Request another link
             </Link>
           </CardFooter>
         </Card>
@@ -44,15 +34,13 @@ export default function ResetPasswordPage() {
     );
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
     setError(null);
     setLoading(true);
+
     try {
-      const result = await authClient.resetPassword({
-        newPassword: password,
-        token: token!,
-      });
+      const result = await authClient.resetPassword({ newPassword: password, token: resetToken });
       if (result.error) {
         setError(result.error.message ?? "Reset failed");
       } else {
@@ -67,19 +55,14 @@ export default function ResetPasswordPage() {
 
   if (success) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4">
-        <Card className="w-full max-w-sm">
-          <CardHeader>
-            <CardTitle className="text-2xl">Password reset</CardTitle>
-            <CardDescription>
-              Your password has been updated. You can now sign in.
-            </CardDescription>
+      <div className="page-shell flex items-center justify-center soft-grid">
+        <Card className="glass-panel w-full max-w-md border-0 py-0">
+          <CardHeader className="py-6">
+            <CardTitle className="hero-title text-2xl">Password updated</CardTitle>
+            <CardDescription>You can now sign in with your new password.</CardDescription>
           </CardHeader>
-          <CardFooter>
-            <Link
-              to="/login"
-              className="text-sm text-primary underline underline-offset-4"
-            >
+          <CardFooter className="py-6">
+            <Link to="/login" className="text-sm text-primary underline underline-offset-4">
               Go to sign in
             </Link>
           </CardFooter>
@@ -89,38 +72,32 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Reset password</CardTitle>
-          <CardDescription>Enter your new password</CardDescription>
+    <div className="page-shell flex items-center justify-center soft-grid">
+      <Card className="glass-panel w-full max-w-md border-0 py-0">
+        <CardHeader className="py-6">
+          <CardTitle className="hero-title text-2xl">Reset password</CardTitle>
+          <CardDescription>Choose a new password for your account.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
-          <CardContent className="flex flex-col gap-4">
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
-            <div className="flex flex-col gap-2">
+          <CardContent className="space-y-4">
+            {error && <p className="rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+            <div className="space-y-2">
               <Label htmlFor="password">New password</Label>
               <Input
                 id="password"
                 type="password"
-                placeholder="At least 8 characters"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(event) => setPassword(event.target.value)}
                 minLength={8}
                 required
               />
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col gap-4">
+          <CardFooter className="flex flex-col gap-3 py-6">
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Resetting..." : "Reset password"}
             </Button>
-            <Link
-              to="/login"
-              className="text-sm text-muted-foreground underline underline-offset-4"
-            >
+            <Link to="/login" className="text-sm text-muted-foreground underline underline-offset-4">
               Back to sign in
             </Link>
           </CardFooter>

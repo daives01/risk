@@ -1,35 +1,16 @@
-import { useState, useMemo, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useCallback, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
+import { ArrowLeft, Crown, Dice1, Flag, Shield, Swords, Users } from "lucide-react";
 import { api } from "@backend/_generated/api";
 import type { Id } from "@backend/_generated/dataModel";
-import { authClient } from "@/lib/auth-client";
+import type { Action, CardId, GraphMap, Phase, TerritoryId } from "risk-engine";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { MapCanvas } from "@/components/game/map-canvas";
+import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
-import type {
-  Action,
-  TerritoryId,
-  CardId,
-  Phase,
-} from "risk-engine";
-import type { GraphMap } from "risk-engine";
-
-const PLAYER_COLORS = [
-  "#ef4444",
-  "#3b82f6",
-  "#22c55e",
-  "#eab308",
-  "#a855f7",
-  "#f97316",
-];
-const NEUTRAL_COLOR = "#6b7280";
 
 type PublicState = {
   players: Record<string, { status: string; teamId?: string }>;
@@ -60,477 +41,90 @@ type MapVisual = {
   territoryAnchors: Record<string, { x: number; y: number }>;
 };
 
-function getPlayerColor(
-  playerId: string,
-  turnOrder: string[],
-): string {
+type GameAction = {
+  _id: string;
+  index: number;
+  events: Array<{ type: string; [key: string]: unknown }>;
+};
+
+const PLAYER_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#f97316", "#14b8a6"];
+const NEUTRAL_COLOR = "#64748b";
+
+const PHASE_COPY: Record<Phase, { title: string; description: string }> = {
+  Setup: {
+    title: "Setting Up",
+    description: "Assign territories and prepare your opening position.",
+  },
+  Reinforcement: {
+    title: "Reinforce",
+    description: "Place all available armies on your owned territories.",
+  },
+  Attack: {
+    title: "Attack",
+    description: "Choose source and target territories to resolve battles.",
+  },
+  Occupy: {
+    title: "Occupy",
+    description: "Move armies into your newly captured territory.",
+  },
+  Fortify: {
+    title: "Fortify",
+    description: "Move armies between your territories, then end turn.",
+  },
+  GameOver: {
+    title: "Game Over",
+    description: "The match is complete.",
+  },
+};
+
+function getPlayerColor(playerId: string, turnOrder: string[]) {
   if (playerId === "neutral") return NEUTRAL_COLOR;
   const idx = turnOrder.indexOf(playerId);
   return PLAYER_COLORS[idx % PLAYER_COLORS.length] ?? NEUTRAL_COLOR;
 }
 
-function PlayerLegend({
-  state,
-  playerMap,
-}: {
-  state: PublicState;
-  playerMap: Array<{
-    userId: string;
-    displayName: string;
-    enginePlayerId: string | null;
-  }>;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {state.turnOrder.map((pid) => {
-        const color = getPlayerColor(pid, state.turnOrder);
-        const info = playerMap.find((p) => p.enginePlayerId === pid);
-        const isCurrentTurn = state.turn.currentPlayerId === pid;
-        const status = state.players[pid]?.status ?? "alive";
-        return (
-          <div
-            key={pid}
-            className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs ${
-              isCurrentTurn ? "border-foreground font-semibold" : "border-border"
-            } ${status === "defeated" ? "opacity-40 line-through" : ""}`}
-          >
-            <span
-              className="inline-block size-2.5 rounded-full"
-              style={{ backgroundColor: color }}
-            />
-            <span>{info?.displayName ?? pid}</span>
-            {isCurrentTurn && state.turn.phase !== "GameOver" && (
-              <span className="text-[10px] text-muted-foreground">◀</span>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function PhaseIndicator({ state }: { state: PublicState }) {
-  const { phase, round } = state.turn;
-  return (
-    <div className="flex items-center justify-between text-sm">
-      <div className="flex items-center gap-2">
-        <span className="font-semibold">{phase}</span>
-        {state.reinforcements && phase === "Reinforcement" && (
-          <span className="text-muted-foreground">
-            ({state.reinforcements.remaining} remaining)
-          </span>
-        )}
-      </div>
-      <span className="text-xs text-muted-foreground">Round {round}</span>
-    </div>
-  );
-}
-
-function ReinforcementControls({
-  state,
-  selectedFrom,
-  count,
-  setCount,
-  onSubmit,
-  disabled,
-}: {
-  state: PublicState;
-  selectedFrom: string | null;
-  count: number;
-  setCount: (n: number) => void;
-  onSubmit: (action: Action) => void;
-  disabled: boolean;
-}) {
-  const remaining = state.reinforcements?.remaining ?? 0;
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="text-sm">
-        Select a territory to place armies ({remaining} remaining)
-      </p>
-      {selectedFrom && (
-        <div className="flex items-center gap-2">
-          <Button
-            size="icon-xs"
-            variant="outline"
-            onClick={() => setCount(Math.max(1, count - 1))}
-            disabled={count <= 1}
-          >
-            -
-          </Button>
-          <span className="w-8 text-center text-sm font-semibold">{count}</span>
-          <Button
-            size="icon-xs"
-            variant="outline"
-            onClick={() => setCount(Math.min(remaining, count + 1))}
-            disabled={count >= remaining}
-          >
-            +
-          </Button>
-          <Button
-            size="sm"
-            disabled={disabled || !selectedFrom}
-            onClick={() =>
-              onSubmit({
-                type: "PlaceReinforcements",
-                territoryId: selectedFrom as TerritoryId,
-                count,
-              })
-            }
-          >
-            Place
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AttackControls({
-  selectedFrom,
-  selectedTo,
-  state,
-  dice,
-  setDice,
-  onSubmit,
-  disabled,
-}: {
-  selectedFrom: string | null;
-  selectedTo: string | null;
-  state: PublicState;
-  dice: number;
-  setDice: (n: number) => void;
-  onSubmit: (action: Action) => void;
-  disabled: boolean;
-}) {
-  const fromArmies = selectedFrom
-    ? state.territories[selectedFrom]?.armies ?? 0
-    : 0;
-  const maxDice = Math.min(3, fromArmies - 1);
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="text-sm">
-        {!selectedFrom
-          ? "Select a territory to attack from"
-          : !selectedTo
-            ? "Select an enemy territory to attack"
-            : "Ready to attack"}
-      </p>
-      {selectedFrom && selectedTo && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Dice:</span>
-          {[1, 2, 3].map((d) => (
-            <Button
-              key={d}
-              size="xs"
-              variant={dice === d ? "default" : "outline"}
-              disabled={d > maxDice}
-              onClick={() => setDice(d)}
-            >
-              {d}
-            </Button>
-          ))}
-          <Button
-            size="sm"
-            disabled={disabled}
-            onClick={() =>
-              onSubmit({
-                type: "Attack",
-                from: selectedFrom as TerritoryId,
-                to: selectedTo as TerritoryId,
-                attackerDice: dice,
-              })
-            }
-          >
-            Attack!
-          </Button>
-        </div>
-      )}
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={disabled}
-        onClick={() => onSubmit({ type: "EndAttackPhase" })}
-      >
-        End Attack Phase
-      </Button>
-    </div>
-  );
-}
-
-function OccupyControls({
-  state,
-  moveArmies,
-  setMoveArmies,
-  onSubmit,
-  disabled,
-}: {
-  state: PublicState;
-  moveArmies: number;
-  setMoveArmies: (n: number) => void;
-  onSubmit: (action: Action) => void;
-  disabled: boolean;
-}) {
-  const pending = state.pending;
-  if (!pending) return null;
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="text-sm">
-        Move armies from{" "}
-        <span className="font-semibold">{pending.from}</span> to{" "}
-        <span className="font-semibold">{pending.to}</span>
-      </p>
-      <div className="flex items-center gap-2">
-        <Button
-          size="icon-xs"
-          variant="outline"
-          onClick={() => setMoveArmies(Math.max(pending.minMove, moveArmies - 1))}
-          disabled={moveArmies <= pending.minMove}
-        >
-          -
-        </Button>
-        <span className="w-8 text-center text-sm font-semibold">
-          {moveArmies}
-        </span>
-        <Button
-          size="icon-xs"
-          variant="outline"
-          onClick={() => setMoveArmies(Math.min(pending.maxMove, moveArmies + 1))}
-          disabled={moveArmies >= pending.maxMove}
-        >
-          +
-        </Button>
-        <span className="text-xs text-muted-foreground">
-          ({pending.minMove}-{pending.maxMove})
-        </span>
-        <Button
-          size="sm"
-          disabled={disabled}
-          onClick={() => onSubmit({ type: "Occupy", moveArmies })}
-        >
-          Move
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function FortifyControls({
-  selectedFrom,
-  selectedTo,
-  count,
-  setCount,
-  state,
-  onSubmit,
-  disabled,
-}: {
-  selectedFrom: string | null;
-  selectedTo: string | null;
-  count: number;
-  setCount: (n: number) => void;
-  state: PublicState;
-  onSubmit: (action: Action) => void;
-  disabled: boolean;
-}) {
-  const fromArmies = selectedFrom
-    ? state.territories[selectedFrom]?.armies ?? 0
-    : 0;
-  const maxCount = fromArmies - 1;
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="text-sm">
-        {!selectedFrom
-          ? "Select a territory to fortify from"
-          : !selectedTo
-            ? "Select a connected friendly territory"
-            : "Ready to fortify"}
-      </p>
-      {selectedFrom && selectedTo && maxCount > 0 && (
-        <div className="flex items-center gap-2">
-          <Button
-            size="icon-xs"
-            variant="outline"
-            onClick={() => setCount(Math.max(1, count - 1))}
-            disabled={count <= 1}
-          >
-            -
-          </Button>
-          <span className="w-8 text-center text-sm font-semibold">{count}</span>
-          <Button
-            size="icon-xs"
-            variant="outline"
-            onClick={() => setCount(Math.min(maxCount, count + 1))}
-            disabled={count >= maxCount}
-          >
-            +
-          </Button>
-          <Button
-            size="sm"
-            disabled={disabled}
-            onClick={() =>
-              onSubmit({
-                type: "Fortify",
-                from: selectedFrom as TerritoryId,
-                to: selectedTo as TerritoryId,
-                count,
-              })
-            }
-          >
-            Fortify
-          </Button>
-        </div>
-      )}
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={disabled}
-        onClick={() => onSubmit({ type: "EndTurn" })}
-      >
-        End Turn
-      </Button>
-    </div>
-  );
-}
-
-function CardsPanel({
-  myHand,
-  selectedCardIds,
-  toggleCard,
-  onTrade,
-  canTrade,
-  disabled,
-  map,
-}: {
-  myHand: HandCard[];
-  selectedCardIds: Set<string>;
-  toggleCard: (id: string) => void;
-  onTrade: () => void;
-  canTrade: boolean;
-  disabled: boolean;
-  map: GraphMap;
-}) {
-  if (myHand.length === 0) return null;
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Cards ({myHand.length})</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-wrap gap-1.5 mb-2">
-          {myHand.map((c) => {
-            const sel = selectedCardIds.has(c.cardId);
-            const tName = c.territoryId
-              ? map.territories[c.territoryId]?.name ?? c.territoryId
-              : null;
-            return (
-              <button
-                key={c.cardId}
-                onClick={() => toggleCard(c.cardId)}
-                className={`rounded-md border px-2 py-1 text-xs transition-all ${
-                  sel
-                    ? "ring-2 ring-primary border-primary bg-primary/10"
-                    : "border-border hover:border-foreground/30"
-                }`}
-              >
-                <span className="font-bold">{c.kind}</span>
-                {tName && (
-                  <span className="ml-1 text-muted-foreground">{tName}</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-        {selectedCardIds.size === 3 && (
-          <Button
-            size="sm"
-            disabled={disabled || !canTrade}
-            onClick={onTrade}
-          >
-            Trade Selected Cards
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
+function getPlayerName(
+  enginePlayerId: string,
+  players: Array<{ displayName: string; enginePlayerId: string | null }>,
+) {
+  return players.find((player) => player.enginePlayerId === enginePlayerId)?.displayName ?? enginePlayerId;
 }
 
 function formatEvent(
   event: Record<string, unknown>,
-  playerMap: Array<{
-    displayName: string;
-    enginePlayerId: string | null;
-  }>,
-): string {
-  const pName = (pid: string) =>
-    playerMap.find((p) => p.enginePlayerId === pid)?.displayName ?? pid;
-  const type = event.type as string;
-  switch (type) {
-    case "ReinforcementsPlaced":
-      return `${pName(event.playerId as string)} placed ${event.count} armies on ${event.territoryId}`;
-    case "AttackResolved":
-      return `Attack ${event.from} → ${event.to}: atk lost ${event.attackerLosses}, def lost ${event.defenderLosses} [${(event.attackRolls as number[]).join(",")} vs ${(event.defendRolls as number[]).join(",")}]`;
-    case "TerritoryCaptured":
-      return `${pName(event.newOwnerId as string)} captured ${event.to}`;
-    case "OccupyResolved":
-      return `Moved ${event.moved} armies ${event.from} → ${event.to}`;
-    case "FortifyResolved":
-      return `Fortified ${event.moved} armies ${event.from} → ${event.to}`;
-    case "PlayerEliminated":
-      return `${pName(event.eliminatedId as string)} eliminated!`;
-    case "GameEnded":
-      return event.winningPlayerId
-        ? `${pName(event.winningPlayerId as string)} wins!`
-        : "Game over!";
-    case "TurnEnded":
-      return `${pName(event.playerId as string)} ended turn`;
-    case "TurnAdvanced":
-      return `${pName(event.nextPlayerId as string)}'s turn (round ${event.round})`;
-    case "ReinforcementsGranted":
-      return `${pName(event.playerId as string)} gets ${event.amount} reinforcements`;
-    case "CardsTraded":
-      return `${pName(event.playerId as string)} traded cards for ${event.value} armies`;
-    case "CardDrawn":
-      return `${pName(event.playerId as string)} drew a card`;
-    default:
-      return type;
-  }
-}
+  playerMap: Array<{ displayName: string; enginePlayerId: string | null }>,
+) {
+  const playerName = (id: unknown) =>
+    typeof id === "string" ? getPlayerName(id, playerMap) : "Unknown";
 
-function EventLog({
-  gameId,
-  playerMap,
-}: {
-  gameId: Id<"games">;
-  playerMap: Array<{
-    displayName: string;
-    enginePlayerId: string | null;
-  }>;
-}) {
-  const actions = useQuery(api.gameplay.listRecentActions, {
-    gameId,
-    limit: 30,
-  });
-  if (!actions) return null;
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Event Log</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-col gap-0.5 text-[11px] text-muted-foreground max-h-48 overflow-y-auto">
-          {actions.length === 0 && <p>No actions yet</p>}
-          {actions.map((a) => (
-            <div key={a._id} className="flex flex-col">
-              {(a.events as Record<string, unknown>[]).map(
-                (ev: Record<string, unknown>, i: number) => (
-                  <p key={i}>{formatEvent(ev, playerMap)}</p>
-                ),
-              )}
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
+  switch (event.type) {
+    case "ReinforcementsPlaced":
+      return `${playerName(event.playerId)} placed ${event.count} armies on ${event.territoryId}`;
+    case "AttackResolved":
+      return `${event.from} attacked ${event.to} (${event.attackerLosses}/${event.defenderLosses} losses)`;
+    case "TerritoryCaptured":
+      return `${playerName(event.newOwnerId)} captured ${event.to}`;
+    case "OccupyResolved":
+      return `${playerName(event.playerId)} moved ${event.moved} armies to ${event.to}`;
+    case "FortifyResolved":
+      return `${playerName(event.playerId)} fortified ${event.from} to ${event.to} (${event.moved})`;
+    case "CardsTraded":
+      return `${playerName(event.playerId)} traded cards for ${event.value} armies`;
+    case "CardDrawn":
+      return `${playerName(event.playerId)} drew a card`;
+    case "TurnEnded":
+      return `${playerName(event.playerId)} ended their turn`;
+    case "TurnAdvanced":
+      return `${playerName(event.nextPlayerId)} starts round ${event.round}`;
+    case "PlayerEliminated":
+      return `${playerName(event.eliminatedId)} was eliminated`;
+    case "GameEnded":
+      return `${playerName(event.winningPlayerId)} won the game`;
+    case "ReinforcementsGranted":
+      return `${playerName(event.playerId)} received ${event.amount} reinforcements`;
+    default:
+      return String(event.type ?? "Event");
+  }
 }
 
 export default function GamePage() {
@@ -544,31 +138,23 @@ export default function GamePage() {
     api.games.getGameViewAsPlayer,
     session && typedGameId ? { gameId: typedGameId } : "skip",
   );
-  const publicView = useQuery(
-    api.games.getGameView,
-    typedGameId ? { gameId: typedGameId } : "skip",
-  );
+  const publicView = useQuery(api.games.getGameView, typedGameId ? { gameId: typedGameId } : "skip");
 
   const view = playerView ?? publicView;
   const myEnginePlayerId =
-    playerView && "myEnginePlayerId" in playerView
-      ? playerView.myEnginePlayerId
-      : null;
+    playerView && "myEnginePlayerId" in playerView ? playerView.myEnginePlayerId : null;
   const myHand: HandCard[] | null =
-    playerView && "myHand" in playerView
-      ? (playerView.myHand as HandCard[] | null)
-      : null;
+    playerView && "myHand" in playerView ? (playerView.myHand as HandCard[] | null) : null;
 
-  const mapDoc = useQuery(
-    api.maps.getByMapId,
-    view?.mapId ? { mapId: view.mapId } : "skip",
-  );
-  const graphMap = mapDoc?.graphMap as unknown as GraphMap | undefined;
-  const mapVisual = mapDoc?.visual as unknown as MapVisual | undefined;
-  const mapImageUrl =
-    mapDoc && "imageUrl" in mapDoc
-      ? (mapDoc.imageUrl as string | null)
-      : null;
+  const mapDoc = useQuery(api.maps.getByMapId, view?.mapId ? { mapId: view.mapId } : "skip");
+  const graphMap = mapDoc?.graphMap as GraphMap | undefined;
+  const mapVisual = mapDoc?.visual as MapVisual | undefined;
+  const mapImageUrl = mapDoc && "imageUrl" in mapDoc ? (mapDoc.imageUrl as string | null) : null;
+
+  const recentActions = useQuery(
+    api.gameplay.listRecentActions,
+    typedGameId ? { gameId: typedGameId, limit: 40 } : "skip",
+  ) as GameAction[] | undefined;
 
   const submitActionMutation = useMutation(api.gameplay.submitAction);
   const resignMutation = useMutation(api.gameplay.resign);
@@ -579,19 +165,57 @@ export default function GamePage() {
   const [attackDice, setAttackDice] = useState(3);
   const [occupyMove, setOccupyMove] = useState(1);
   const [fortifyCount, setFortifyCount] = useState(1);
-  const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(
-    new Set(),
-  );
+  const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
 
   const state = view?.state as PublicState | null | undefined;
-
-  const isMyTurn =
-    !!myEnginePlayerId &&
-    !!state &&
-    state.turn.currentPlayerId === myEnginePlayerId;
   const isSpectator = !myEnginePlayerId;
-  const controlsDisabled = !isMyTurn || submitting || isSpectator;
+  const isMyTurn = !!myEnginePlayerId && !!state && state.turn.currentPlayerId === myEnginePlayerId;
+  const controlsDisabled = !isMyTurn || isSpectator || submitting;
+
+  const playerMap = view?.players ?? [];
+
+  const validFromIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!state || !myEnginePlayerId || !graphMap) return ids;
+
+    if (state.turn.phase === "Reinforcement") {
+      for (const [territoryId, territory] of Object.entries(state.territories)) {
+        if (territory.ownerId === myEnginePlayerId) ids.add(territoryId);
+      }
+    }
+
+    if (state.turn.phase === "Attack" || state.turn.phase === "Fortify") {
+      for (const [territoryId, territory] of Object.entries(state.territories)) {
+        if (territory.ownerId === myEnginePlayerId && territory.armies >= 2) ids.add(territoryId);
+      }
+    }
+
+    return ids;
+  }, [graphMap, myEnginePlayerId, state]);
+
+  const validToIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!state || !myEnginePlayerId || !graphMap || !selectedFrom) return ids;
+
+    if (state.turn.phase === "Attack") {
+      const neighbors = graphMap.adjacency[selectedFrom] ?? [];
+      for (const neighborId of neighbors) {
+        const territory = state.territories[neighborId];
+        if (territory && territory.ownerId !== myEnginePlayerId) ids.add(neighborId);
+      }
+    }
+
+    if (state.turn.phase === "Fortify") {
+      for (const [territoryId, territory] of Object.entries(state.territories)) {
+        if (territoryId !== selectedFrom && territory.ownerId === myEnginePlayerId) {
+          ids.add(territoryId);
+        }
+      }
+    }
+
+    return ids;
+  }, [graphMap, myEnginePlayerId, selectedFrom, state]);
 
   const submitAction = useCallback(
     async (action: Action) => {
@@ -606,130 +230,101 @@ export default function GamePage() {
         setSelectedFrom(null);
         setSelectedTo(null);
         setReinforceCount(1);
+        setAttackDice(3);
+        setOccupyMove(1);
         setFortifyCount(1);
         setSelectedCardIds(new Set());
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Action failed");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Action failed");
       } finally {
         setSubmitting(false);
       }
     },
-    [typedGameId, state, submitActionMutation],
+    [state, submitActionMutation, typedGameId],
   );
 
-  const validFromIds = useMemo(() => {
-    const ids = new Set<string>();
-    if (!state || !myEnginePlayerId || !graphMap) return ids;
-    const phase = state.turn.phase;
-    if (phase === "Reinforcement") {
-      for (const [tid, t] of Object.entries(state.territories)) {
-        if (t.ownerId === myEnginePlayerId) ids.add(tid);
-      }
-    } else if (phase === "Attack") {
-      for (const [tid, t] of Object.entries(state.territories)) {
-        if (t.ownerId === myEnginePlayerId && t.armies >= 2) ids.add(tid);
-      }
-    } else if (phase === "Fortify") {
-      for (const [tid, t] of Object.entries(state.territories)) {
-        if (t.ownerId === myEnginePlayerId && t.armies >= 2) ids.add(tid);
-      }
-    }
-    return ids;
-  }, [state, myEnginePlayerId, graphMap]);
-
-  const validToIds = useMemo(() => {
-    const ids = new Set<string>();
-    if (!state || !myEnginePlayerId || !graphMap || !selectedFrom) return ids;
-    const phase = state.turn.phase;
-    if (phase === "Attack") {
-      const neighbors = graphMap.adjacency[selectedFrom];
-      if (neighbors) {
-        for (const nid of neighbors) {
-          const t = state.territories[nid];
-          if (t && t.ownerId !== myEnginePlayerId && t.ownerId !== "neutral" || (t && t.ownerId === "neutral")) {
-            if (t && t.ownerId !== myEnginePlayerId) ids.add(nid);
-          }
-        }
-      }
-    } else if (phase === "Fortify") {
-      for (const [tid, t] of Object.entries(state.territories)) {
-        if (
-          tid !== selectedFrom &&
-          t.ownerId === myEnginePlayerId
-        ) {
-          ids.add(tid);
-        }
-      }
-    }
-    return ids;
-  }, [state, myEnginePlayerId, graphMap, selectedFrom]);
-
-  const handleClickTerritory = useCallback(
-    (tid: string) => {
+  const handleTerritoryClick = useCallback(
+    (territoryId: string) => {
       if (!state || controlsDisabled) return;
-      const phase = state.turn.phase;
 
-      if (phase === "Reinforcement") {
-        if (validFromIds.has(tid)) {
-          setSelectedFrom(tid);
+      if (state.turn.phase === "Reinforcement") {
+        if (validFromIds.has(territoryId)) {
+          setSelectedFrom(territoryId);
           setReinforceCount(1);
         }
-      } else if (phase === "Attack") {
-        if (!selectedFrom) {
-          if (validFromIds.has(tid)) {
-            setSelectedFrom(tid);
-            setSelectedTo(null);
-          }
-        } else if (tid === selectedFrom) {
+        return;
+      }
+
+      if (state.turn.phase === "Attack") {
+        if (!selectedFrom && validFromIds.has(territoryId)) {
+          setSelectedFrom(territoryId);
+          setSelectedTo(null);
+          return;
+        }
+
+        if (territoryId === selectedFrom) {
           setSelectedFrom(null);
           setSelectedTo(null);
-        } else if (validToIds.has(tid)) {
-          setSelectedTo(tid);
-          const fromArmies = state.territories[selectedFrom]?.armies ?? 0;
-          setAttackDice(Math.min(3, fromArmies - 1));
-        } else if (validFromIds.has(tid)) {
-          setSelectedFrom(tid);
+          return;
+        }
+
+        if (selectedFrom && validToIds.has(territoryId)) {
+          setSelectedTo(territoryId);
+          const armies = state.territories[selectedFrom]?.armies ?? 2;
+          setAttackDice(Math.min(3, armies - 1));
+          return;
+        }
+
+        if (validFromIds.has(territoryId)) {
+          setSelectedFrom(territoryId);
           setSelectedTo(null);
         }
-      } else if (phase === "Fortify") {
-        if (!selectedFrom) {
-          if (validFromIds.has(tid)) {
-            setSelectedFrom(tid);
-            setSelectedTo(null);
-          }
-        } else if (tid === selectedFrom) {
+        return;
+      }
+
+      if (state.turn.phase === "Fortify") {
+        if (!selectedFrom && validFromIds.has(territoryId)) {
+          setSelectedFrom(territoryId);
+          setSelectedTo(null);
+          return;
+        }
+
+        if (territoryId === selectedFrom) {
           setSelectedFrom(null);
           setSelectedTo(null);
-        } else if (validToIds.has(tid)) {
-          setSelectedTo(tid);
+          return;
+        }
+
+        if (selectedFrom && validToIds.has(territoryId)) {
+          setSelectedTo(territoryId);
           setFortifyCount(1);
-        } else if (validFromIds.has(tid)) {
-          setSelectedFrom(tid);
+          return;
+        }
+
+        if (validFromIds.has(territoryId)) {
+          setSelectedFrom(territoryId);
           setSelectedTo(null);
         }
       }
     },
-    [state, controlsDisabled, validFromIds, validToIds, selectedFrom],
+    [controlsDisabled, selectedFrom, state, validFromIds, validToIds],
   );
 
-  const toggleCard = useCallback(
-    (cardId: string) => {
-      setSelectedCardIds((prev) => {
-        const next = new Set(prev);
-        if (next.has(cardId)) {
-          next.delete(cardId);
-        } else if (next.size < 3) {
-          next.add(cardId);
-        }
-        return next;
-      });
-    },
-    [],
-  );
+  const toggleCard = useCallback((cardId: string) => {
+    setSelectedCardIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(cardId)) {
+        next.delete(cardId);
+      } else if (next.size < 3) {
+        next.add(cardId);
+      }
+      return next;
+    });
+  }, []);
 
   const handleTrade = useCallback(() => {
     if (selectedCardIds.size !== 3) return;
-    submitAction({
+    void submitAction({
       type: "TradeCards",
       cardIds: Array.from(selectedCardIds) as CardId[],
     });
@@ -737,227 +332,421 @@ export default function GamePage() {
 
   const handleResign = useCallback(async () => {
     if (!typedGameId) return;
-    if (!confirm("Are you sure you want to resign?")) return;
+    if (!confirm("Are you sure you want to resign this game?")) return;
     try {
       await resignMutation({ gameId: typedGameId });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Resign failed");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not resign");
     }
-  }, [typedGameId, resignMutation]);
+  }, [resignMutation, typedGameId]);
 
-  // Loading / not found states
+  const winnerId = state?.turnOrder.find((playerId) => state.players[playerId]?.status === "alive") ?? null;
+
+  const playerStats = useMemo(() => {
+    if (!state) return [];
+
+    const territoryCounts: Record<string, number> = {};
+    const armyCounts: Record<string, number> = {};
+
+    for (const territory of Object.values(state.territories)) {
+      territoryCounts[territory.ownerId] = (territoryCounts[territory.ownerId] ?? 0) + 1;
+      armyCounts[territory.ownerId] = (armyCounts[territory.ownerId] ?? 0) + territory.armies;
+    }
+
+    return state.turnOrder.map((playerId) => ({
+      playerId,
+      territories: territoryCounts[playerId] ?? 0,
+      armies: armyCounts[playerId] ?? 0,
+      cards: state.handSizes[playerId] ?? 0,
+      status: state.players[playerId]?.status ?? "alive",
+    }));
+  }, [state]);
+
+  const flattenedEvents = useMemo(() => {
+    if (!recentActions) return [];
+    const events: Array<{ key: string; text: string }> = [];
+    for (const action of recentActions) {
+      for (const [index, event] of action.events.entries()) {
+        events.push({
+          key: `${action._id}-${index}`,
+          text: formatEvent(event, playerMap),
+        });
+      }
+    }
+    return events.slice(-40).reverse();
+  }, [playerMap, recentActions]);
+
   if (!typedGameId) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">Invalid game URL</p>
-      </div>
-    );
+    return <div className="page-shell flex items-center justify-center">Invalid game URL</div>;
   }
 
-  if (
-    view === undefined ||
-    graphMap === undefined ||
-    mapVisual === undefined
-  ) {
-    if (view !== undefined && mapDoc === null) {
-      return (
-        <div className="flex min-h-screen items-center justify-center">
-          <p className="text-muted-foreground">Map is unavailable</p>
-        </div>
-      );
-    }
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">Loading game...</p>
-      </div>
-    );
+  if (view === undefined || graphMap === undefined || mapVisual === undefined) {
+    return <div className="page-shell flex items-center justify-center">Loading game...</div>;
   }
 
   if (view === null) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">Game not found</p>
-      </div>
-    );
+    return <div className="page-shell flex items-center justify-center">Game not found</div>;
   }
 
   if (!state || !graphMap || !mapVisual) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-muted-foreground">Waiting for game state...</p>
-      </div>
-    );
+    return <div className="page-shell flex items-center justify-center">Waiting for game state...</div>;
   }
 
-  const playerMap = view.players;
   const phase = state.turn.phase;
+  const phaseCopy = PHASE_COPY[phase] ?? PHASE_COPY.GameOver;
+  const currentPlayerName = getPlayerName(state.turn.currentPlayerId, playerMap);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="flex items-center justify-between border-b px-4 py-2">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate("/")}
-            className="text-lg font-semibold hover:underline"
-          >
-            Risk
-          </button>
-          <span className="text-sm text-muted-foreground">{view.name}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {isSpectator && (
-            <span className="rounded-md bg-muted px-2 py-0.5 text-xs">
-              Spectating
-            </span>
-          )}
-          {!isSpectator && (
-            <Button size="xs" variant="ghost" onClick={handleResign}>
-              Resign
+    <div className="page-shell soft-grid">
+      <div className="page-container flex flex-col gap-4">
+        <header className="glass-panel flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" onClick={() => navigate("/")}>
+              <ArrowLeft className="size-4" />
+              Home
             </Button>
-          )}
-        </div>
-      </header>
-
-      <div className="p-4">
-        <div className="mb-3">
-          <PlayerLegend state={state} playerMap={playerMap} />
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_340px]">
-          {/* Board */}
-          <div className="overflow-auto">
-            <MapCanvas
-              map={graphMap}
-              visual={mapVisual}
-              imageUrl={mapImageUrl}
-              territories={state.territories}
-              turnOrder={state.turnOrder}
-              selectedFrom={selectedFrom}
-              selectedTo={selectedTo}
-              validFromIds={isMyTurn ? validFromIds : new Set()}
-              validToIds={isMyTurn ? validToIds : new Set()}
-              interactive={isMyTurn}
-              onClickTerritory={handleClickTerritory}
-              getPlayerColor={getPlayerColor}
-            />
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Live Match</p>
+              <h1 className="hero-title text-xl">{view.name}</h1>
+            </div>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {isSpectator && <span className="rounded-full border bg-muted px-3 py-1 text-xs">Spectating</span>}
+            {!isSpectator && (
+              <Button variant="outline" size="sm" onClick={handleResign}>
+                <Flag className="size-4" />
+                Resign
+              </Button>
+            )}
+          </div>
+        </header>
 
-          {/* Sidebar */}
-          <div className="flex flex-col gap-3">
-            <Card>
-              <CardContent className="pt-4">
-                <PhaseIndicator state={state} />
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="flex min-w-0 flex-col gap-4">
+            <Card className="glass-panel overflow-hidden border-0 py-0">
+              <CardHeader className="border-b border-border/60 bg-card/80 py-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <CardTitle className="text-xl">{phaseCopy.title}</CardTitle>
+                    <p className="text-sm text-muted-foreground">{phaseCopy.description}</p>
+                  </div>
+                  <div className="flex items-center gap-2 rounded-lg border bg-background/70 px-3 py-2 text-sm">
+                    <Crown className="size-4 text-primary" />
+                    <span className="font-semibold">{currentPlayerName}</span>
+                    <span className="text-muted-foreground">Round {state.turn.round}</span>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-3 sm:p-4">
+                <MapCanvas
+                  map={graphMap}
+                  visual={mapVisual}
+                  imageUrl={mapImageUrl}
+                  territories={state.territories}
+                  turnOrder={state.turnOrder}
+                  selectedFrom={selectedFrom}
+                  selectedTo={selectedTo}
+                  validFromIds={isMyTurn ? validFromIds : new Set()}
+                  validToIds={isMyTurn ? validToIds : new Set()}
+                  interactive={isMyTurn}
+                  onClickTerritory={handleTerritoryClick}
+                  getPlayerColor={getPlayerColor}
+                />
+                <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-lg border bg-background/80 px-3 py-2">Deck: {state.deckCount}</div>
+                  <div className="rounded-lg border bg-background/80 px-3 py-2">Discard: {state.discardCount}</div>
+                  <div className="rounded-lg border bg-background/80 px-3 py-2">
+                    Captured this turn: {state.capturedThisTurn ? "Yes" : "No"}
+                  </div>
+                  <div className="rounded-lg border bg-background/80 px-3 py-2">Trades this turn: {state.tradesCompleted}</div>
+                </div>
               </CardContent>
             </Card>
 
-            {/* Action controls (only if it's my turn and not game over) */}
-            {isMyTurn && phase !== "GameOver" && (
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Actions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {phase === "Reinforcement" && (
-                    <ReinforcementControls
-                      state={state}
-                      selectedFrom={selectedFrom}
-                      count={reinforceCount}
-                      setCount={setReinforceCount}
-                      onSubmit={submitAction}
-                      disabled={controlsDisabled}
-                    />
-                  )}
-                  {phase === "Attack" && !state.pending && (
-                    <AttackControls
-                      selectedFrom={selectedFrom}
-                      selectedTo={selectedTo}
-                      state={state}
-                      dice={attackDice}
-                      setDice={setAttackDice}
-                      onSubmit={submitAction}
-                      disabled={controlsDisabled}
-                    />
-                  )}
-                  {phase === "Occupy" && (
-                    <OccupyControls
-                      state={state}
-                      moveArmies={occupyMove}
-                      setMoveArmies={setOccupyMove}
-                      onSubmit={submitAction}
-                      disabled={controlsDisabled}
-                    />
-                  )}
-                  {(phase === "Attack" && state.pending) && (
-                    <OccupyControls
-                      state={state}
-                      moveArmies={occupyMove}
-                      setMoveArmies={setOccupyMove}
-                      onSubmit={submitAction}
-                      disabled={controlsDisabled}
-                    />
-                  )}
-                  {phase === "Fortify" && (
-                    <FortifyControls
-                      selectedFrom={selectedFrom}
-                      selectedTo={selectedTo}
-                      count={fortifyCount}
-                      setCount={setFortifyCount}
-                      state={state}
-                      onSubmit={submitAction}
-                      disabled={controlsDisabled}
-                    />
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Game Over */}
-            {phase === "GameOver" && (
-              <Card>
-                <CardContent className="pt-4 text-center">
-                  <p className="text-lg font-bold">Game Over</p>
-                  <p className="text-sm text-muted-foreground">
-                    {state.turnOrder.find(
-                      (pid) => state.players[pid]?.status === "alive",
-                    )
-                      ? `Winner: ${playerMap.find(
-                          (p) =>
-                            p.enginePlayerId ===
-                            state.turnOrder.find(
-                              (pid) =>
-                                state.players[pid]?.status === "alive",
-                            ),
-                        )?.displayName ?? "Unknown"}`
-                      : "No winner"}
+            <Card className="glass-panel border-0 py-0">
+              <CardHeader className="py-4">
+                <CardTitle className="text-base">Recent Events</CardTitle>
+              </CardHeader>
+              <CardContent className="max-h-64 space-y-2 overflow-y-auto pb-4 text-sm">
+                {flattenedEvents.length === 0 && (
+                  <p className="text-muted-foreground">No actions yet.</p>
+                )}
+                {flattenedEvents.map((event) => (
+                  <p key={event.key} className="rounded-md border bg-background/80 px-3 py-2 text-muted-foreground">
+                    {event.text}
                   </p>
+                ))}
+              </CardContent>
+            </Card>
+          </section>
+
+          <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto">
+            <Card className="glass-panel border-0 py-0">
+              <CardHeader className="py-4">
+                <CardTitle className="text-base">Turn Controls</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3 pb-4">
+                {!isMyTurn && phase !== "GameOver" && (
+                  <p className="rounded-lg border bg-background/70 px-3 py-2 text-sm text-muted-foreground">
+                    Waiting for {currentPlayerName} to play.
+                  </p>
+                )}
+
+                {isMyTurn && phase === "Reinforcement" && (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      Select a territory and place armies ({state.reinforcements?.remaining ?? 0} left).
+                    </p>
+                    {selectedFrom && (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={state.reinforcements?.remaining ?? 1}
+                          value={reinforceCount}
+                          onChange={(event) => setReinforceCount(Math.max(1, Number(event.target.value) || 1))}
+                          className="w-24"
+                        />
+                        <Button
+                          disabled={controlsDisabled}
+                          onClick={() => submitAction({
+                            type: "PlaceReinforcements",
+                            territoryId: selectedFrom as TerritoryId,
+                            count: reinforceCount,
+                          })}
+                        >
+                          <Shield className="size-4" />
+                          Place
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {isMyTurn && phase === "Attack" && !state.pending && (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      Pick your attacking and target territories.
+                    </p>
+                    {selectedFrom && selectedTo && (
+                      <div className="space-y-2 rounded-lg border bg-background/70 p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">Attacker dice</span>
+                          <div className="flex gap-1">
+                            {[1, 2, 3].map((dice) => {
+                              const maxDice = Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1);
+                              return (
+                                <Button
+                                  key={dice}
+                                  type="button"
+                                  size="xs"
+                                  variant={attackDice === dice ? "default" : "outline"}
+                                  disabled={dice > maxDice}
+                                  onClick={() => setAttackDice(dice)}
+                                >
+                                  {dice}
+                                </Button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <Button
+                          className="w-full"
+                          disabled={controlsDisabled}
+                          onClick={() => submitAction({
+                            type: "Attack",
+                            from: selectedFrom as TerritoryId,
+                            to: selectedTo as TerritoryId,
+                            attackerDice: attackDice,
+                          })}
+                        >
+                          <Swords className="size-4" />
+                          Resolve Attack
+                        </Button>
+                      </div>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={controlsDisabled}
+                      onClick={() => submitAction({ type: "EndAttackPhase" })}
+                    >
+                      End Attack Phase
+                    </Button>
+                  </>
+                )}
+
+                {isMyTurn && (phase === "Occupy" || (phase === "Attack" && !!state.pending)) && state.pending && (
+                  (() => {
+                    const pending = state.pending;
+                    return (
+                      <>
+                    <p className="text-sm text-muted-foreground">
+                      Move armies from {pending.from} to {pending.to}.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={pending.minMove}
+                        max={pending.maxMove}
+                        value={occupyMove}
+                        onChange={(event) => {
+                          const value = Number(event.target.value) || pending.minMove;
+                          setOccupyMove(Math.max(pending.minMove, Math.min(pending.maxMove, value)));
+                        }}
+                        className="w-24"
+                      />
+                      <Button
+                        disabled={controlsDisabled}
+                        onClick={() => submitAction({ type: "Occupy", moveArmies: occupyMove })}
+                      >
+                        Confirm Move
+                      </Button>
+                    </div>
+                      </>
+                    );
+                  })()
+                )}
+
+                {isMyTurn && phase === "Fortify" && (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      Select source and destination territories.
+                    </p>
+                    {selectedFrom && selectedTo && (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={Math.max(1, (state.territories[selectedFrom]?.armies ?? 2) - 1)}
+                          value={fortifyCount}
+                          onChange={(event) => setFortifyCount(Math.max(1, Number(event.target.value) || 1))}
+                          className="w-24"
+                        />
+                        <Button
+                          disabled={controlsDisabled}
+                          onClick={() => submitAction({
+                            type: "Fortify",
+                            from: selectedFrom as TerritoryId,
+                            to: selectedTo as TerritoryId,
+                            count: fortifyCount,
+                          })}
+                        >
+                          Fortify
+                        </Button>
+                      </div>
+                    )}
+                    <Button
+                      variant="outline"
+                      disabled={controlsDisabled}
+                      onClick={() => submitAction({ type: "EndTurn" })}
+                    >
+                      End Turn
+                    </Button>
+                  </>
+                )}
+
+                {phase === "GameOver" && (
+                  <div className="rounded-lg border bg-background/70 px-3 py-3 text-sm">
+                    Winner: {winnerId ? getPlayerName(winnerId, playerMap) : "Unknown"}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {myHand && (
+              <Card className="glass-panel border-0 py-0">
+                <CardHeader className="py-4">
+                  <CardTitle className="text-base">Cards ({myHand.length})</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 pb-4">
+                  <div className="flex flex-wrap gap-2">
+                    {myHand.map((card) => {
+                      const selected = selectedCardIds.has(card.cardId);
+                      return (
+                        <button
+                          key={card.cardId}
+                          type="button"
+                          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                            selected
+                              ? "border-primary bg-primary/15 text-primary"
+                              : "border-border bg-background/80 hover:border-primary/50"
+                          }`}
+                          onClick={() => toggleCard(card.cardId)}
+                        >
+                          {card.kind}
+                        </button>
+                      );
+                    })}
+                  </div>
                   <Button
-                    className="mt-3"
-                    onClick={() => navigate("/")}
+                    className="w-full"
+                    disabled={controlsDisabled || phase !== "Reinforcement" || selectedCardIds.size !== 3}
+                    onClick={handleTrade}
                   >
-                    Back to Home
+                    Trade Selected Cards
                   </Button>
                 </CardContent>
               </Card>
             )}
 
-            {/* Cards panel */}
-            {myHand && graphMap && (
-              <CardsPanel
-                myHand={myHand}
-                selectedCardIds={selectedCardIds}
-                toggleCard={toggleCard}
-                onTrade={handleTrade}
-                canTrade={
-                  phase === "Reinforcement" && selectedCardIds.size === 3
-                }
-                disabled={controlsDisabled}
-                map={graphMap}
-              />
-            )}
+            <Card className="glass-panel border-0 py-0">
+              <CardHeader className="py-4">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Users className="size-4" />
+                  Players
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 pb-4">
+                {playerStats.map((player) => {
+                  const isCurrent = player.playerId === state.turn.currentPlayerId;
+                  const isDefeated = player.status === "defeated";
+                  const color = getPlayerColor(player.playerId, state.turnOrder);
 
-            {/* Event log */}
-            <EventLog gameId={typedGameId} playerMap={playerMap} />
-          </div>
+                  return (
+                    <div
+                      key={player.playerId}
+                      className={`rounded-lg border px-3 py-2 ${isCurrent ? "border-primary/70 bg-primary/10" : "bg-background/80"} ${
+                        isDefeated ? "opacity-55" : ""
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="size-2.5 rounded-full" style={{ backgroundColor: color }} />
+                          <span className={`text-sm font-semibold ${isDefeated ? "line-through" : ""}`}>
+                            {getPlayerName(player.playerId, playerMap)}
+                          </span>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {player.territories}T / {player.armies}A / {player.cards}C
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
+            <Card className="glass-panel border-0 py-0">
+              <CardContent className="grid grid-cols-3 gap-2 py-4 text-center text-xs">
+                <div className="rounded-lg border bg-background/70 p-2">
+                  <Dice1 className="mx-auto mb-1 size-4 text-primary" />
+                  <p className="text-muted-foreground">Phase</p>
+                  <p className="font-semibold">{phase}</p>
+                </div>
+                <div className="rounded-lg border bg-background/70 p-2">
+                  <Crown className="mx-auto mb-1 size-4 text-primary" />
+                  <p className="text-muted-foreground">Turn</p>
+                  <p className="font-semibold">{state.turn.round}</p>
+                </div>
+                <div className="rounded-lg border bg-background/70 p-2">
+                  <Flag className="mx-auto mb-1 size-4 text-primary" />
+                  <p className="text-muted-foreground">Status</p>
+                  <p className="font-semibold">{phase === "GameOver" ? "Final" : "Live"}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </aside>
         </div>
       </div>
     </div>

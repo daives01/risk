@@ -2,16 +2,9 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -19,15 +12,12 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      const result = await authClient.requestPasswordReset({
-        email,
-        redirectTo: "/reset-password",
-      });
+      const result = await authClient.requestPasswordReset({ email, redirectTo: "/reset-password" });
       if (result.error) {
         setError(result.error.message ?? "Request failed");
       } else {
@@ -42,20 +32,14 @@ export default function ForgotPasswordPage() {
 
   if (submitted) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4">
-        <Card className="w-full max-w-sm">
-          <CardHeader>
-            <CardTitle className="text-2xl">Check your email</CardTitle>
-            <CardDescription>
-              If an account exists for <strong>{email}</strong>, we sent a
-              password reset link.
-            </CardDescription>
+      <div className="page-shell flex items-center justify-center soft-grid">
+        <Card className="glass-panel w-full max-w-md border-0 py-0">
+          <CardHeader className="py-6">
+            <CardTitle className="hero-title text-2xl">Check your email</CardTitle>
+            <CardDescription>If an account exists for {email}, we sent a reset link.</CardDescription>
           </CardHeader>
-          <CardFooter>
-            <Link
-              to="/login"
-              className="text-sm text-primary underline underline-offset-4"
-            >
+          <CardFooter className="py-6">
+            <Link to="/login" className="text-sm text-primary underline underline-offset-4">
               Back to sign in
             </Link>
           </CardFooter>
@@ -65,39 +49,25 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Forgot password</CardTitle>
-          <CardDescription>
-            Enter your email and we'll send you a reset link
-          </CardDescription>
+    <div className="page-shell flex items-center justify-center soft-grid">
+      <Card className="glass-panel w-full max-w-md border-0 py-0">
+        <CardHeader className="py-6">
+          <CardTitle className="hero-title text-2xl">Forgot password</CardTitle>
+          <CardDescription>Enter your email to receive a reset link.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
-          <CardContent className="flex flex-col gap-4">
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
-            <div className="flex flex-col gap-2">
+          <CardContent className="space-y-4">
+            {error && <p className="rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+            <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+              <Input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col gap-4">
+          <CardFooter className="flex flex-col gap-3 py-6">
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Sending..." : "Send reset link"}
             </Button>
-            <Link
-              to="/login"
-              className="text-sm text-muted-foreground underline underline-offset-4"
-            >
+            <Link to="/login" className="text-sm text-muted-foreground underline underline-offset-4">
               Back to sign in
             </Link>
           </CardFooter>
