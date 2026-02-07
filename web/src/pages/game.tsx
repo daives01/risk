@@ -8,11 +8,25 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ShortcutHint } from "@/components/ui/shortcut-hint";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { MapCanvas } from "@/components/game/map-canvas";
-import { GameEventsCard, GameHandCard, GamePlayersCard } from "@/components/game/game-panels";
+import { GameChatCard, GameEventsCard, GameHandCard, GamePlayersCard } from "@/components/game/game-panels";
 import { authClient } from "@/lib/auth-client";
 import { adaptMapDoc, adaptView } from "@/lib/game/adapters";
 import { formatEvent, getPlayerColor, getPlayerName } from "@/lib/game/display";
+import {
+  resolveHighlightedTerritoryIds,
+  togglePlayerHighlight,
+  toggleTeamHighlight,
+  type HighlightFilter,
+} from "@/lib/game/highlighting";
+import {
+  findNextCaptureFrame,
+  findNextEliminationFrame,
+  findNextTurnBoundary,
+  findPreviousTurnBoundary,
+} from "@/lib/game/history-navigation";
+import { buildPlayerPanelStats } from "@/lib/game/player-stats";
 import { PHASE_COPY } from "@/lib/game/types";
+import type { ChatChannel } from "@/lib/game/types";
 import type { ReinforcementDraft } from "@/lib/game/types";
 import { useGameActions } from "@/lib/game/use-game-actions";
 import { useGameRuntimeQueries, useGameViewQueries } from "@/lib/game/use-game-queries";
@@ -26,9 +40,20 @@ export default function GamePage() {
   const typedGameId = gameId as Id<"games"> | undefined;
   const { playerView, publicView } = useGameViewQueries(session, typedGameId);
   const { view, myEnginePlayerId, myHand, playerMap, state } = adaptView(playerView, publicView);
-  const { mapDoc, recentActions, historyTimeline } = useGameRuntimeQueries(typedGameId, view?.mapId);
+  const [chatChannel, setChatChannel] = useState<ChatChannel>("global");
+  const [chatDraft, setChatDraft] = useState("");
+  const { mapDoc, recentActions, historyTimeline, chatMessages } = useGameRuntimeQueries(
+    typedGameId,
+    view?.mapId,
+    chatChannel,
+  );
   const { graphMap, mapVisual, mapImageUrl } = adaptMapDoc(mapDoc);
-  const { submitActionMutation, submitReinforcementPlacementsMutation, resignMutation } = useGameActions();
+  const {
+    submitActionMutation,
+    submitReinforcementPlacementsMutation,
+    resignMutation,
+    sendGameChatMessageMutation,
+  } = useGameActions();
 
   const [selectedFrom, setSelectedFrom] = useState<string | null>(null);
   const [selectedTo, setSelectedTo] = useState<string | null>(null);
@@ -42,12 +67,14 @@ export default function GamePage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyPlaying, setHistoryPlaying] = useState(false);
   const [historyFrameIndex, setHistoryFrameIndex] = useState(0);
+  const [highlightFilter, setHighlightFilter] = useState<HighlightFilter>("none");
 
   const phase = state?.turn.phase ?? "GameOver";
   const isSpectator = !myEnginePlayerId;
   const isMyTurn = !!myEnginePlayerId && !!state && state.turn.currentPlayerId === myEnginePlayerId;
   const controlsDisabled = !isMyTurn || isSpectator || submitting || historyOpen;
-  const historyCount = historyTimeline?.length ?? 0;
+  const historyFrames = useMemo(() => historyTimeline ?? [], [historyTimeline]);
+  const historyCount = historyFrames.length;
   const historyMaxIndex = Math.max(0, historyCount - 1);
   const historyAtEnd = historyFrameIndex >= historyMaxIndex;
 
@@ -59,6 +86,7 @@ export default function GamePage() {
   const uncommittedReinforcements = Math.max(0, remainingReinforcements - queuedReinforcementTotal);
   const isPlacementPhase = state?.turn.phase === "Reinforcement";
   const myTeamId = myEnginePlayerId && state ? state.players[myEnginePlayerId]?.teamId : undefined;
+  const canUseTeamChat = !!view?.teamModeEnabled && !!myTeamId;
   const isTeammateOwner = useCallback((ownerId: string) => {
     if (!state || !myEnginePlayerId || !myTeamId) return false;
     if (ownerId === myEnginePlayerId || ownerId === "neutral") return false;
@@ -332,6 +360,22 @@ export default function GamePage() {
     }
   }, [resignMutation, typedGameId]);
 
+  const handleSendChatMessage = useCallback(async () => {
+    if (!typedGameId) return;
+    const text = chatDraft.trim();
+    if (!text) return;
+    try {
+      await sendGameChatMessageMutation({
+        gameId: typedGameId,
+        channel: chatChannel,
+        text,
+      });
+      setChatDraft("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not send message");
+    }
+  }, [chatChannel, chatDraft, sendGameChatMessageMutation, typedGameId]);
+
   const flattenedEvents = useMemo(() => {
     if (!recentActions) return [];
     const events: Array<{ key: string; text: string }> = [];
@@ -346,18 +390,23 @@ export default function GamePage() {
     return events.slice(-40).reverse();
   }, [playerMap, recentActions]);
 
+  const resolvePlayerColor = useCallback(
+    (playerId: string, turnOrder: string[]) => getPlayerColor(playerId, playerMap, turnOrder),
+    [playerMap],
+  );
+
   useEffect(() => {
     if (!historyOpen) {
       setHistoryPlaying(false);
       return;
     }
-    const maxIndex = Math.max(0, (historyTimeline?.length ?? 1) - 1);
+    const maxIndex = Math.max(0, historyCount - 1);
     setHistoryFrameIndex((prev) => Math.min(prev, maxIndex));
-  }, [historyOpen, historyTimeline?.length]);
+  }, [historyCount, historyOpen]);
 
   useEffect(() => {
     if (!historyOpen || !historyPlaying) return;
-    const maxIndex = (historyTimeline?.length ?? 0) - 1;
+    const maxIndex = historyCount - 1;
     if (maxIndex <= 0) return;
     const timer = setInterval(() => {
       setHistoryFrameIndex((prev) => {
@@ -369,13 +418,57 @@ export default function GamePage() {
       });
     }, 700);
     return () => clearInterval(timer);
-  }, [historyOpen, historyPlaying, historyTimeline]);
+  }, [historyCount, historyOpen, historyPlaying]);
 
   useEffect(() => {
     if (!historyOpen) return;
     setSelectedFrom(null);
     setSelectedTo(null);
   }, [historyOpen]);
+
+  useEffect(() => {
+    if (chatChannel === "team" && !canUseTeamChat) {
+      setChatChannel("global");
+    }
+  }, [canUseTeamChat, chatChannel]);
+
+  const jumpToTurnBoundary = useCallback(
+    (direction: "prev" | "next") => {
+      if (historyFrames.length === 0) return;
+      setHistoryFrameIndex((prev) =>
+        direction === "prev"
+          ? findPreviousTurnBoundary(historyFrames, prev)
+          : findNextTurnBoundary(historyFrames, prev),
+      );
+      setHistoryPlaying(false);
+    },
+    [historyFrames],
+  );
+
+  const jumpToHistoryEvent = useCallback(
+    (kind: "capture" | "elimination") => {
+      if (historyFrames.length === 0) return;
+      setHistoryFrameIndex((prev) =>
+        kind === "capture"
+          ? findNextCaptureFrame(historyFrames, prev)
+          : findNextEliminationFrame(historyFrames, prev),
+      );
+      setHistoryPlaying(false);
+    },
+    [historyFrames],
+  );
+
+  const handleTogglePlayerHighlight = useCallback((playerId: string) => {
+    setHighlightFilter((prev) => togglePlayerHighlight(prev, playerId));
+  }, []);
+
+  const handleToggleTeamHighlight = useCallback((teamId: string) => {
+    setHighlightFilter((prev) => toggleTeamHighlight(prev, teamId));
+  }, []);
+
+  const handleClearHighlight = useCallback(() => {
+    setHighlightFilter("none");
+  }, []);
 
   useGameShortcuts({
     historyOpen,
@@ -386,13 +479,17 @@ export default function GamePage() {
     reinforcementDraftCount: reinforcementDrafts.length,
     controlsDisabled,
     hasPendingOccupy: !!state?.pending,
+    hasHighlight: highlightFilter !== "none",
     onToggleHistory: () => setHistoryOpen((prev) => !prev),
     onSetHistoryPlaying: setHistoryPlaying,
     onSetHistoryFrameIndex: setHistoryFrameIndex,
+    onJumpHistoryTurnBoundary: jumpToTurnBoundary,
+    onJumpHistoryEvent: jumpToHistoryEvent,
     onClearSelection: () => {
       setSelectedFrom(null);
       setSelectedTo(null);
     },
+    onClearHighlight: handleClearHighlight,
     onUndoPlacement: handleUndoPlacement,
     onConfirmPlacements: () => {
       void handleConfirmPlacements();
@@ -400,6 +497,15 @@ export default function GamePage() {
     onEndAttackPhase: handleEndAttackPhase,
     onEndTurn: handleEndTurn,
   });
+
+  const activeHistoryFrame = historyOpen ? historyFrames[historyFrameIndex] ?? null : null;
+  const displayState = activeHistoryFrame?.state ?? state;
+  const highlightedTerritoryIds = useMemo(
+    () => (displayState ? resolveHighlightedTerritoryIds(displayState, highlightFilter) : new Set<string>()),
+    [displayState, highlightFilter],
+  );
+  const hasHighlight = highlightFilter !== "none";
+  const playerStats = useMemo(() => (displayState ? buildPlayerPanelStats(displayState) : []), [displayState]);
 
   if (!typedGameId) {
     return <div className="page-shell flex items-center justify-center">Invalid game URL</div>;
@@ -417,32 +523,15 @@ export default function GamePage() {
     return <div className="page-shell flex items-center justify-center">Waiting for game state...</div>;
   }
 
-  const activeHistoryFrame = historyOpen ? historyTimeline?.[historyFrameIndex] ?? null : null;
-  const displayState = activeHistoryFrame?.state ?? state;
-  const displayPhase = displayState.turn.phase;
+  const resolvedDisplayState = displayState ?? state;
+  const displayPhase = resolvedDisplayState.turn.phase;
   const phaseLabel = displayPhase === "Reinforcement" ? "Place" : displayPhase;
   const phaseCopy = PHASE_COPY[displayPhase] ?? PHASE_COPY.GameOver;
   const showPhaseTitle = historyOpen || isMyTurn || !["Reinforcement", "Attack", "Fortify"].includes(displayPhase);
-  const winnerId = displayState.turnOrder.find((playerId) => displayState.players[playerId]?.status === "alive") ?? null;
-  const playbackTerritories = historyOpen ? displayState.territories : displayedTerritories;
-
-  const playerStats = (() => {
-    const territoryCounts: Record<string, number> = {};
-    const armyCounts: Record<string, number> = {};
-
-    for (const territory of Object.values(displayState.territories)) {
-      territoryCounts[territory.ownerId] = (territoryCounts[territory.ownerId] ?? 0) + 1;
-      armyCounts[territory.ownerId] = (armyCounts[territory.ownerId] ?? 0) + territory.armies;
-    }
-
-    return displayState.turnOrder.map((playerId) => ({
-      playerId,
-      territories: territoryCounts[playerId] ?? 0,
-      armies: armyCounts[playerId] ?? 0,
-      cards: displayState.handSizes[playerId] ?? 0,
-      status: displayState.players[playerId]?.status ?? "alive",
-    }));
-  })();
+  const winnerId =
+    resolvedDisplayState.turnOrder.find((playerId) => resolvedDisplayState.players[playerId]?.status === "alive") ??
+    null;
+  const playbackTerritories = historyOpen ? resolvedDisplayState.territories : displayedTerritories;
 
   return (
     <div className="page-shell soft-grid overflow-x-hidden">
@@ -543,6 +632,16 @@ export default function GamePage() {
                   size="xs"
                   type="button"
                   variant="outline"
+                  title="Previous turn boundary (Shift+[)"
+                  disabled={historyFrameIndex <= 0}
+                  onClick={() => jumpToTurnBoundary("prev")}
+                >
+                  Prev Turn
+                </Button>
+                <Button
+                  size="xs"
+                  type="button"
+                  variant="outline"
                   title="Previous frame ([)"
                   disabled={historyFrameIndex <= 0}
                   onClick={() => setHistoryFrameIndex((prev) => Math.max(0, prev - 1))}
@@ -573,6 +672,36 @@ export default function GamePage() {
                   size="xs"
                   type="button"
                   variant="outline"
+                  title="Next turn boundary (Shift+])"
+                  disabled={historyAtEnd}
+                  onClick={() => jumpToTurnBoundary("next")}
+                >
+                  Next Turn
+                </Button>
+                <Button
+                  size="xs"
+                  type="button"
+                  variant="outline"
+                  title="Next capture (C)"
+                  disabled={historyAtEnd}
+                  onClick={() => jumpToHistoryEvent("capture")}
+                >
+                  Capture
+                </Button>
+                <Button
+                  size="xs"
+                  type="button"
+                  variant="outline"
+                  title="Next elimination (E)"
+                  disabled={historyAtEnd}
+                  onClick={() => jumpToHistoryEvent("elimination")}
+                >
+                  Elim
+                </Button>
+                <Button
+                  size="xs"
+                  type="button"
+                  variant="outline"
                   title="Reset history (R)"
                   onClick={() => {
                     setHistoryFrameIndex(0);
@@ -583,6 +712,24 @@ export default function GamePage() {
                 </Button>
                 <span className="rounded border bg-background/70 px-2 py-1 text-xs text-muted-foreground">
                   {historyFrameIndex + 1}/{historyCount}
+                </span>
+                <label className="flex min-w-[240px] items-center gap-2 text-xs text-muted-foreground">
+                  <span>Frame</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={historyMaxIndex}
+                    value={historyFrameIndex}
+                    onChange={(event) => {
+                      setHistoryFrameIndex(Number.parseInt(event.target.value, 10) || 0);
+                      setHistoryPlaying(false);
+                    }}
+                    className="h-1.5 w-full accent-foreground"
+                    aria-label="Replay timeline frame"
+                  />
+                </label>
+                <span className="max-w-80 truncate rounded border bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+                  {activeHistoryFrame?.label ?? "Game start"}
                 </span>
               </>
             )}
@@ -623,6 +770,17 @@ export default function GamePage() {
                 <ShortcutHint shortcut="mod+enter" />
               </Button>
             )}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              title="Clear highlight (X)"
+              disabled={!hasHighlight}
+              onClick={handleClearHighlight}
+            >
+              Clear Highlight
+              <ShortcutHint shortcut="x" />
+            </Button>
           </div>
         </div>
 
@@ -634,18 +792,19 @@ export default function GamePage() {
                 visual={mapVisual}
                 imageUrl={mapImageUrl}
                 territories={playbackTerritories}
-                turnOrder={displayState.turnOrder}
+                turnOrder={resolvedDisplayState.turnOrder}
                 selectedFrom={selectedFrom}
                 selectedTo={selectedTo}
                 validFromIds={!historyOpen && isMyTurn ? validFromIds : new Set()}
                 validToIds={!historyOpen && isMyTurn ? validToIds : new Set()}
+                highlightedTerritoryIds={highlightedTerritoryIds}
                 interactive={!historyOpen && isMyTurn}
                 onClickTerritory={handleTerritoryClick}
                 onClearSelection={() => {
                   setSelectedFrom(null);
                   setSelectedTo(null);
                 }}
-                getPlayerColor={getPlayerColor}
+                getPlayerColor={resolvePlayerColor}
                 battleOverlay={
                   !historyOpen && isMyTurn && (phase === "Occupy" || (phase === "Attack" && !!state.pending)) && state.pending
                     ? {
@@ -714,27 +873,47 @@ export default function GamePage() {
 
           <GamePlayersCard
             playerStats={playerStats}
-            displayState={displayState}
+            displayState={resolvedDisplayState}
             playerMap={playerMap}
-            getPlayerColor={getPlayerColor}
+            teamModeEnabled={!!view.teamModeEnabled}
+            activeHighlight={highlightFilter}
+            onTogglePlayerHighlight={handleTogglePlayerHighlight}
+            onToggleTeamHighlight={handleToggleTeamHighlight}
+            onClearHighlight={handleClearHighlight}
+            getPlayerColor={resolvePlayerColor}
             getPlayerName={getPlayerName}
           />
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <GameEventsCard flattenedEvents={flattenedEvents} />
 
-            {myHand && (
-              <GameHandCard
-                myHand={myHand}
-                selectedCardIds={selectedCardIds}
-                onToggleCard={toggleCard}
-                onTrade={handleTrade}
-                controlsDisabled={controlsDisabled}
-                phase={phase}
-                isMyTurn={isMyTurn}
-                phaseLabel={phaseLabel}
+            <div className="space-y-4">
+              <GameChatCard
+                messages={chatMessages ?? []}
+                activeChannel={chatChannel}
+                teamAvailable={canUseTeamChat}
+                canSend={!isSpectator && !historyOpen && view.status === "active"}
+                draftText={chatDraft}
+                onSetDraftText={setChatDraft}
+                onSelectChannel={setChatChannel}
+                onSend={() => {
+                  void handleSendChatMessage();
+                }}
               />
-            )}
+
+              {myHand && (
+                <GameHandCard
+                  myHand={myHand}
+                  selectedCardIds={selectedCardIds}
+                  onToggleCard={toggleCard}
+                  onTrade={handleTrade}
+                  controlsDisabled={controlsDisabled}
+                  phase={phase}
+                  isMyTurn={isMyTurn}
+                  phaseLabel={phaseLabel}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -31,6 +31,7 @@ interface MapCanvasProps {
   selectedTo: string | null;
   validFromIds: Set<string>;
   validToIds: Set<string>;
+  highlightedTerritoryIds: Set<string>;
   interactive: boolean;
   onClickTerritory: (territoryId: string) => void;
   onClearSelection?: () => void;
@@ -90,6 +91,7 @@ export function MapCanvas({
   selectedTo,
   validFromIds,
   validToIds,
+  highlightedTerritoryIds,
   interactive,
   onClickTerritory,
   onClearSelection,
@@ -104,6 +106,7 @@ export function MapCanvas({
   });
   const frameAspect = 16 / 9;
   const imageAspect = visual.imageWidth / visual.imageHeight;
+  const highlightActive = highlightedTerritoryIds.size > 0;
 
   const graphEdges = Object.entries(map.adjacency ?? {}).flatMap(([from, neighbors]) =>
     neighbors
@@ -264,9 +267,21 @@ export function MapCanvas({
 
               const touchesFrom = selectedFrom === from || selectedFrom === to;
               const touchesTo = selectedTo === from || selectedTo === to;
+              const touchesHighlight =
+                highlightedTerritoryIds.has(from) || highlightedTerritoryIds.has(to);
               const isCandidate =
                 !!selectedFrom &&
                 ((from === selectedFrom && validToIds.has(to)) || (to === selectedFrom && validToIds.has(from)));
+
+              const edgeStroke = touchesTo
+                ? "rgba(248,113,113,0.95)"
+                : touchesFrom || isCandidate
+                  ? "rgba(96,165,250,0.95)"
+                  : highlightActive
+                    ? touchesHighlight
+                      ? "rgba(255,255,255,0.38)"
+                      : "rgba(255,255,255,0.09)"
+                    : "rgba(255,255,255,0.24)";
 
               return (
                 <line
@@ -275,7 +290,7 @@ export function MapCanvas({
                   y1={`${fromAnchor.y * 100}%`}
                   x2={`${toAnchor.x * 100}%`}
                   y2={`${toAnchor.y * 100}%`}
-                  stroke={touchesTo ? "rgba(248,113,113,0.95)" : touchesFrom || isCandidate ? "rgba(96,165,250,0.95)" : "rgba(255,255,255,0.24)"}
+                  stroke={edgeStroke}
                   strokeWidth={touchesFrom || touchesTo || isCandidate ? 3 : 1.5}
                 />
               );
@@ -292,6 +307,9 @@ export function MapCanvas({
             const isValidFrom = validFromIds.has(territoryId);
             const isValidTo = validToIds.has(territoryId);
             const selectable = interactive && (isValidFrom || isValidTo);
+            const isActionEmphasized = isFrom || isTo || isValidFrom || isValidTo;
+            const isHighlighted = !highlightActive || highlightedTerritoryIds.has(territoryId);
+            const shouldDeEmphasize = highlightActive && !isHighlighted && !isActionEmphasized;
 
             return (
               <button
@@ -304,6 +322,8 @@ export function MapCanvas({
                 className={cn(
                   "absolute min-w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 px-2 py-1 text-xs font-bold text-white shadow-sm transition",
                   selectable ? "cursor-pointer" : "cursor-default opacity-80",
+                  shouldDeEmphasize && "opacity-30 saturate-50",
+                  highlightActive && isHighlighted && !isActionEmphasized && "ring-1 ring-white/70",
                   isFrom && "ring-2 ring-blue-500",
                   isTo && "ring-2 ring-red-500",
                 )}

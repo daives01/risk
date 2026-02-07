@@ -2,9 +2,11 @@ import type { GraphMap } from "risk-engine";
 import type { HandCard, MapVisual, PublicState } from "@/lib/game/types";
 
 type ViewLike = {
-  players?: Array<{ displayName: string; enginePlayerId: string | null }>;
+  players?: Array<{ displayName: string; enginePlayerId: string | null; color?: string | null }>;
   state?: unknown;
   mapId?: string;
+  status?: string;
+  teamModeEnabled?: boolean;
 };
 
 type PlayerViewLike = ViewLike & {
