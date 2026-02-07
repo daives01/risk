@@ -67,6 +67,18 @@
     @apply border-border outline-ring/50;
   }
 
+  /* Use app-provided +/- controls, not browser-native number steppers. */
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
   html,
   body,
   #root {

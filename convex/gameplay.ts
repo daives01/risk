@@ -3,11 +3,32 @@ import { v } from "convex/values";
 import type { GenericDatabaseReader } from "convex/server";
 import type { DataModel } from "./_generated/dataModel";
 import { authComponent } from "./auth.js";
-import { applyAction, ActionError, defaultRuleset } from "risk-engine";
-import type { Action, CardId, GameState, PlayerId, GraphMap } from "risk-engine";
+import { applyAction, ActionError, calculateReinforcements, createDeck, createRng, defaultRuleset } from "risk-engine";
+import type { Action, CardId, GameState, PlayerId, GraphMap, TerritoryId, GameEvent } from "risk-engine";
 import type { Id } from "./_generated/dataModel";
 
 const ACTION_RATE_LIMIT_MS = 500;
+
+type TimelinePublicState = {
+  players: Record<string, { status: string; teamId?: string }>;
+  turnOrder: string[];
+  territories: Record<string, { ownerId: string; armies: number }>;
+  turn: { currentPlayerId: string; phase: string; round: number };
+  pending?: {
+    type: "Occupy";
+    from: string;
+    to: string;
+    minMove: number;
+    maxMove: number;
+  };
+  reinforcements?: { remaining: number; sources?: Record<string, number> };
+  capturedThisTurn: boolean;
+  tradesCompleted: number;
+  deckCount: number;
+  discardCount: number;
+  handSizes: Record<string, number>;
+  stateVersion: number;
+};
 
 async function enforceRateLimit(
   db: GenericDatabaseReader<DataModel>,
@@ -131,6 +152,124 @@ export const submitAction = mutation({
     return {
       events: result.events,
       newVersion: result.state.stateVersion,
+    };
+  },
+});
+
+export const submitReinforcementPlacements = mutation({
+  args: {
+    gameId: v.id("games"),
+    expectedVersion: v.number(),
+    placements: v.array(v.object({
+      territoryId: v.string(),
+      count: v.number(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+
+    const game = await ctx.db.get(args.gameId);
+    if (!game) throw new Error("Game not found");
+    if (game.status !== "active") throw new Error("Game is not active");
+    if (args.placements.length === 0) throw new Error("No placements to submit");
+
+    const state = game.state as GameState;
+    if (!state) throw new Error("Game has no state");
+    if (state.stateVersion !== args.expectedVersion) {
+      throw new Error(
+        `Version mismatch: expected ${args.expectedVersion}, current ${state.stateVersion}`,
+      );
+    }
+
+    const callerId = String(user._id);
+    const playerDoc = await ctx.db
+      .query("gamePlayers")
+      .withIndex("by_gameId_userId", (q) =>
+        q.eq("gameId", args.gameId).eq("userId", callerId),
+      )
+      .unique();
+    if (!playerDoc || !playerDoc.enginePlayerId) {
+      throw new Error("You are not a player in this game");
+    }
+    const playerId = playerDoc.enginePlayerId as PlayerId;
+
+    await enforceRateLimit(ctx.db, args.gameId, playerId);
+
+    const mapDoc = await ctx.db
+      .query("maps")
+      .withIndex("by_mapId", (q) => q.eq("mapId", game.mapId))
+      .unique();
+    if (!mapDoc) throw new Error("Map not found");
+    const graphMap = mapDoc.graphMap as unknown as GraphMap;
+
+    let nextState = state;
+    const events: unknown[] = [];
+
+    for (const placement of args.placements) {
+      const count = Math.trunc(placement.count);
+      if (!Number.isFinite(count) || count < 1) {
+        throw new Error("Each placement count must be a positive integer");
+      }
+
+      const action: Action = {
+        type: "PlaceReinforcements",
+        territoryId: placement.territoryId as TerritoryId,
+        count,
+      };
+
+      let result;
+      try {
+        result = applyAction(
+          nextState,
+          playerId,
+          action,
+          graphMap,
+          defaultRuleset.combat,
+          defaultRuleset.fortify,
+          defaultRuleset.cards,
+          defaultRuleset.teams,
+        );
+      } catch (e) {
+        if (e instanceof ActionError) {
+          throw new Error(e.message);
+        }
+        throw e;
+      }
+
+      nextState = result.state;
+      events.push(...result.events);
+    }
+
+    const lastAction = await ctx.db
+      .query("gameActions")
+      .withIndex("by_gameId_index", (q) => q.eq("gameId", args.gameId))
+      .order("desc")
+      .first();
+    const nextIndex = lastAction ? lastAction.index + 1 : 0;
+
+    await ctx.db.insert("gameActions", {
+      gameId: args.gameId,
+      index: nextIndex,
+      playerId: playerDoc.enginePlayerId,
+      action: { type: "PlaceReinforcementsBatch", placements: args.placements },
+      events,
+      stateVersionBefore: state.stateVersion,
+      stateVersionAfter: nextState.stateVersion,
+      createdAt: Date.now(),
+    });
+
+    const isGameOver = nextState.turn.phase === "GameOver";
+
+    await ctx.db.patch(args.gameId, {
+      state: nextState,
+      stateVersion: nextState.stateVersion,
+      ...(isGameOver ? { status: "finished" as const, finishedAt: Date.now() } : {}),
+    });
+
+    return {
+      events,
+      newVersion: nextState.stateVersion,
     };
   },
 });
@@ -362,5 +501,347 @@ export const listActions = query({
       events: redactEvents(a.events as RawEvent[]),
       createdAt: a.createdAt,
     }));
+  },
+});
+
+function toTimelinePublicState(state: GameState): TimelinePublicState {
+  const handSizes: Record<string, number> = {};
+  for (const [playerId, hand] of Object.entries(state.hands)) {
+    handSizes[playerId] = hand.length;
+  }
+
+  const turnOrder = [...state.turnOrder];
+  const territories = Object.fromEntries(
+    Object.entries(state.territories).map(([territoryId, territory]) => [
+      territoryId,
+      { ownerId: territory.ownerId, armies: territory.armies },
+    ]),
+  );
+
+  return {
+    players: state.players as Record<string, { status: string; teamId?: string }>,
+    turnOrder,
+    territories,
+    turn: {
+      currentPlayerId: state.turn.currentPlayerId,
+      phase: state.turn.phase,
+      round: state.turn.round,
+    },
+    pending: state.pending
+      ? {
+          type: "Occupy",
+          from: state.pending.from,
+          to: state.pending.to,
+          minMove: state.pending.minMove,
+          maxMove: state.pending.maxMove,
+        }
+      : undefined,
+    reinforcements: state.reinforcements
+      ? {
+          remaining: state.reinforcements.remaining,
+          sources: state.reinforcements.sources,
+        }
+      : undefined,
+    capturedThisTurn: state.capturedThisTurn,
+    tradesCompleted: state.tradesCompleted,
+    deckCount: state.deck.draw.length,
+    discardCount: state.deck.discard.length,
+    handSizes,
+    stateVersion: state.stateVersion,
+  };
+}
+
+function toPlayerIndex(playerId: string): number {
+  const match = /^p(\d+)$/.exec(playerId);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
+function createInitialStateFromSeed(
+  currentState: GameState,
+  graphMap: GraphMap,
+  playerIds: PlayerId[],
+): GameState {
+  const territoryIds = Object.keys(graphMap.territories) as TerritoryId[];
+  const setup = defaultRuleset.setup;
+  const rng = createRng({ seed: currentState.rng.seed, index: 0 });
+  const turnOrder = rng.shuffle(playerIds);
+
+  const shuffledTerritories = rng.shuffle(territoryIds);
+  const initialArmies = setup.playerInitialArmies[playerIds.length] ?? 20;
+
+  const neutralCount = Math.min(
+    setup.neutralTerritoryCount,
+    territoryIds.length - playerIds.length,
+  );
+  const neutralTerritories = shuffledTerritories.slice(0, neutralCount);
+  const playerTerritories = shuffledTerritories.slice(neutralCount);
+
+  const territories: Record<string, { ownerId: PlayerId | "neutral"; armies: number }> = {};
+
+  for (const tid of neutralTerritories) {
+    territories[tid] = { ownerId: "neutral", armies: setup.neutralInitialArmies };
+  }
+
+  const assignments: Record<string, TerritoryId[]> = {};
+  for (const pid of turnOrder) assignments[pid] = [];
+  for (let i = 0; i < playerTerritories.length; i++) {
+    const pid = turnOrder[i % turnOrder.length]!;
+    const tid = playerTerritories[i]!;
+    territories[tid] = { ownerId: pid, armies: 1 };
+    assignments[pid]!.push(tid);
+  }
+
+  for (const pid of turnOrder) {
+    const owned = assignments[pid]!;
+    let remaining = initialArmies - owned.length;
+    while (remaining > 0) {
+      const idx = rng.nextInt(0, owned.length - 1);
+      territories[owned[idx]!]!.armies += 1;
+      remaining -= 1;
+    }
+  }
+
+  const players: Record<string, { status: "alive" }> = {};
+  for (const pid of playerIds) {
+    players[pid] = { status: "alive" };
+  }
+
+  const deckResult = createDeck(defaultRuleset.cards.deckDefinition, territoryIds, rng);
+  const hands: Record<string, readonly CardId[]> = {};
+  for (const pid of playerIds) hands[pid] = [];
+
+  const firstPlayer = turnOrder[0]!;
+  const reinforcementResult = calculateReinforcements(
+    { territories } as GameState,
+    firstPlayer,
+    graphMap,
+  );
+
+  return {
+    players,
+    turnOrder,
+    territories,
+    turn: {
+      currentPlayerId: firstPlayer,
+      phase: "Reinforcement",
+      round: 1,
+    },
+    reinforcements: {
+      remaining: reinforcementResult.total,
+      sources: reinforcementResult.sources,
+    },
+    deck: deckResult.deck,
+    cardsById: deckResult.cardsById,
+    hands,
+    tradesCompleted: 0,
+    capturedThisTurn: false,
+    rng: rng.state,
+    stateVersion: 1,
+    rulesetVersion: currentState.rulesetVersion,
+  };
+}
+
+function applyResignForTimeline(
+  state: GameState,
+  playerId: PlayerId,
+  graphMap: GraphMap,
+): GameState {
+  const playerState = state.players[playerId];
+  if (!playerState || playerState.status !== "alive") return state;
+
+  const newPlayers = {
+    ...state.players,
+    [playerId]: { ...playerState, status: "defeated" as const },
+  };
+
+  const newTerritories = { ...state.territories };
+  for (const [tid, territory] of Object.entries(newTerritories)) {
+    if (territory.ownerId === playerId) {
+      newTerritories[tid] = { ...territory, ownerId: "neutral" };
+    }
+  }
+
+  const resignerCards = state.hands[playerId] ?? [];
+  const newHands = { ...state.hands, [playerId]: [] as readonly CardId[] };
+  const newDeck = {
+    ...state.deck,
+    discard: [...state.deck.discard, ...resignerCards],
+  };
+
+  const alivePlayers = state.turnOrder.filter((pid) => newPlayers[pid]!.status === "alive");
+  const isGameOver = alivePlayers.length <= 1;
+
+  let newTurn = state.turn;
+  let newReinforcements = state.reinforcements;
+  let newCapturedThisTurn = state.capturedThisTurn;
+
+  if (isGameOver) {
+    newTurn = { ...state.turn, phase: "GameOver" };
+  } else if (state.turn.currentPlayerId === playerId) {
+    const { turnOrder } = state;
+    const currentIndex = turnOrder.indexOf(playerId);
+    let nextIndex = currentIndex;
+    let wrapped = false;
+
+    do {
+      nextIndex = (nextIndex + 1) % turnOrder.length;
+      if (nextIndex === 0 && currentIndex !== 0) wrapped = true;
+    } while (newPlayers[turnOrder[nextIndex]!]!.status !== "alive");
+
+    const nextPlayerId = turnOrder[nextIndex]!;
+    const newRound = wrapped ? state.turn.round + 1 : state.turn.round;
+    const reinforcementResult = calculateReinforcements(
+      { territories: newTerritories } as GameState,
+      nextPlayerId,
+      graphMap,
+    );
+
+    newTurn = {
+      currentPlayerId: nextPlayerId,
+      phase: "Reinforcement",
+      round: newRound,
+    };
+    newReinforcements = {
+      remaining: reinforcementResult.total,
+      sources: reinforcementResult.sources,
+    };
+    newCapturedThisTurn = false;
+  }
+
+  return {
+    ...state,
+    players: newPlayers,
+    territories: newTerritories,
+    hands: newHands,
+    deck: newDeck,
+    turn: newTurn,
+    reinforcements: newReinforcements,
+    pending: isGameOver || state.turn.currentPlayerId === playerId ? undefined : state.pending,
+    capturedThisTurn: newCapturedThisTurn,
+    stateVersion: state.stateVersion + 1,
+  };
+}
+
+function describeTimelineStep(action: Record<string, unknown>, events: GameEvent[]): string {
+  const firstEvent = events[0];
+  if (firstEvent?.type === "ReinforcementsPlaced") return "Placed armies";
+  if (firstEvent?.type === "AttackResolved") return "Attack resolved";
+  if (firstEvent?.type === "TerritoryCaptured") return "Territory captured";
+  if (firstEvent?.type === "OccupyResolved") return "Occupy move";
+  if (firstEvent?.type === "FortifyResolved") return "Fortified";
+  if (firstEvent?.type === "TurnAdvanced") return "Turn advanced";
+  if (firstEvent?.type === "GameEnded") return "Game ended";
+
+  const actionType = typeof action.type === "string" ? action.type : "Action";
+  if (actionType === "PlaceReinforcementsBatch") return "Placement batch confirmed";
+  return actionType;
+}
+
+export const getHistoryTimeline = query({
+  args: {
+    gameId: v.id("games"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { gameId, limit }) => {
+    const game = await ctx.db.get(gameId);
+    if (!game || !game.state) return [];
+
+    const state = game.state as GameState;
+    const mapDoc = await ctx.db
+      .query("maps")
+      .withIndex("by_mapId", (q) => q.eq("mapId", game.mapId))
+      .unique();
+    if (!mapDoc) return [];
+    const graphMap = mapDoc.graphMap as unknown as GraphMap;
+
+    const playerDocs = await ctx.db
+      .query("gamePlayers")
+      .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
+      .collect();
+    const playerIds = playerDocs
+      .map((doc) => doc.enginePlayerId)
+      .filter((playerId): playerId is string => !!playerId)
+      .sort((a, b) => toPlayerIndex(a) - toPlayerIndex(b)) as PlayerId[];
+    if (playerIds.length === 0) return [];
+
+    const actions = await ctx.db
+      .query("gameActions")
+      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
+      .order("asc")
+      .take(limit ?? 500);
+
+    let simState = createInitialStateFromSeed(state, graphMap, playerIds);
+    const timeline: Array<{
+      index: number;
+      actionType: string;
+      label: string;
+      state: TimelinePublicState;
+    }> = [
+      {
+        index: -1,
+        actionType: "Start",
+        label: "Game start",
+        state: toTimelinePublicState(simState),
+      },
+    ];
+
+    for (const actionDoc of actions) {
+      const action = actionDoc.action as Record<string, unknown>;
+      const actionType = typeof action.type === "string" ? action.type : "Unknown";
+      const actorId = actionDoc.playerId as PlayerId;
+
+      try {
+        if (actionType === "Resign") {
+          simState = applyResignForTimeline(simState, actorId, graphMap);
+        } else if (actionType === "PlaceReinforcementsBatch") {
+          const placements = Array.isArray(action.placements) ? action.placements : [];
+          for (const placement of placements) {
+            if (!placement || typeof placement !== "object") continue;
+            const territoryId = (placement as { territoryId?: unknown }).territoryId;
+            const count = (placement as { count?: unknown }).count;
+            if (typeof territoryId !== "string" || typeof count !== "number") continue;
+            const result = applyAction(
+              simState,
+              actorId,
+              {
+                type: "PlaceReinforcements",
+                territoryId: territoryId as TerritoryId,
+                count,
+              },
+              graphMap,
+              defaultRuleset.combat,
+              defaultRuleset.fortify,
+              defaultRuleset.cards,
+              defaultRuleset.teams,
+            );
+            simState = result.state;
+          }
+        } else {
+          const result = applyAction(
+            simState,
+            actorId,
+            action as unknown as Action,
+            graphMap,
+            defaultRuleset.combat,
+            defaultRuleset.fortify,
+            defaultRuleset.cards,
+            defaultRuleset.teams,
+          );
+          simState = result.state;
+        }
+      } catch {
+        // Keep playback available even if one legacy action cannot be replayed.
+      }
+
+      const events = actionDoc.events as GameEvent[];
+      timeline.push({
+        index: actionDoc.index,
+        actionType,
+        label: describeTimelineStep(action, events),
+        state: toTimelinePublicState(simState),
+      });
+    }
+
+    return timeline;
   },
 });

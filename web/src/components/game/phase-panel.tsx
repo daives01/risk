@@ -8,7 +8,7 @@ interface PhasePanelProps {
 
 const PHASE_LABELS: Record<string, string> = {
   Setup: "Setting Up",
-  Reinforcement: "Reinforcements",
+  Reinforcement: "Place",
   Attack: "Attack",
   Occupy: "Occupy Territory",
   Fortify: "Fortify",

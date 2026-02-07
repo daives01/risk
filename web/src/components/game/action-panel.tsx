@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { NumberStepper } from "@/components/ui/number-stepper";
 import { TERRITORY_DISPLAY } from "@/lib/classic-map-layout";
 import type { PublicGameState, MyCard } from "@/lib/use-game-controller";
 import { cn } from "@/lib/utils";
@@ -91,13 +91,13 @@ export function ActionPanel({
             {selectedFrom ? (
               <div className="mt-2 flex items-center gap-2">
                 <span className="text-sm">{fromName}</span>
-                <Input
-                  type="number"
+                <NumberStepper
+                  value={draftCount}
                   min={1}
                   max={state.reinforcements?.remaining ?? 1}
-                  value={draftCount}
-                  onChange={e => onSetDraftCount(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-20"
+                  onChange={onSetDraftCount}
+                  disabled={submitting}
+                  size="sm"
                 />
                 <Button size="sm" onClick={onSubmitAction} disabled={submitting}>
                   Place
@@ -143,13 +143,13 @@ export function ActionPanel({
             Move armies from {TERRITORY_DISPLAY[state.pending.from]?.name} to {TERRITORY_DISPLAY[state.pending.to]?.name}
           </p>
           <div className="mt-2 flex items-center gap-2">
-            <Input
-              type="number"
+            <NumberStepper
+              value={draftCount}
               min={state.pending.minMove}
               max={state.pending.maxMove}
-              value={draftCount}
-              onChange={e => onSetDraftCount(Math.max(state.pending!.minMove, parseInt(e.target.value) || state.pending!.minMove))}
-              className="w-20"
+              onChange={onSetDraftCount}
+              disabled={submitting}
+              size="sm"
             />
             <Button size="sm" onClick={onSubmitAction} disabled={submitting}>
               Move
@@ -168,13 +168,13 @@ export function ActionPanel({
             <div className="mt-2 flex flex-col gap-2">
               <span className="text-sm">{fromName} → {toName}</span>
               <div className="flex items-center gap-2">
-                <Input
-                  type="number"
+                <NumberStepper
+                  value={draftCount}
                   min={1}
                   max={(state.territories[selectedFrom]?.armies ?? 2) - 1}
-                  value={draftCount}
-                  onChange={e => onSetDraftCount(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-20"
+                  onChange={onSetDraftCount}
+                  disabled={submitting}
+                  size="sm"
                 />
                 <Button size="sm" onClick={onSubmitAction} disabled={submitting}>
                   Fortify
