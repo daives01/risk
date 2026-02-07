@@ -17,11 +17,15 @@ export function useMapPanZoom({
   initialScale = 1,
   zoomStep = 0.2,
 }: UseMapPanZoomOptions = {}) {
+  const PAN_DRAG_THRESHOLD_PX = 4;
+  const CLICK_SUPPRESS_WINDOW_MS = 150;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const pointersRef = useRef(new Map<number, Point>());
   const panStartRef = useRef<Point | null>(null);
   const panOriginRef = useRef<Point>({ x: 0, y: 0 });
   const pinchStartRef = useRef<{ distance: number; center: Point; scale: number; pan: Point } | null>(null);
+  const movedDuringGestureRef = useRef(false);
+  const suppressClicksUntilRef = useRef(0);
 
   const [scale, setScale] = useState(initialScale);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
@@ -99,6 +103,7 @@ export function useMapPanZoom({
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const point = { x: event.clientX, y: event.clientY };
     pointersRef.current.set(event.pointerId, point);
+    movedDuringGestureRef.current = false;
 
     if (pointersRef.current.size === 1) {
       panStartRef.current = point;
@@ -126,6 +131,7 @@ export function useMapPanZoom({
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
     if (pointersRef.current.size === 2 && pinchStartRef.current) {
+      movedDuringGestureRef.current = true;
       const [a, b] = [...pointersRef.current.values()];
       const distance = Math.hypot(b.x - a.x, b.y - a.y);
       const center = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
@@ -152,6 +158,9 @@ export function useMapPanZoom({
     if (pointersRef.current.size === 1 && panStartRef.current) {
       const dx = event.clientX - panStartRef.current.x;
       const dy = event.clientY - panStartRef.current.y;
+      if (!movedDuringGestureRef.current && Math.hypot(dx, dy) >= PAN_DRAG_THRESHOLD_PX) {
+        movedDuringGestureRef.current = true;
+      }
       setPan({
         x: panOriginRef.current.x + dx,
         y: panOriginRef.current.y + dy,
@@ -167,10 +176,16 @@ export function useMapPanZoom({
       panStartRef.current = remaining;
       panOriginRef.current = pan;
     } else {
+      if (movedDuringGestureRef.current) {
+        suppressClicksUntilRef.current = Date.now() + CLICK_SUPPRESS_WINDOW_MS;
+      }
       panStartRef.current = null;
       setIsDragging(false);
+      movedDuringGestureRef.current = false;
     }
   }, [pan]);
+
+  const shouldSuppressClick = useCallback(() => Date.now() < suppressClicksUntilRef.current, []);
 
   const transformStyle = useMemo(
     () => ({
@@ -190,6 +205,7 @@ export function useMapPanZoom({
     zoomIn: () => zoomBy(1),
     zoomOut: () => zoomBy(-1),
     reset,
+    shouldSuppressClick,
     handlers: {
       onWheel,
       onPointerDown,

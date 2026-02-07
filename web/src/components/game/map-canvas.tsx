@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Lock, LockOpen, Minus, Plus, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { NumberStepper } from "@/components/ui/number-stepper";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useMapPanZoom } from "@/lib/use-map-pan-zoom";
 import { isTypingTarget } from "@/lib/keyboard-shortcuts";
 
@@ -112,7 +114,7 @@ export function MapCanvas({
   const [zoomLocked, setZoomLocked] = useState(true);
   const [floatingDeltas, setFloatingDeltas] = useState<FloatingTroopDelta[]>([]);
   const previousTerritoriesRef = useRef<Record<string, TerritoryState> | null>(null);
-  const { containerRef, handlers, transformStyle, scale, zoomIn, zoomOut, reset } = useMapPanZoom({
+  const { containerRef, handlers, transformStyle, scale, zoomIn, zoomOut, reset, shouldSuppressClick } = useMapPanZoom({
     minScale: 0.85,
     maxScale: 1.75,
     zoomStep: 0.1,
@@ -191,7 +193,7 @@ export function MapCanvas({
       } else if (event.key === "-" || event.key === "_") {
         event.preventDefault();
         zoomOut();
-      } else if (event.key === "0") {
+      } else if (event.key.toLowerCase() === "r") {
         event.preventDefault();
         reset();
       }
@@ -250,55 +252,11 @@ export function MapCanvas({
   }
 
   return (
-    <div className="w-full rounded-lg border bg-card p-2">
-      <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <p>Map</p>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setZoomLocked((prev) => !prev)}
-            title="Lock/Unlock map (L)"
-            className={cn(
-              "rounded border px-2 py-1 transition",
-              zoomLocked ? "border-primary text-primary" : "hover:bg-muted",
-            )}
-          >
-            {zoomLocked ? "Locked" : "Unlocked"}
-          </button>
-          <button
-            type="button"
-            onClick={zoomOut}
-            disabled={zoomLocked}
-            title="Zoom out (-)"
-            className="rounded border px-2 py-1 transition hover:bg-muted"
-          >
-            -
-          </button>
-          <span className="w-12 text-center">{Math.round(scale * 100)}%</span>
-          <button
-            type="button"
-            onClick={zoomIn}
-            disabled={zoomLocked}
-            title="Zoom in (+)"
-            className="rounded border px-2 py-1 transition hover:bg-muted"
-          >
-            +
-          </button>
-          <button
-            type="button"
-            onClick={reset}
-            title="Reset zoom (0)"
-            className="rounded border px-2 py-1 transition hover:bg-muted"
-          >
-            Reset
-          </button>
-        </div>
-      </div>
-
+    <div className="w-full select-none">
       <div
         ref={containerRef}
         className={cn(
-          "relative mx-auto aspect-video w-full overflow-hidden rounded-md bg-muted touch-none",
+          "relative mx-auto aspect-video w-full overflow-hidden rounded-xl border border-border/70 bg-muted touch-none select-none",
           zoomLocked && "touch-auto",
         )}
         {...(zoomLocked ? {} : handlers)}
@@ -306,11 +264,18 @@ export function MapCanvas({
         <div
           className="relative h-full w-full"
           style={transformStyle}
-          onPointerDown={() => {
+          onClick={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (shouldSuppressClick()) return;
             if (interactive && onClearSelection) onClearSelection();
           }}
         >
-          <img src={imageUrl} alt="Risk map" className="h-full w-full object-contain" draggable={false} />
+          <img
+            src={imageUrl}
+            alt="Risk map"
+            className="h-full w-full object-contain pointer-events-none select-none"
+            draggable={false}
+          />
 
           <svg className="pointer-events-none absolute inset-0 h-full w-full">
             {graphEdges.map(({ from, to }) => {
@@ -371,7 +336,10 @@ export function MapCanvas({
               <button
                 key={territoryId}
                 type="button"
-                onClick={() => onClickTerritory(territoryId)}
+                onClick={() => {
+                  if (shouldSuppressClick()) return;
+                  onClickTerritory(territoryId);
+                }}
                 onPointerDown={(event) => event.stopPropagation()}
                 disabled={!selectable}
                 title={territory.name ?? territoryId}
@@ -523,6 +491,82 @@ export function MapCanvas({
               )}
             </div>
           )}
+        </div>
+
+        <div className="pointer-events-none absolute bottom-3 left-3 z-30">
+          <div
+            className="pointer-events-auto flex items-center gap-1 rounded-lg border border-border/60 bg-background/88 p-1 shadow-lg backdrop-blur-sm"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant={zoomLocked ? "default" : "outline"}
+                    className="rounded-md"
+                    onClick={() => setZoomLocked((prev) => !prev)}
+                    aria-label={zoomLocked ? "Unlock map" : "Lock map"}
+                  >
+                    {zoomLocked ? <Lock className="size-3.5" /> : <LockOpen className="size-3.5" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{zoomLocked ? "Unlock map (L)" : "Lock map (L)"}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="outline"
+                    className="rounded-md"
+                    onClick={zoomOut}
+                    disabled={zoomLocked}
+                    aria-label="Zoom out"
+                  >
+                    <Minus className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Zoom out (-)</TooltipContent>
+              </Tooltip>
+              <span className="min-w-11 rounded-md border border-border/50 px-1.5 py-1 text-center text-[11px] font-semibold tabular-nums text-foreground/90">
+                {Math.round(scale * 100)}%
+              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="outline"
+                    className="rounded-md"
+                    onClick={zoomIn}
+                    disabled={zoomLocked}
+                    aria-label="Zoom in"
+                  >
+                    <Plus className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Zoom in (+)</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="outline"
+                    className="rounded-md"
+                    onClick={reset}
+                    aria-label="Reset zoom"
+                  >
+                    <RotateCcw className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Reset map (R)</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
       </div>
     </div>

@@ -7,6 +7,7 @@ type ViewLike = {
   mapId?: string;
   status?: string;
   teamModeEnabled?: boolean;
+  effectiveRuleset?: unknown;
 };
 
 type PlayerViewLike = ViewLike & {

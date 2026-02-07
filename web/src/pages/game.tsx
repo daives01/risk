@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Navigate, useLocation, useParams } from "react-router-dom";
 import { Flag, History, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import type { Id } from "@backend/_generated/dataModel";
+import { defaultRuleset } from "risk-engine";
 import type { Action, CardId, TerritoryId } from "risk-engine";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,7 +10,7 @@ import { ShortcutHint } from "@/components/ui/shortcut-hint";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { MapCanvas } from "@/components/game/map-canvas";
 import { HistoryScrubber } from "@/components/game/history-scrubber";
-import { GameChatCard, GameEventsCard, GameHandCard, GamePlayersCard } from "@/components/game/game-panels";
+import { GameChatCard, GameEventsCard, GamePlayersCard } from "@/components/game/game-panels";
 import { authClient } from "@/lib/auth-client";
 import { adaptMapDoc, adaptView } from "@/lib/game/adapters";
 import { formatEvent, getPlayerColor, getPlayerName } from "@/lib/game/display";
@@ -28,6 +29,52 @@ import { useGameActions } from "@/lib/game/use-game-actions";
 import { useGameRuntimeQueries, useGameViewQueries } from "@/lib/game/use-game-queries";
 import { useGameShortcuts } from "@/lib/game/use-game-shortcuts";
 import { toast } from "sonner";
+
+type TradeSetsConfig = {
+  allowThreeOfAKind: boolean;
+  allowOneOfEach: boolean;
+  wildActsAsAny: boolean;
+};
+
+function isValidTradeSet(kinds: readonly string[], tradeSets: TradeSetsConfig): boolean {
+  if (kinds.length !== 3) return false;
+
+  const nonWildKinds = kinds.filter((kind) => kind !== "W");
+  const wildCount = kinds.length - nonWildKinds.length;
+
+  if (!tradeSets.wildActsAsAny && wildCount > 0) return false;
+
+  if (tradeSets.allowThreeOfAKind) {
+    const uniqueNonWild = new Set(nonWildKinds);
+    if (uniqueNonWild.size <= 1) return true;
+  }
+
+  if (tradeSets.allowOneOfEach) {
+    const uniqueNonWild = new Set(nonWildKinds);
+    if (uniqueNonWild.size + wildCount >= 3 && uniqueNonWild.size === nonWildKinds.length) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function findAutoTradeSet(
+  hand: Array<{ cardId: string; kind: string }>,
+  tradeSets: TradeSetsConfig,
+): string[] | null {
+  for (let i = 0; i < hand.length; i++) {
+    for (let j = i + 1; j < hand.length; j++) {
+      for (let k = j + 1; k < hand.length; k++) {
+        const selected = [hand[i]!, hand[j]!, hand[k]!];
+        if (isValidTradeSet(selected.map((card) => card.kind), tradeSets)) {
+          return selected.map((card) => card.cardId);
+        }
+      }
+    }
+  }
+  return null;
+}
 
 export default function GamePage() {
   const HISTORY_PLAYBACK_INTERVAL_MS = 840;
@@ -66,6 +113,7 @@ export default function GamePage() {
   const [fortifyCount, setFortifyCount] = useState(1);
   const [reinforcementDrafts, setReinforcementDrafts] = useState<ReinforcementDraft[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
+  const [cardsOpen, setCardsOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyPlaying, setHistoryPlaying] = useState(false);
@@ -502,6 +550,7 @@ export default function GamePage() {
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (target.closest("[data-map-canvas-zone='true']")) return;
+      if (target.closest("[data-player-highlight-zone='true']")) return;
       setHighlightFilter("none");
     };
     window.addEventListener("pointerdown", onPointerDown);
@@ -566,9 +615,20 @@ export default function GamePage() {
 
   const resolvedDisplayState = displayState ?? state;
   const displayPhase = resolvedDisplayState.turn.phase;
-  const phaseLabel = displayPhase === "Reinforcement" ? "Place" : displayPhase;
   const phaseCopy = PHASE_COPY[displayPhase] ?? PHASE_COPY.GameOver;
   const showPhaseTitle = historyOpen || isMyTurn || !["Reinforcement", "Attack", "Fortify"].includes(displayPhase);
+  const effectiveCards = (
+    view?.effectiveRuleset as { cards?: { forcedTradeHandSize?: number; tradeSets?: TradeSetsConfig } } | null
+  )?.cards;
+  const forcedTradeHandSize = effectiveCards?.forcedTradeHandSize ?? defaultRuleset.cards.forcedTradeHandSize;
+  const tradeSets = effectiveCards?.tradeSets ?? defaultRuleset.cards.tradeSets;
+  const myCardCount = myHand?.length ?? 0;
+  const mustTradeNow =
+    !historyOpen &&
+    isMyTurn &&
+    phase === "Reinforcement" &&
+    myCardCount >= forcedTradeHandSize;
+  const autoTradeCardIds = findAutoTradeSet(myHand ?? [], tradeSets);
   const winnerId =
     resolvedDisplayState.turnOrder.find((playerId) => resolvedDisplayState.players[playerId]?.status === "alive") ??
     null;
@@ -751,6 +811,16 @@ export default function GamePage() {
                   <TooltipContent>Resign game</TooltipContent>
                 </Tooltip>
               )}
+              {!isSpectator && !historyOpen && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="xs" type="button" onClick={() => setCardsOpen(true)}>
+                      Cards ({myCardCount})
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Open cards</TooltipContent>
+                </Tooltip>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -773,94 +843,90 @@ export default function GamePage() {
           </div>
         </div>
 
-        <div className="flex min-w-0 flex-col gap-1">
-          <Card className="glass-panel overflow-hidden border-0 py-0">
-            <CardContent className="p-1 sm:p-2" data-map-canvas-zone="true">
-              <MapCanvas
-                map={graphMap}
-                visual={mapVisual}
-                imageUrl={mapImageUrl}
-                territories={playbackTerritories}
-                turnOrder={resolvedDisplayState.turnOrder}
-                selectedFrom={selectedFrom}
-                selectedTo={selectedTo}
-                validFromIds={!historyOpen && isMyTurn ? validFromIds : new Set()}
-                validToIds={!historyOpen && isMyTurn ? validToIds : new Set()}
-                highlightedTerritoryIds={highlightedTerritoryIds}
-                graphEdgeMode={showActionEdges ? "action" : "none"}
-                interactive={!historyOpen && isMyTurn}
-                troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
-                onClickTerritory={handleTerritoryClick}
-                onClearSelection={() => {
-                  setSelectedFrom(null);
-                  setSelectedTo(null);
-                }}
-                getPlayerColor={resolvePlayerColor}
-                battleOverlay={
-                  !historyOpen && isMyTurn && (phase === "Occupy" || (phase === "Attack" && !!state.pending)) && state.pending
-                    ? {
-                        mode: "occupy",
-                        fromTerritoryId: state.pending.from,
-                        toTerritoryId: state.pending.to,
-                        fromLabel: graphMap.territories[state.pending.from]?.name ?? state.pending.from,
-                        toLabel: graphMap.territories[state.pending.to]?.name ?? state.pending.to,
-                        occupyMove,
-                        minMove: state.pending.minMove,
-                        maxMove: state.pending.maxMove,
-                        disabled: controlsDisabled,
-                        onSetOccupyMove: setOccupyMove,
-                        onSubmitOccupy: () => {
-                          void submitAction({ type: "Occupy", moveArmies: occupyMove });
-                        },
-                      }
-                    : !historyOpen && isMyTurn && phase === "Fortify" && selectedFrom && selectedTo
-                    ? {
-                        mode: "fortify",
-                        fromTerritoryId: selectedFrom,
-                        toTerritoryId: selectedTo,
-                        fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
-                        toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
-                        fortifyCount,
-                        minCount: 1,
-                        maxCount: Math.max(1, (state.territories[selectedFrom]?.armies ?? 2) - 1),
-                        disabled: controlsDisabled,
-                        onSetFortifyCount: setFortifyCount,
-                        onSubmitFortify: () => {
-                          void submitAction({
-                            type: "Fortify",
-                            from: selectedFrom as TerritoryId,
-                            to: selectedTo as TerritoryId,
-                            count: fortifyCount,
-                          });
-                        },
-                        onCancelSelection: () => {
-                          setSelectedFrom(null);
-                          setSelectedTo(null);
-                        },
-                      }
-                    : !historyOpen && isMyTurn && phase === "Attack" && !state.pending && selectedFrom && selectedTo
-                    ? {
-                        mode: "attack",
-                        fromTerritoryId: selectedFrom,
-                        toTerritoryId: selectedTo,
-                        fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
-                        toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
-                        attackDice,
-                        maxDice: Math.max(1, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1)),
-                        disabled: controlsDisabled,
-                        onSetAttackDice: setAttackDice,
-                        onResolveAttack: handleResolveAttack,
-                        onCancelSelection: () => {
-                          setSelectedFrom(null);
-                          setSelectedTo(null);
-                        },
-                        onEndAttackPhase: handleEndAttackPhase,
-                      }
-                    : null
-                }
-              />
-            </CardContent>
-          </Card>
+        <div className="flex min-w-0 flex-col gap-1" data-map-canvas-zone="true">
+          <MapCanvas
+            map={graphMap}
+            visual={mapVisual}
+            imageUrl={mapImageUrl}
+            territories={playbackTerritories}
+            turnOrder={resolvedDisplayState.turnOrder}
+            selectedFrom={selectedFrom}
+            selectedTo={selectedTo}
+            validFromIds={!historyOpen && isMyTurn ? validFromIds : new Set()}
+            validToIds={!historyOpen && isMyTurn ? validToIds : new Set()}
+            highlightedTerritoryIds={highlightedTerritoryIds}
+            graphEdgeMode={showActionEdges ? "action" : "none"}
+            interactive={!historyOpen && isMyTurn}
+            troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
+            onClickTerritory={handleTerritoryClick}
+            onClearSelection={() => {
+              setSelectedFrom(null);
+              setSelectedTo(null);
+            }}
+            getPlayerColor={resolvePlayerColor}
+            battleOverlay={
+              !historyOpen && isMyTurn && (phase === "Occupy" || (phase === "Attack" && !!state.pending)) && state.pending
+                ? {
+                    mode: "occupy",
+                    fromTerritoryId: state.pending.from,
+                    toTerritoryId: state.pending.to,
+                    fromLabel: graphMap.territories[state.pending.from]?.name ?? state.pending.from,
+                    toLabel: graphMap.territories[state.pending.to]?.name ?? state.pending.to,
+                    occupyMove,
+                    minMove: state.pending.minMove,
+                    maxMove: state.pending.maxMove,
+                    disabled: controlsDisabled,
+                    onSetOccupyMove: setOccupyMove,
+                    onSubmitOccupy: () => {
+                      void submitAction({ type: "Occupy", moveArmies: occupyMove });
+                    },
+                  }
+                : !historyOpen && isMyTurn && phase === "Fortify" && selectedFrom && selectedTo
+                ? {
+                    mode: "fortify",
+                    fromTerritoryId: selectedFrom,
+                    toTerritoryId: selectedTo,
+                    fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
+                    toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
+                    fortifyCount,
+                    minCount: 1,
+                    maxCount: Math.max(1, (state.territories[selectedFrom]?.armies ?? 2) - 1),
+                    disabled: controlsDisabled,
+                    onSetFortifyCount: setFortifyCount,
+                    onSubmitFortify: () => {
+                      void submitAction({
+                        type: "Fortify",
+                        from: selectedFrom as TerritoryId,
+                        to: selectedTo as TerritoryId,
+                        count: fortifyCount,
+                      });
+                    },
+                    onCancelSelection: () => {
+                      setSelectedFrom(null);
+                      setSelectedTo(null);
+                    },
+                  }
+                : !historyOpen && isMyTurn && phase === "Attack" && !state.pending && selectedFrom && selectedTo
+                ? {
+                    mode: "attack",
+                    fromTerritoryId: selectedFrom,
+                    toTerritoryId: selectedTo,
+                    fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
+                    toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
+                    attackDice,
+                    maxDice: Math.max(1, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1)),
+                    disabled: controlsDisabled,
+                    onSetAttackDice: setAttackDice,
+                    onResolveAttack: handleResolveAttack,
+                    onCancelSelection: () => {
+                      setSelectedFrom(null);
+                      setSelectedTo(null);
+                    },
+                    onEndAttackPhase: handleEndAttackPhase,
+                  }
+                : null
+            }
+          />
 
           <GamePlayersCard
             playerStats={playerStats}
@@ -875,9 +941,10 @@ export default function GamePage() {
           />
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <GameEventsCard flattenedEvents={flattenedEvents} />
-
-            <div className="space-y-4">
+            <div>
+              <GameEventsCard flattenedEvents={flattenedEvents} />
+            </div>
+            <div>
               <GameChatCard
                 messages={chatMessages ?? []}
                 activeChannel={chatChannel}
@@ -901,23 +968,78 @@ export default function GamePage() {
                   void handleSendChatMessage();
                 }}
               />
-
-              {myHand && (
-                <GameHandCard
-                  myHand={myHand}
-                  selectedCardIds={selectedCardIds}
-                  onToggleCard={toggleCard}
-                  onTrade={handleTrade}
-                  controlsDisabled={controlsDisabled}
-                  phase={phase}
-                  isMyTurn={isMyTurn}
-                  phaseLabel={phaseLabel}
-                />
-              )}
             </div>
           </div>
         </div>
       </div>
+
+      {cardsOpen && myHand && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/65 p-4 backdrop-blur-[1px]">
+          <Card className="glass-panel w-full max-w-lg border border-border/70 py-0 shadow-xl">
+            <CardContent className="space-y-4 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-base font-semibold">Cards ({myCardCount})</p>
+                  <p className="text-sm text-muted-foreground">Select 3 to trade.</p>
+                  {mustTradeNow && (
+                    <p className="text-xs uppercase tracking-wide text-destructive">
+                      Trade required at {forcedTradeHandSize}+ cards
+                    </p>
+                  )}
+                </div>
+                <Button size="xs" variant="outline" type="button" onClick={() => setCardsOpen(false)}>
+                  Close
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {myHand.map((card) => {
+                  const selected = selectedCardIds.has(card.cardId);
+                  return (
+                    <button
+                      key={card.cardId}
+                      type="button"
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                        selected
+                          ? "border-primary bg-primary/15 text-primary"
+                          : "border-border bg-background/80 hover:border-primary/50"
+                      }`}
+                      onClick={() => toggleCard(card.cardId)}
+                    >
+                      {card.kind}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="xs"
+                  disabled={controlsDisabled || phase !== "Reinforcement" || selectedCardIds.size !== 3}
+                  onClick={handleTrade}
+                >
+                  Trade 3
+                </Button>
+                {mustTradeNow && autoTradeCardIds && (
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    disabled={controlsDisabled || submitting}
+                    onClick={() => {
+                      void submitAction({
+                        type: "TradeCards",
+                        cardIds: autoTradeCardIds as CardId[],
+                      });
+                    }}
+                  >
+                    Auto Trade
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

@@ -56,7 +56,7 @@ export function GamePlayersCard({
   };
 
   return (
-    <Card className="glass-panel border-0 py-0">
+    <Card className="glass-panel border-0 py-0" data-player-highlight-zone="true">
       <CardHeader className="flex flex-row items-center justify-between py-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Users className="size-4" />
@@ -147,80 +147,17 @@ interface GameEventsCardProps {
 
 export function GameEventsCard({ flattenedEvents }: GameEventsCardProps) {
   return (
-    <Card className="glass-panel border-0 py-0">
+    <Card className="glass-panel h-[22rem] border-0 py-0 xl:h-[24rem]">
       <CardHeader className="py-4">
         <CardTitle className="text-base">Recent Events</CardTitle>
       </CardHeader>
-      <CardContent className="max-h-64 space-y-2 overflow-y-auto pb-4 text-sm">
+      <CardContent className="h-[calc(100%-3.25rem)] space-y-2 overflow-y-auto pb-4 text-sm">
         {flattenedEvents.length === 0 && <p className="text-muted-foreground">No actions yet.</p>}
         {flattenedEvents.map((event) => (
           <p key={event.key} className="rounded-md border bg-background/80 px-3 py-2 text-muted-foreground">
             {event.text}
           </p>
         ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-interface GameHandCardProps {
-  myHand: Array<{ cardId: string; kind: string }>;
-  selectedCardIds: Set<string>;
-  onToggleCard: (cardId: string) => void;
-  onTrade: () => void;
-  controlsDisabled: boolean;
-  phase: string;
-  isMyTurn: boolean;
-  phaseLabel: string;
-}
-
-export function GameHandCard({
-  myHand,
-  selectedCardIds,
-  onToggleCard,
-  onTrade,
-  controlsDisabled,
-  phase,
-  isMyTurn,
-  phaseLabel,
-}: GameHandCardProps) {
-  return (
-    <Card className="glass-panel border-0 py-0">
-      <CardHeader className="py-4">
-        <CardTitle className="text-base">Cards ({myHand.length})</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3 pb-4">
-        <div className="flex flex-wrap gap-2">
-          {myHand.map((card) => {
-            const selected = selectedCardIds.has(card.cardId);
-            return (
-              <button
-                key={card.cardId}
-                type="button"
-                className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                  selected
-                    ? "border-primary bg-primary/15 text-primary"
-                    : "border-border bg-background/80 hover:border-primary/50"
-                }`}
-                onClick={() => onToggleCard(card.cardId)}
-              >
-                {card.kind}
-              </button>
-            );
-          })}
-        </div>
-        <Button
-          className="w-full"
-          disabled={controlsDisabled || phase !== "Reinforcement" || selectedCardIds.size !== 3}
-          onClick={onTrade}
-        >
-          Trade Selected Cards
-        </Button>
-        {isMyTurn && (
-          <div className="px-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            {phaseLabel}
-          </div>
-        )}
       </CardContent>
     </Card>
   );
@@ -258,7 +195,6 @@ export function GameChatCard({
   onSend,
 }: GameChatCardProps) {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
-  const previousMessageCountRef = useRef(messages.length);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -274,20 +210,13 @@ export function GameChatCard({
   };
 
   useEffect(() => {
-    const previousCount = previousMessageCountRef.current;
-    previousMessageCountRef.current = messages.length;
-    if (messages.length <= previousCount) return;
-
-    const newestMessage = messages[messages.length - 1];
-    if (!newestMessage?.isMine) return;
-
     const container = messagesContainerRef.current;
     if (!container) return;
     container.scrollTop = container.scrollHeight;
-  }, [messages]);
+  }, [activeChannel, messages.length]);
 
   return (
-    <Card className="glass-panel gap-2 border-0 py-0">
+    <Card className="glass-panel h-[22rem] gap-2 border-0 py-0 xl:h-[24rem]">
       <CardHeader className="flex flex-row items-center gap-2 pb-1 pt-3">
         <CardTitle className="text-base">Chat</CardTitle>
         {showChannelPicker && (
@@ -313,53 +242,55 @@ export function GameChatCard({
           </div>
         )}
       </CardHeader>
-      <CardContent className="space-y-2 pb-4 pt-0">
+      <CardContent className="flex h-[calc(100%-3.25rem)] flex-col space-y-2 pb-4 pt-0">
         <div
           ref={messagesContainerRef}
-          className="max-h-64 space-y-2 overflow-y-auto rounded-md border bg-background/45 p-2 pt-2.5 text-sm"
+          className="flex-1 overflow-y-auto rounded-md border bg-background/45 p-2 pt-2.5 text-sm"
         >
-          {messages.length === 0 && <p className="text-muted-foreground">No messages yet.</p>}
-          {messages.map((message) => (
-            <div key={message._id} className={`group flex ${message.isMine ? "justify-end" : "justify-start"}`}>
-              <div className={`flex max-w-[85%] flex-col gap-1 ${message.isMine ? "items-end" : "items-start"}`}>
-                <div className="text-xs text-muted-foreground">
-                  {message.isMine ? "You" : message.senderDisplayName}
-                  {message.editedAt ? " (edited)" : ""}
-                </div>
-                <div
-                  className={`rounded-none px-3 py-2 ${
-                    message.isMine
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background/80"
-                  }`}
-                >
-                  <p className="break-words text-sm leading-tight">{message.text}</p>
-                </div>
-                {message.isMine && canSend && (
-                  <div className="flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant={editingMessageId === message._id ? "default" : "ghost"}
-                      aria-label="Edit message"
-                      onClick={() => onStartEditMessage(message)}
-                    >
-                      <Pencil className="size-3.5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label="Delete message"
-                      onClick={() => onDeleteMessage(message._id)}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
+          <div className="mt-auto space-y-2">
+            {messages.length === 0 && <p className="text-muted-foreground">No messages yet.</p>}
+            {messages.map((message) => (
+              <div key={message._id} className={`group flex ${message.isMine ? "justify-end" : "justify-start"}`}>
+                <div className={`flex max-w-[85%] flex-col gap-1 ${message.isMine ? "items-end" : "items-start"}`}>
+                  <div className="text-xs text-muted-foreground">
+                    {message.isMine ? "You" : message.senderDisplayName}
+                    {message.editedAt ? " (edited)" : ""}
                   </div>
-                )}
+                  <div
+                    className={`rounded-none px-3 py-2 ${
+                      message.isMine
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background/80"
+                    }`}
+                  >
+                    <p className="break-words text-sm leading-tight">{message.text}</p>
+                  </div>
+                  {message.isMine && canSend && (
+                    <div className="flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant={editingMessageId === message._id ? "default" : "ghost"}
+                        aria-label="Edit message"
+                        onClick={() => onStartEditMessage(message)}
+                      >
+                        <Pencil className="size-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label="Delete message"
+                        onClick={() => onDeleteMessage(message._id)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
         <form className="flex gap-2" onSubmit={handleSubmit}>
