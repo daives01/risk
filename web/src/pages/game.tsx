@@ -573,6 +573,8 @@ export default function GamePage() {
     resolvedDisplayState.turnOrder.find((playerId) => resolvedDisplayState.players[playerId]?.status === "alive") ??
     null;
   const playbackTerritories = historyOpen ? resolvedDisplayState.territories : displayedTerritories;
+  const showActionEdges =
+    !historyOpen && isMyTurn && !!selectedFrom && (phase === "Attack" || phase === "Fortify");
 
   return (
     <div className="page-shell soft-grid overflow-x-hidden">
@@ -643,36 +645,6 @@ export default function GamePage() {
           )}
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
-            <TooltipProvider>
-              {!isSpectator && !historyOpen && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="icon-sm" onClick={handleResign} aria-label="Resign game">
-                      <Flag className="size-4" aria-hidden="true" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Resign game</TooltipContent>
-                </Tooltip>
-              )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={historyOpen ? "default" : "outline"}
-                    size="icon-sm"
-                    type="button"
-                    aria-label="Toggle history"
-                    onClick={() => {
-                      setHistoryOpen((prev) => !prev);
-                      setHistoryPlaying(false);
-                    }}
-                    disabled={historyCount === 0}
-                  >
-                    <History className="size-4" aria-hidden="true" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Toggle history (H)</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
             {historyOpen && (
               <>
                 <Button
@@ -768,6 +740,36 @@ export default function GamePage() {
                 <ShortcutHint shortcut="mod+enter" />
               </Button>
             )}
+            <TooltipProvider>
+              {!isSpectator && !historyOpen && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="icon-sm" onClick={handleResign} aria-label="Resign game">
+                      <Flag className="size-4" aria-hidden="true" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Resign game</TooltipContent>
+                </Tooltip>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={historyOpen ? "default" : "outline"}
+                    size="icon-sm"
+                    type="button"
+                    aria-label="Toggle history"
+                    onClick={() => {
+                      setHistoryOpen((prev) => !prev);
+                      setHistoryPlaying(false);
+                    }}
+                    disabled={historyCount === 0}
+                  >
+                    <History className="size-4" aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Toggle history (H)</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
 
@@ -785,6 +787,7 @@ export default function GamePage() {
                 validFromIds={!historyOpen && isMyTurn ? validFromIds : new Set()}
                 validToIds={!historyOpen && isMyTurn ? validToIds : new Set()}
                 highlightedTerritoryIds={highlightedTerritoryIds}
+                graphEdgeMode={showActionEdges ? "action" : "none"}
                 interactive={!historyOpen && isMyTurn}
                 troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
                 onClickTerritory={handleTerritoryClick}

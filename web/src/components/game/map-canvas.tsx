@@ -32,6 +32,7 @@ interface MapCanvasProps {
   validFromIds: Set<string>;
   validToIds: Set<string>;
   highlightedTerritoryIds: Set<string>;
+  graphEdgeMode?: "all" | "action" | "none";
   interactive: boolean;
   troopDeltaDurationMs?: number;
   onClickTerritory: (territoryId: string) => void;
@@ -100,6 +101,7 @@ export function MapCanvas({
   validFromIds,
   validToIds,
   highlightedTerritoryIds,
+  graphEdgeMode = "all",
   interactive,
   troopDeltaDurationMs = 1000,
   onClickTerritory,
@@ -323,6 +325,9 @@ export function MapCanvas({
               const isCandidate =
                 !!selectedFrom &&
                 ((from === selectedFrom && validToIds.has(to)) || (to === selectedFrom && validToIds.has(from)));
+              const showActionEdge = isCandidate || touchesTo;
+              if (graphEdgeMode === "none") return null;
+              if (graphEdgeMode === "action" && !showActionEdge) return null;
 
               const edgeStroke = touchesTo
                 ? "rgba(248,113,113,0.95)"
