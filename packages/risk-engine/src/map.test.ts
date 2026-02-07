@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { validateMap } from "./map.js";
-import type { GraphMap } from "./map.js";
+import { validateMap, validateVisual, validateAuthoredMap } from "./map.js";
+import type { GraphMap, MapVisual } from "./map.js";
 import type { TerritoryId, ContinentId } from "./types.js";
 
 const t = (id: string) => id as TerritoryId;
@@ -17,6 +17,19 @@ function makeValidMap(): GraphMap {
       A: [t("B")],
       B: [t("A"), t("C")],
       C: [t("B")],
+    },
+  };
+}
+
+function makeValidVisual(): MapVisual {
+  return {
+    imageStorageId: "test-storage-id",
+    imageWidth: 1000,
+    imageHeight: 600,
+    territoryAnchors: {
+      A: { x: 0.1, y: 0.2 },
+      B: { x: 0.5, y: 0.4 },
+      C: { x: 0.8, y: 0.9 },
     },
   };
 }
@@ -129,5 +142,54 @@ describe("validateMap", () => {
     const result = validateMap(map);
     expect(result.valid).toBe(true);
     expect(result.errors).toHaveLength(0);
+  });
+});
+
+describe("validateVisual", () => {
+  test("accepts valid visual metadata", () => {
+    const result = validateVisual(makeValidMap(), makeValidVisual());
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  test("rejects missing anchor", () => {
+    const visual = makeValidVisual();
+    delete (visual.territoryAnchors as Record<string, { x: number; y: number }>).B;
+    const result = validateVisual(makeValidMap(), visual);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes('Missing anchor for territory "B"'))).toBe(
+      true,
+    );
+  });
+
+  test("rejects out-of-range anchor coordinates", () => {
+    const visual = makeValidVisual();
+    (visual.territoryAnchors as Record<string, { x: number; y: number }>).A = {
+      x: 1.2,
+      y: -0.1,
+    };
+    const result = validateVisual(makeValidMap(), visual);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes('Anchor x for territory "A"'))).toBe(true);
+    expect(result.errors.some((e) => e.includes('Anchor y for territory "A"'))).toBe(true);
+  });
+});
+
+describe("validateAuthoredMap", () => {
+  test("returns combined graph + visual errors", () => {
+    const map: GraphMap = {
+      territories: { A: {} },
+      adjacency: { A: [t("Z")] },
+    };
+    const visual: MapVisual = {
+      imageStorageId: "",
+      imageWidth: 0,
+      imageHeight: 0,
+      territoryAnchors: {},
+    };
+
+    const result = validateAuthoredMap({ graphMap: map, visual });
+    expect(result.valid).toBe(false);
+    expect(result.errors.length).toBeGreaterThanOrEqual(4);
   });
 });

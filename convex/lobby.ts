@@ -42,7 +42,9 @@ export const createGame = mutation({
       .query("maps")
       .withIndex("by_mapId", (q) => q.eq("mapId", args.mapId))
       .unique();
-    if (!map) throw new Error("Map not found");
+    if (!map || map.authoring.status !== "published") {
+      throw new Error("Map not found or not published");
+    }
 
     const maxPlayers = args.maxPlayers ?? 6;
     if (maxPlayers < 2 || maxPlayers > 6) {
@@ -233,7 +235,9 @@ export const startGame = mutation({
       .query("maps")
       .withIndex("by_mapId", (q) => q.eq("mapId", game.mapId))
       .unique();
-    if (!mapDoc) throw new Error("Map not found");
+    if (!mapDoc || mapDoc.authoring.status !== "published") {
+      throw new Error("Map not found or not published");
+    }
 
     const graphMap = mapDoc.graphMap as unknown as GraphMap;
     const territoryIds = Object.keys(graphMap.territories) as TerritoryId[];

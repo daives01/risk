@@ -19,6 +19,23 @@ export interface GraphMap {
   readonly continents?: Record<string, ContinentInfo>;
 }
 
+export interface TerritoryAnchor {
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface MapVisual {
+  readonly imageStorageId: string;
+  readonly imageWidth: number;
+  readonly imageHeight: number;
+  readonly territoryAnchors: Record<string, TerritoryAnchor>;
+}
+
+export interface AuthoredMap {
+  readonly graphMap: GraphMap;
+  readonly visual: MapVisual;
+}
+
 // ── Validation ────────────────────────────────────────────────────────
 
 export interface MapValidationResult {
@@ -76,5 +93,57 @@ export function validateMap(map: GraphMap): MapValidationResult {
     }
   }
 
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateVisual(
+  map: GraphMap,
+  visual: MapVisual,
+): MapValidationResult {
+  const errors: string[] = [];
+
+  if (!visual.imageStorageId || visual.imageStorageId.trim().length === 0) {
+    errors.push("Map image is required");
+  }
+
+  if (!Number.isFinite(visual.imageWidth) || visual.imageWidth <= 0) {
+    errors.push("imageWidth must be a positive number");
+  }
+  if (!Number.isFinite(visual.imageHeight) || visual.imageHeight <= 0) {
+    errors.push("imageHeight must be a positive number");
+  }
+
+  for (const territoryId of Object.keys(map.territories)) {
+    const anchor = visual.territoryAnchors[territoryId];
+    if (!anchor) {
+      errors.push(`Missing anchor for territory "${territoryId}"`);
+      continue;
+    }
+
+    if (!Number.isFinite(anchor.x) || anchor.x < 0 || anchor.x > 1) {
+      errors.push(
+        `Anchor x for territory "${territoryId}" must be between 0 and 1`,
+      );
+    }
+    if (!Number.isFinite(anchor.y) || anchor.y < 0 || anchor.y > 1) {
+      errors.push(
+        `Anchor y for territory "${territoryId}" must be between 0 and 1`,
+      );
+    }
+  }
+
+  for (const territoryId of Object.keys(visual.territoryAnchors)) {
+    if (!map.territories[territoryId]) {
+      errors.push(`Anchor references unknown territory "${territoryId}"`);
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateAuthoredMap(authoredMap: AuthoredMap): MapValidationResult {
+  const graphValidation = validateMap(authoredMap.graphMap);
+  const visualValidation = validateVisual(authoredMap.graphMap, authoredMap.visual);
+  const errors = [...graphValidation.errors, ...visualValidation.errors];
   return { valid: errors.length === 0, errors };
 }

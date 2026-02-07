@@ -14,6 +14,8 @@ import CreateGamePage from "@/pages/create-game"
 import LobbyPage from "@/pages/lobby"
 import JoinGamePage from "@/pages/join-game"
 import GamePage from "@/pages/game"
+import AdminMapsPage from "@/pages/admin-maps"
+import AdminMapEditorPage from "@/pages/admin-map-editor"
 
 function HomePage() {
   const { data: session, isPending } = authClient.useSession()
@@ -107,6 +109,8 @@ function App() {
           <Route path="/g/:gameId" element={<LobbyPage />} />
           <Route path="/play/:gameId" element={<GamePage />} />
           <Route path="/join/:code" element={<JoinGamePage />} />
+          <Route path="/admin/maps" element={<AdminMapsPage />} />
+          <Route path="/admin/maps/:mapId" element={<AdminMapEditorPage />} />
         </Routes>
         <Toaster />
       </BrowserRouter>

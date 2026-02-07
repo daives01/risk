@@ -18,6 +18,25 @@ const graphMap = v.object({
   continents: v.optional(v.record(v.string(), continentInfo)),
 });
 
+const mapVisual = v.object({
+  imageStorageId: v.id("_storage"),
+  imageWidth: v.number(),
+  imageHeight: v.number(),
+  territoryAnchors: v.record(
+    v.string(),
+    v.object({
+      x: v.number(),
+      y: v.number(),
+    }),
+  ),
+});
+
+const mapAuthoring = v.object({
+  status: v.union(v.literal("draft"), v.literal("published")),
+  updatedAt: v.number(),
+  publishedAt: v.optional(v.number()),
+});
+
 export default defineSchema({
   games: defineTable({
     name: v.string(),
@@ -72,6 +91,14 @@ export default defineSchema({
     mapId: v.string(),
     name: v.string(),
     graphMap,
+    visual: mapVisual,
+    authoring: mapAuthoring,
     createdAt: v.number(),
-  }).index("by_mapId", ["mapId"]),
+  })
+    .index("by_mapId", ["mapId"])
+    .index("by_authoringStatus", ["authoring.status"]),
+  admins: defineTable({
+    userId: v.string(),
+    createdAt: v.number(),
+  }).index("by_userId", ["userId"]),
 });

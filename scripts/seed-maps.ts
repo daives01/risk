@@ -2,13 +2,12 @@
 /**
  * CLI seed script for maps.
  *
- * Validates all predefined maps locally using risk-engine, then calls the
- * Convex internal action `seed:seedMaps` to upsert them into the database.
+ * Validates all predefined maps locally using risk-engine.
  *
  * Usage:
  *   bun scripts/seed-maps.ts
- *   # or from repo root:
- *   npx convex run seed:seedMaps
+ * Publishing maps now requires visual metadata + uploaded image and should be
+ * done in the admin editor at /admin/maps.
  */
 
 import { classicMap } from "risk-maps";
@@ -49,5 +48,5 @@ if (!allValid) {
   process.exit(1);
 }
 
-console.log("\nAll maps valid. To seed into Convex, run:");
-console.log("  npx convex run seed:seedMaps");
+console.log("\nAll maps valid.");
+console.log("Publish maps via the admin editor (/admin/maps).");

@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { MapCanvas } from "@/components/game/map-canvas";
 import { toast } from "sonner";
 import type {
   Action,
@@ -52,6 +53,12 @@ type PublicState = {
 };
 
 type HandCard = { cardId: string; kind: string; territoryId?: string };
+type MapVisual = {
+  imageStorageId: string;
+  imageWidth: number;
+  imageHeight: number;
+  territoryAnchors: Record<string, { x: number; y: number }>;
+};
 
 function getPlayerColor(
   playerId: string,
@@ -95,110 +102,6 @@ function PlayerLegend({
             {isCurrentTurn && state.turn.phase !== "GameOver" && (
               <span className="text-[10px] text-muted-foreground">◀</span>
             )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function TerritoryBoard({
-  map,
-  state,
-  selectedFrom,
-  selectedTo,
-  validFromIds,
-  validToIds,
-  onClickTerritory,
-}: {
-  map: GraphMap;
-  state: PublicState;
-  selectedFrom: string | null;
-  selectedTo: string | null;
-  validFromIds: Set<string>;
-  validToIds: Set<string>;
-  onClickTerritory: (tid: string) => void;
-}) {
-  const continentGroups = useMemo(() => {
-    const groups: Record<string, string[]> = {};
-    const ungrouped: string[] = [];
-    for (const tid of Object.keys(map.territories)) {
-      const info = map.territories[tid];
-      const cid = info?.continentId;
-      if (cid) {
-        if (!groups[cid]) groups[cid] = [];
-        groups[cid]!.push(tid);
-      } else {
-        ungrouped.push(tid);
-      }
-    }
-    if (ungrouped.length > 0) {
-      groups["Other"] = ungrouped;
-    }
-    return groups;
-  }, [map.territories]);
-
-  const continentNames = useMemo(() => {
-    const names: Record<string, string> = {};
-    if (map.continents) {
-      for (const cid of Object.keys(map.continents)) {
-        names[cid] = cid;
-      }
-    }
-    return names;
-  }, [map.continents]);
-
-  return (
-    <div className="flex flex-col gap-4">
-      {Object.entries(continentGroups).map(([cid, tids]) => {
-        const bonus = map.continents?.[cid]?.bonus;
-        return (
-          <div key={cid}>
-            <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {continentNames[cid] ?? cid}
-              {bonus !== undefined && (
-                <span className="ml-1 font-normal">+{bonus}</span>
-              )}
-            </h3>
-            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-5">
-              {tids.sort().map((tid) => {
-                const t = state.territories[tid];
-                if (!t) return null;
-                const color = getPlayerColor(t.ownerId, state.turnOrder);
-                const isFrom = selectedFrom === tid;
-                const isTo = selectedTo === tid;
-                const isValidFrom = validFromIds.has(tid);
-                const isValidTo = validToIds.has(tid);
-                const name =
-                  map.territories[tid]?.name ?? tid;
-                return (
-                  <button
-                    key={tid}
-                    onClick={() => onClickTerritory(tid)}
-                    className={`relative flex flex-col items-center rounded-md border p-1.5 text-center transition-all ${
-                      isFrom
-                        ? "ring-2 ring-blue-500 border-blue-500"
-                        : isTo
-                          ? "ring-2 ring-red-500 border-red-500"
-                          : isValidFrom
-                            ? "border-blue-300 hover:border-blue-400 cursor-pointer"
-                            : isValidTo
-                              ? "border-red-300 hover:border-red-400 cursor-pointer"
-                              : "border-border opacity-60"
-                    }`}
-                  >
-                    <span
-                      className="mb-0.5 inline-block size-2 rounded-full"
-                      style={{ backgroundColor: color }}
-                    />
-                    <span className="text-[10px] leading-tight font-medium truncate w-full">
-                      {name}
-                    </span>
-                    <span className="text-sm font-bold">{t.armies}</span>
-                  </button>
-                );
-              })}
-            </div>
           </div>
         );
       })}
@@ -661,6 +564,11 @@ export default function GamePage() {
     view?.mapId ? { mapId: view.mapId } : "skip",
   );
   const graphMap = mapDoc?.graphMap as unknown as GraphMap | undefined;
+  const mapVisual = mapDoc?.visual as unknown as MapVisual | undefined;
+  const mapImageUrl =
+    mapDoc && "imageUrl" in mapDoc
+      ? (mapDoc.imageUrl as string | null)
+      : null;
 
   const submitActionMutation = useMutation(api.gameplay.submitAction);
   const resignMutation = useMutation(api.gameplay.resign);
@@ -846,7 +754,18 @@ export default function GamePage() {
     );
   }
 
-  if (view === undefined || graphMap === undefined) {
+  if (
+    view === undefined ||
+    graphMap === undefined ||
+    mapVisual === undefined
+  ) {
+    if (view !== undefined && mapDoc === null) {
+      return (
+        <div className="flex min-h-screen items-center justify-center">
+          <p className="text-muted-foreground">Map is unavailable</p>
+        </div>
+      );
+    }
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted-foreground">Loading game...</p>
@@ -862,7 +781,7 @@ export default function GamePage() {
     );
   }
 
-  if (!state || !graphMap) {
+  if (!state || !graphMap || !mapVisual) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p className="text-muted-foreground">Waiting for game state...</p>
@@ -907,14 +826,19 @@ export default function GamePage() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_340px]">
           {/* Board */}
           <div className="overflow-auto">
-            <TerritoryBoard
+            <MapCanvas
               map={graphMap}
-              state={state}
+              visual={mapVisual}
+              imageUrl={mapImageUrl}
+              territories={state.territories}
+              turnOrder={state.turnOrder}
               selectedFrom={selectedFrom}
               selectedTo={selectedTo}
               validFromIds={isMyTurn ? validFromIds : new Set()}
               validToIds={isMyTurn ? validToIds : new Set()}
+              interactive={isMyTurn}
               onClickTerritory={handleClickTerritory}
+              getPlayerColor={getPlayerColor}
             />
           </div>
 

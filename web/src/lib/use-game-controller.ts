@@ -1,5 +1,4 @@
 import { useMemo, useState, useCallback } from "react";
-import { classicMap } from "risk-maps";
 import type { TerritoryId, Action } from "risk-engine";
 
 export interface PublicGameState {
@@ -28,6 +27,7 @@ interface GameControllerParams {
   myEnginePlayerId: string | null;
   myHand: MyCard[] | null;
   perspective: "player" | "spectator";
+  adjacency: Record<string, readonly TerritoryId[]>;
 }
 
 export interface TerritoryHint {
@@ -36,7 +36,13 @@ export interface TerritoryHint {
   role: "source" | "target" | "placeable" | "none";
 }
 
-export function useGameController({ state, myEnginePlayerId, myHand: _myHand, perspective }: GameControllerParams) {
+export function useGameController({
+  state,
+  myEnginePlayerId,
+  myHand: _myHand,
+  perspective,
+  adjacency,
+}: GameControllerParams) {
   const [selectedFrom, setSelectedFrom] = useState<string | null>(null);
   const [selectedTo, setSelectedTo] = useState<string | null>(null);
   const [draftCount, setDraftCount] = useState(1);
@@ -58,8 +64,6 @@ export function useGameController({ state, myEnginePlayerId, myHand: _myHand, pe
     }
 
     if (!isMyTurn) return result;
-
-    const adjacency = classicMap.adjacency;
 
     switch (phase) {
       case "Reinforcement": {
@@ -113,7 +117,7 @@ export function useGameController({ state, myEnginePlayerId, myHand: _myHand, pe
     }
 
     return result;
-  }, [state, isMyTurn, phase, myEnginePlayerId, selectedFrom]);
+  }, [state, isMyTurn, phase, myEnginePlayerId, selectedFrom, adjacency]);
 
   const handleTerritoryClick = useCallback((tid: string) => {
     if (!isMyTurn || !state) return;

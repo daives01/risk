@@ -1,5 +1,4 @@
 import { internalAction } from "./_generated/server";
-import { internal } from "./_generated/api";
 import { classicMap } from "risk-maps";
 import { validateMap } from "risk-engine";
 import type { GraphMap } from "risk-engine";
@@ -15,7 +14,7 @@ const MAPS: MapDef[] = [
 ];
 
 export const seedMaps = internalAction({
-  handler: async (ctx) => {
+  handler: async () => {
     const results: string[] = [];
 
     for (const { mapId, name, graphMap } of MAPS) {
@@ -26,14 +25,14 @@ export const seedMaps = internalAction({
         );
       }
 
-      await ctx.runMutation(internal.maps.upsert, {
-        mapId,
-        name,
-        graphMap: graphMap as any,
-      });
-      results.push(`Seeded map "${mapId}" (${Object.keys(graphMap.territories).length} territories)`);
+      results.push(
+        `Validated map "${mapId}" (${name}, ${Object.keys(graphMap.territories).length} territories)`,
+      );
     }
 
+    results.push(
+      "No maps were inserted. Use /admin/maps to upload an image, author anchors/graph, and publish.",
+    );
     return results;
   },
 });
