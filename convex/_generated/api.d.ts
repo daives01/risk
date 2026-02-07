@@ -18,6 +18,7 @@ import type * as http from "../http.js";
 import type * as lobby from "../lobby.js";
 import type * as mapPlayerLimits from "../mapPlayerLimits.js";
 import type * as maps from "../maps.js";
+import type * as rulesets from "../rulesets.js";
 import type * as seed from "../seed.js";
 import type * as sendEmail from "../sendEmail.js";
 
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   lobby: typeof lobby;
   mapPlayerLimits: typeof mapPlayerLimits;
   maps: typeof maps;
+  rulesets: typeof rulesets;
   seed: typeof seed;
   sendEmail: typeof sendEmail;
 }>;

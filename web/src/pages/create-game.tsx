@@ -9,6 +9,18 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+type RulesetOverridesInput = {
+  combat: { allowAttackerDiceChoice: boolean };
+  fortify: { fortifyMode: "adjacent" | "connected"; maxFortifiesPerTurn?: number };
+  cards: { forcedTradeHandSize: number; awardCardOnCapture: boolean };
+  teams: {
+    preventAttackingTeammates: boolean;
+    allowPlaceOnTeammate: boolean;
+    allowFortifyWithTeammate: boolean;
+    allowFortifyThroughTeammates: boolean;
+  };
+};
+
 export default function CreateGamePage() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const navigate = useNavigate();
@@ -21,6 +33,15 @@ export default function CreateGamePage() {
   const [maxPlayers, setMaxPlayers] = useState(6);
   const [teamModeEnabled, setTeamModeEnabled] = useState(false);
   const [teamAssignmentStrategy, setTeamAssignmentStrategy] = useState<"manual" | "balancedRandom">("manual");
+  const [fortifyMode, setFortifyMode] = useState<"adjacent" | "connected">("connected");
+  const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | "unlimited">("unlimited");
+  const [forcedTradeHandSize, setForcedTradeHandSize] = useState(5);
+  const [awardCardOnCapture, setAwardCardOnCapture] = useState(true);
+  const [allowAttackerDiceChoice, setAllowAttackerDiceChoice] = useState(true);
+  const [preventAttackingTeammates, setPreventAttackingTeammates] = useState(true);
+  const [allowPlaceOnTeammate, setAllowPlaceOnTeammate] = useState(true);
+  const [allowFortifyWithTeammate, setAllowFortifyWithTeammate] = useState(true);
+  const [allowFortifyThroughTeammates, setAllowFortifyThroughTeammates] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const selectedMap = useMemo(
@@ -60,12 +81,27 @@ export default function CreateGamePage() {
     setError(null);
     setLoading(true);
     try {
+      const rulesetOverrides: RulesetOverridesInput = {
+        combat: { allowAttackerDiceChoice },
+        fortify: {
+          fortifyMode,
+          ...(maxFortifiesPerTurn === "unlimited" ? {} : { maxFortifiesPerTurn }),
+        },
+        cards: { forcedTradeHandSize, awardCardOnCapture },
+        teams: {
+          preventAttackingTeammates,
+          allowPlaceOnTeammate,
+          allowFortifyWithTeammate,
+          allowFortifyThroughTeammates,
+        },
+      };
       const { gameId } = await createGame({
         name: name || "New Game",
         mapId: selectedMapId,
         maxPlayers,
         teamModeEnabled,
         teamAssignmentStrategy,
+        rulesetOverrides,
       });
       navigate(`/g/${gameId}`);
     } catch (err) {
@@ -174,6 +210,112 @@ export default function CreateGamePage() {
                   </select>
                 </div>
               )}
+
+              <div className="space-y-3 rounded-lg border bg-background/70 p-3">
+                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Game Rules</p>
+
+                <div className="space-y-2">
+                  <Label htmlFor="fortifyMode">Fortify Mode</Label>
+                  <select
+                    id="fortifyMode"
+                    value={fortifyMode}
+                    onChange={(event) => setFortifyMode(event.target.value as "adjacent" | "connected")}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                  >
+                    <option value="connected">Connected path</option>
+                    <option value="adjacent">Adjacent only</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="maxFortifiesPerTurn">Fortifies Per Turn</Label>
+                  <select
+                    id="maxFortifiesPerTurn"
+                    value={maxFortifiesPerTurn}
+                    onChange={(event) =>
+                      setMaxFortifiesPerTurn(
+                        event.target.value === "unlimited"
+                          ? "unlimited"
+                          : Number(event.target.value),
+                      )
+                    }
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                  >
+                    <option value="unlimited">Unlimited</option>
+                    <option value={0}>0</option>
+                    <option value={1}>1</option>
+                    <option value={2}>2</option>
+                    <option value={3}>3</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="forcedTradeHandSize">Forced Trade Hand Size</Label>
+                  <Input
+                    id="forcedTradeHandSize"
+                    type="number"
+                    min={3}
+                    max={12}
+                    value={forcedTradeHandSize}
+                    onChange={(event) => setForcedTradeHandSize(Number(event.target.value))}
+                  />
+                </div>
+
+                <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={awardCardOnCapture}
+                    onChange={(event) => setAwardCardOnCapture(event.target.checked)}
+                  />
+                  Award card after capture
+                </label>
+
+                <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={allowAttackerDiceChoice}
+                    onChange={(event) => setAllowAttackerDiceChoice(event.target.checked)}
+                  />
+                  Allow attacker dice choice
+                </label>
+
+                {teamModeEnabled && (
+                  <>
+                    <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={preventAttackingTeammates}
+                        onChange={(event) => setPreventAttackingTeammates(event.target.checked)}
+                      />
+                      Prevent attacking teammates
+                    </label>
+                    <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={allowPlaceOnTeammate}
+                        onChange={(event) => setAllowPlaceOnTeammate(event.target.checked)}
+                      />
+                      Allow placing on teammate
+                    </label>
+                    <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={allowFortifyWithTeammate}
+                        onChange={(event) => setAllowFortifyWithTeammate(event.target.checked)}
+                      />
+                      Allow fortify with teammate
+                    </label>
+                    <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={allowFortifyThroughTeammates}
+                        onChange={(event) => setAllowFortifyThroughTeammates(event.target.checked)}
+                      />
+                      Allow fortify through teammate chain
+                    </label>
+                  </>
+                )}
+              </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-3 py-6">
               <Button type="submit" className="w-full" disabled={loading || !selectedMapId}>

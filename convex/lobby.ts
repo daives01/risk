@@ -5,12 +5,12 @@ import {
   createRng,
   createDeck,
   calculateReinforcements,
-  defaultRuleset,
 } from "risk-engine";
 import type {
   CardId,
   GameState,
   PlayerId,
+  RulesetConfig,
   TeamId,
   TerritoryId,
   GraphMap,
@@ -21,11 +21,16 @@ import {
 } from "./mapPlayerLimits";
 import {
   createBalancedTeamAssignments,
-  resolveEngineTeamsConfig,
   resolveTeamModeConfig,
   validateTeamAssignments,
   type TeamId as LobbyTeamId,
 } from "./gameTeams";
+import {
+  resolveEffectiveRuleset,
+  resolveRulesetFromOverrides,
+  rulesetOverridesValidator,
+  type RulesetOverrides,
+} from "./rulesets";
 
 function generateInviteCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -34,6 +39,10 @@ function generateInviteCode(): string {
     code += chars[Math.floor(Math.random() * chars.length)];
   }
   return code;
+}
+
+function toStoredRuleset(ruleset: RulesetConfig) {
+  return JSON.parse(JSON.stringify(ruleset));
 }
 
 export const createGame = mutation({
@@ -48,6 +57,7 @@ export const createGame = mutation({
     teamAssignmentStrategy: v.optional(
       v.union(v.literal("manual"), v.literal("balancedRandom")),
     ),
+    rulesetOverrides: v.optional(rulesetOverridesValidator),
   },
   handler: async (ctx, args) => {
     const user = await authComponent.safeGetAuthUser(ctx);
@@ -76,6 +86,9 @@ export const createGame = mutation({
       );
     }
 
+    const rulesetOverrides = args.rulesetOverrides as RulesetOverrides | undefined;
+    resolveRulesetFromOverrides(args.teamModeEnabled ?? false, rulesetOverrides);
+
     const gameId = await ctx.db.insert("games", {
       name: args.name,
       mapId: args.mapId,
@@ -84,6 +97,7 @@ export const createGame = mutation({
       maxPlayers,
       teamModeEnabled: args.teamModeEnabled ?? false,
       teamAssignmentStrategy: args.teamAssignmentStrategy ?? "manual",
+      rulesetOverrides,
       createdBy: String(user._id),
       createdAt: Date.now(),
     });
@@ -220,6 +234,8 @@ export const getLobby = query({
         startedAt: game.startedAt ?? null,
         teamModeEnabled: game.teamModeEnabled ?? false,
         teamAssignmentStrategy: game.teamAssignmentStrategy ?? "manual",
+        rulesetOverrides: game.rulesetOverrides ?? null,
+        effectiveRuleset: game.effectiveRuleset ?? null,
       },
       players: players.map((p) => ({
         userId: p.userId,
@@ -301,6 +317,34 @@ export const rebalanceTeams = mutation({
   },
 });
 
+export const setRulesetOverrides = mutation({
+  args: {
+    gameId: v.id("games"),
+    rulesetOverrides: v.optional(rulesetOverridesValidator),
+  },
+  handler: async (ctx, { gameId, rulesetOverrides }) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+
+    const game = await ctx.db.get(gameId);
+    if (!game) throw new Error("Game not found");
+    if (game.status !== "lobby") throw new Error("Game is not in lobby");
+    if (game.createdBy !== String(user._id)) {
+      throw new Error("Only the host can update game rules");
+    }
+
+    const effectiveRuleset = resolveRulesetFromOverrides(
+      game.teamModeEnabled ?? false,
+      rulesetOverrides as RulesetOverrides | undefined,
+    );
+
+    await ctx.db.patch(gameId, {
+      rulesetOverrides,
+      effectiveRuleset: toStoredRuleset(effectiveRuleset),
+    });
+  },
+});
+
 export const startGame = mutation({
   args: {
     gameId: v.id("games"),
@@ -353,9 +397,14 @@ export const startGame = mutation({
     }
 
     const territoryIds = Object.keys(graphMap.territories) as TerritoryId[];
-    const setup = defaultRuleset.setup;
+    const effectiveRuleset = resolveEffectiveRuleset({
+      teamModeEnabled: game.teamModeEnabled,
+      rulesetOverrides: game.rulesetOverrides as RulesetOverrides | undefined,
+      effectiveRuleset: game.effectiveRuleset as RulesetConfig | undefined,
+    });
+    const setup = effectiveRuleset.setup;
     const teamMode = resolveTeamModeConfig(game);
-    const teamsConfig = resolveEngineTeamsConfig(teamMode);
+    const teamsConfig = effectiveRuleset.teams;
 
     // Build engine player IDs (use index-based IDs for determinism)
     const playerIds: PlayerId[] = playerDocs.map(
@@ -453,7 +502,7 @@ export const startGame = mutation({
 
     // Create card deck
     const deckResult = createDeck(
-      defaultRuleset.cards.deckDefinition,
+      effectiveRuleset.cards.deckDefinition,
       territoryIds,
       rng,
     );
@@ -491,6 +540,7 @@ export const startGame = mutation({
       hands,
       tradesCompleted: 0,
       capturedThisTurn: false,
+      fortifiesUsedThisTurn: 0,
       rng: rng.state,
       stateVersion: 1,
       rulesetVersion: 1,
@@ -512,6 +562,7 @@ export const startGame = mutation({
       startedAt: Date.now(),
       state: engineState,
       stateVersion: 1,
+      effectiveRuleset: toStoredRuleset(effectiveRuleset),
     });
 
     return { gameId };

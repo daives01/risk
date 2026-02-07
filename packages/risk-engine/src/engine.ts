@@ -569,6 +569,13 @@ function handleFortify(
     );
   }
 
+  const fortifiesUsedThisTurn = state.fortifiesUsedThisTurn ?? 0;
+  if (fortifiesUsedThisTurn >= fortify.maxFortifiesPerTurn) {
+    throw new ActionError(
+      `Cannot fortify: reached max fortifies per turn (${fortify.maxFortifiesPerTurn})`,
+    );
+  }
+
   // Territory existence
   const fromTerritory = state.territories[action.from];
   if (!fromTerritory) {
@@ -644,6 +651,7 @@ function handleFortify(
   const newState: GameState = {
     ...state,
     territories: newTerritories,
+    fortifiesUsedThisTurn: fortifiesUsedThisTurn + 1,
     stateVersion: state.stateVersion + 1,
   };
 
@@ -914,6 +922,7 @@ function handleEndTurn(
       round: newRound,
     },
     capturedThisTurn: false,
+    fortifiesUsedThisTurn: 0,
     deck: currentDeck,
     hands: currentHands,
     rng: rngState,

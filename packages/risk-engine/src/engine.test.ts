@@ -1119,12 +1119,14 @@ const fortifyMap: GraphMap = {
 
 const connectedFortify: FortifyConfig = {
   fortifyMode: "connected",
+  maxFortifiesPerTurn: Number.MAX_SAFE_INTEGER,
   allowFortifyWithTeammate: false,
   allowFortifyThroughTeammates: false,
 };
 
 const adjacentFortify: FortifyConfig = {
   fortifyMode: "adjacent",
+  maxFortifiesPerTurn: Number.MAX_SAFE_INTEGER,
   allowFortifyWithTeammate: false,
   allowFortifyThroughTeammates: false,
 };
@@ -1367,6 +1369,32 @@ describe("Fortify", () => {
     expect(state.territories[T2].armies).toBe(originalT2Armies);
     expect(state.stateVersion).toBe(0);
   });
+
+  test("enforces zero fortify cap", () => {
+    const state = makeFortifyState();
+    const config: FortifyConfig = { ...connectedFortify, maxFortifiesPerTurn: 0 };
+    expect(() =>
+      applyAction(state, P1, fortify(T1, T2, 1), fortifyMap, undefined, config),
+    ).toThrow(/reached max fortifies per turn/);
+  });
+
+  test("enforces one fortify cap and tracks per-turn usage", () => {
+    const state = makeFortifyState();
+    const config: FortifyConfig = { ...connectedFortify, maxFortifiesPerTurn: 1 };
+    const first = applyAction(state, P1, fortify(T1, T2, 1), fortifyMap, undefined, config);
+    expect(first.state.fortifiesUsedThisTurn).toBe(1);
+    expect(() =>
+      applyAction(first.state, P1, fortify(T2, T1, 1), fortifyMap, undefined, config),
+    ).toThrow(/reached max fortifies per turn/);
+  });
+
+  test("allows multiple fortifies when cap permits", () => {
+    const state = makeFortifyState();
+    const config: FortifyConfig = { ...connectedFortify, maxFortifiesPerTurn: 2 };
+    const first = applyAction(state, P1, fortify(T1, T2, 1), fortifyMap, undefined, config);
+    const second = applyAction(first.state, P1, fortify(T2, T1, 1), fortifyMap, undefined, config);
+    expect(second.state.fortifiesUsedThisTurn).toBe(2);
+  });
 });
 
 // ── EndTurn tests ──────────────────────────────────────────────────
@@ -1421,6 +1449,12 @@ describe("EndTurn", () => {
     expect(result.state.turn.currentPlayerId).toBe(P2);
     expect(result.state.turn.phase).toBe("Reinforcement");
     expect(result.state.turn.round).toBe(1); // same round
+  });
+
+  test("resets fortify usage counter on turn advance", () => {
+    const state = makeEndTurnState({ fortifiesUsedThisTurn: 2 });
+    const result = applyAction(state, P1, endTurn(), endTurnMap);
+    expect(result.state.fortifiesUsedThisTurn).toBe(0);
   });
 
   test("clears capturedThisTurn flag", () => {

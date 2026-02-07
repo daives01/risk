@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { effectiveRulesetValidator, rulesetOverridesValidator } from "./rulesets";
 
 const territoryInfo = v.object({
   name: v.optional(v.string()),
@@ -57,6 +58,8 @@ export default defineSchema({
     teamAssignmentStrategy: v.optional(
       v.union(v.literal("manual"), v.literal("balancedRandom")),
     ),
+    rulesetOverrides: v.optional(rulesetOverridesValidator),
+    effectiveRuleset: v.optional(effectiveRulesetValidator),
     createdBy: v.string(),
     createdAt: v.number(),
     startedAt: v.optional(v.number()),

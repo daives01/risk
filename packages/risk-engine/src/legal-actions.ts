@@ -232,6 +232,9 @@ function getFortifyActions(
 
   const { map, fortify, teams } = config;
   if (!fortify) return actions;
+  if ((state.fortifiesUsedThisTurn ?? 0) >= fortify.maxFortifiesPerTurn) {
+    return actions;
+  }
 
   const territoryIds = Object.keys(state.territories) as TerritoryId[];
 

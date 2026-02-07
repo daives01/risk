@@ -23,6 +23,7 @@ export interface CombatConfig {
 
 export interface FortifyConfig {
   readonly fortifyMode: "adjacent" | "connected";
+  readonly maxFortifiesPerTurn: number;
   readonly allowFortifyWithTeammate: boolean;
   readonly allowFortifyThroughTeammates: boolean;
 }
@@ -105,6 +106,7 @@ export const defaultRuleset: RulesetConfig = {
 
   fortify: {
     fortifyMode: "connected",
+    maxFortifiesPerTurn: Number.MAX_SAFE_INTEGER,
     allowFortifyWithTeammate: false,
     allowFortifyThroughTeammates: false,
   },

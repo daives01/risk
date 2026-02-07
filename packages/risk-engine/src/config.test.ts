@@ -37,5 +37,8 @@ describe("RulesetConfig", () => {
 
   test("fortify mode is connected by default", () => {
     expect(defaultRuleset.fortify.fortifyMode).toBe("connected");
+    expect(defaultRuleset.fortify.maxFortifiesPerTurn).toBe(
+      Number.MAX_SAFE_INTEGER,
+    );
   });
 });

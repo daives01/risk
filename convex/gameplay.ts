@@ -3,10 +3,10 @@ import { v } from "convex/values";
 import type { GenericDatabaseReader } from "convex/server";
 import type { DataModel } from "./_generated/dataModel";
 import { authComponent } from "./auth.js";
-import { applyAction, ActionError, calculateReinforcements, createDeck, createRng, defaultRuleset } from "risk-engine";
-import type { Action, CardId, GameState, PlayerId, GraphMap, TerritoryId, GameEvent } from "risk-engine";
+import { applyAction, ActionError, calculateReinforcements, createDeck, createRng } from "risk-engine";
+import type { Action, CardId, GameState, PlayerId, GraphMap, TerritoryId, GameEvent, RulesetConfig } from "risk-engine";
 import type { Id } from "./_generated/dataModel";
-import { resolveEngineTeamsConfig, resolveTeamModeConfig } from "./gameTeams";
+import { resolveEffectiveRuleset, type RulesetOverrides } from "./rulesets";
 
 const ACTION_RATE_LIMIT_MS = 500;
 
@@ -30,6 +30,14 @@ type TimelinePublicState = {
   handSizes: Record<string, number>;
   stateVersion: number;
 };
+
+function getGameRuleset(game: {
+  teamModeEnabled?: boolean;
+  rulesetOverrides?: RulesetOverrides;
+  effectiveRuleset?: RulesetConfig;
+}): RulesetConfig {
+  return resolveEffectiveRuleset(game);
+}
 
 async function enforceRateLimit(
   db: GenericDatabaseReader<DataModel>,
@@ -67,7 +75,11 @@ export const submitAction = mutation({
 
     const state = game.state as GameState;
     if (!state) throw new Error("Game has no state");
-    const teamsConfig = resolveEngineTeamsConfig(resolveTeamModeConfig(game));
+    const ruleset = getGameRuleset({
+      teamModeEnabled: game.teamModeEnabled,
+      rulesetOverrides: game.rulesetOverrides as RulesetOverrides | undefined,
+      effectiveRuleset: game.effectiveRuleset as RulesetConfig | undefined,
+    });
 
     // Optimistic concurrency check
     if (state.stateVersion !== args.expectedVersion) {
@@ -109,10 +121,10 @@ export const submitAction = mutation({
         playerId,
         action,
         graphMap,
-        defaultRuleset.combat,
-        defaultRuleset.fortify,
-        defaultRuleset.cards,
-        teamsConfig,
+        ruleset.combat,
+        ruleset.fortify,
+        ruleset.cards,
+        ruleset.teams,
       );
     } catch (e) {
       if (e instanceof ActionError) {
@@ -178,7 +190,11 @@ export const submitReinforcementPlacements = mutation({
 
     const state = game.state as GameState;
     if (!state) throw new Error("Game has no state");
-    const teamsConfig = resolveEngineTeamsConfig(resolveTeamModeConfig(game));
+    const ruleset = getGameRuleset({
+      teamModeEnabled: game.teamModeEnabled,
+      rulesetOverrides: game.rulesetOverrides as RulesetOverrides | undefined,
+      effectiveRuleset: game.effectiveRuleset as RulesetConfig | undefined,
+    });
     if (state.stateVersion !== args.expectedVersion) {
       throw new Error(
         `Version mismatch: expected ${args.expectedVersion}, current ${state.stateVersion}`,
@@ -228,10 +244,10 @@ export const submitReinforcementPlacements = mutation({
           playerId,
           action,
           graphMap,
-          defaultRuleset.combat,
-          defaultRuleset.fortify,
-          defaultRuleset.cards,
-          teamsConfig,
+          ruleset.combat,
+          ruleset.fortify,
+          ruleset.cards,
+          ruleset.teams,
         );
       } catch (e) {
         if (e instanceof ActionError) {
@@ -291,7 +307,11 @@ export const resign = mutation({
 
     const state = game.state as GameState;
     if (!state) throw new Error("Game has no state");
-    const teamsConfig = resolveEngineTeamsConfig(resolveTeamModeConfig(game));
+    const ruleset = getGameRuleset({
+      teamModeEnabled: game.teamModeEnabled,
+      rulesetOverrides: game.rulesetOverrides as RulesetOverrides | undefined,
+      effectiveRuleset: game.effectiveRuleset as RulesetConfig | undefined,
+    });
 
     const callerId = String(user._id);
     const playerDoc = await ctx.db
@@ -340,7 +360,7 @@ export const resign = mutation({
     const aliveTeams = new Set(
       alivePlayers.map((pid) => newPlayers[pid]!.teamId ?? `solo:${pid}`),
     );
-    const isGameOver = teamsConfig.teamsEnabled ? aliveTeams.size <= 1 : alivePlayers.length <= 1;
+    const isGameOver = ruleset.teams.teamsEnabled ? aliveTeams.size <= 1 : alivePlayers.length <= 1;
 
     // If it's the resigning player's turn, advance to next alive player
     let newTurn = state.turn;
@@ -375,7 +395,7 @@ export const resign = mutation({
         { territories: newTerritories, players: newPlayers } as GameState,
         nextPlayerId,
         graphMap,
-        teamsConfig,
+        ruleset.teams,
       );
 
       newTurn = {
@@ -416,7 +436,7 @@ export const resign = mutation({
       ...(isGameOver
         ? [{
             type: "GameEnded",
-            ...(teamsConfig.teamsEnabled
+            ...(ruleset.teams.teamsEnabled
               ? { winningTeamId: alivePlayers[0] ? newPlayers[alivePlayers[0]]!.teamId : undefined }
               : { winningPlayerId: alivePlayers[0] }),
           }]
@@ -573,10 +593,10 @@ function createInitialStateFromSeed(
   currentState: GameState,
   graphMap: GraphMap,
   playerIds: PlayerId[],
-  teamsConfig: ReturnType<typeof resolveEngineTeamsConfig>,
+  ruleset: RulesetConfig,
 ): GameState {
   const territoryIds = Object.keys(graphMap.territories) as TerritoryId[];
-  const setup = defaultRuleset.setup;
+  const setup = ruleset.setup;
   const rng = createRng({ seed: currentState.rng.seed, index: 0 });
   const turnOrder = rng.shuffle(playerIds);
 
@@ -623,7 +643,7 @@ function createInitialStateFromSeed(
     };
   }
 
-  const deckResult = createDeck(defaultRuleset.cards.deckDefinition, territoryIds, rng);
+  const deckResult = createDeck(ruleset.cards.deckDefinition, territoryIds, rng);
   const hands: Record<string, readonly CardId[]> = {};
   for (const pid of playerIds) hands[pid] = [];
 
@@ -632,7 +652,7 @@ function createInitialStateFromSeed(
     { territories, players } as GameState,
     firstPlayer,
     graphMap,
-    teamsConfig,
+    ruleset.teams,
   );
 
   return {
@@ -653,6 +673,7 @@ function createInitialStateFromSeed(
     hands,
     tradesCompleted: 0,
     capturedThisTurn: false,
+    fortifiesUsedThisTurn: 0,
     rng: rng.state,
     stateVersion: 1,
     rulesetVersion: currentState.rulesetVersion,
@@ -663,7 +684,7 @@ function applyResignForTimeline(
   state: GameState,
   playerId: PlayerId,
   graphMap: GraphMap,
-  teamsConfig: ReturnType<typeof resolveEngineTeamsConfig>,
+  ruleset: RulesetConfig,
 ): GameState {
   const playerState = state.players[playerId];
   if (!playerState || playerState.status !== "alive") return state;
@@ -689,7 +710,7 @@ function applyResignForTimeline(
 
   const alivePlayers = state.turnOrder.filter((pid) => newPlayers[pid]!.status === "alive");
   const aliveTeams = new Set(alivePlayers.map((pid) => newPlayers[pid]!.teamId ?? `solo:${pid}`));
-  const isGameOver = teamsConfig.teamsEnabled ? aliveTeams.size <= 1 : alivePlayers.length <= 1;
+  const isGameOver = ruleset.teams.teamsEnabled ? aliveTeams.size <= 1 : alivePlayers.length <= 1;
 
   let newTurn = state.turn;
   let newReinforcements = state.reinforcements;
@@ -714,7 +735,7 @@ function applyResignForTimeline(
       { territories: newTerritories, players: newPlayers } as GameState,
       nextPlayerId,
       graphMap,
-      teamsConfig,
+      ruleset.teams,
     );
 
     newTurn = {
@@ -774,7 +795,11 @@ export const getHistoryTimeline = query({
       .unique();
     if (!mapDoc) return [];
     const graphMap = mapDoc.graphMap as unknown as GraphMap;
-    const teamsConfig = resolveEngineTeamsConfig(resolveTeamModeConfig(game));
+    const ruleset = getGameRuleset({
+      teamModeEnabled: game.teamModeEnabled,
+      rulesetOverrides: game.rulesetOverrides as RulesetOverrides | undefined,
+      effectiveRuleset: game.effectiveRuleset as RulesetConfig | undefined,
+    });
 
     const playerDocs = await ctx.db
       .query("gamePlayers")
@@ -792,7 +817,7 @@ export const getHistoryTimeline = query({
       .order("asc")
       .take(limit ?? 500);
 
-    let simState = createInitialStateFromSeed(state, graphMap, playerIds, teamsConfig);
+    let simState = createInitialStateFromSeed(state, graphMap, playerIds, ruleset);
     const timeline: Array<{
       index: number;
       actionType: string;
@@ -814,7 +839,7 @@ export const getHistoryTimeline = query({
 
       try {
         if (actionType === "Resign") {
-          simState = applyResignForTimeline(simState, actorId, graphMap, teamsConfig);
+          simState = applyResignForTimeline(simState, actorId, graphMap, ruleset);
         } else if (actionType === "PlaceReinforcementsBatch") {
           const placements = Array.isArray(action.placements) ? action.placements : [];
           for (const placement of placements) {
@@ -831,10 +856,10 @@ export const getHistoryTimeline = query({
                 count,
               },
               graphMap,
-              defaultRuleset.combat,
-              defaultRuleset.fortify,
-              defaultRuleset.cards,
-              teamsConfig,
+              ruleset.combat,
+              ruleset.fortify,
+              ruleset.cards,
+              ruleset.teams,
             );
             simState = result.state;
           }
@@ -844,10 +869,10 @@ export const getHistoryTimeline = query({
             actorId,
             action as unknown as Action,
             graphMap,
-            defaultRuleset.combat,
-            defaultRuleset.fortify,
-            defaultRuleset.cards,
-            teamsConfig,
+            ruleset.combat,
+            ruleset.fortify,
+            ruleset.cards,
+            ruleset.teams,
           );
           simState = result.state;
         }

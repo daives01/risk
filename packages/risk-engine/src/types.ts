@@ -236,6 +236,7 @@ export interface GameState {
   readonly hands: Record<string, readonly CardId[]>;
   readonly tradesCompleted: number;
   readonly capturedThisTurn: boolean;
+  readonly fortifiesUsedThisTurn?: number;
   readonly rng: RngState;
   readonly stateVersion: number;
   readonly rulesetVersion: number;

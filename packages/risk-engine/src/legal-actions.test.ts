@@ -361,6 +361,18 @@ describe("getLegalActions - Fortify", () => {
     expect(actionTypes(actions)).toContain("EndTurn");
   });
 
+  test("returns only EndTurn when fortify cap is reached", () => {
+    const state = makeState({
+      turn: { currentPlayerId: P1, phase: "Fortify", round: 1 },
+      reinforcements: undefined,
+      fortifiesUsedThisTurn: 1,
+    });
+    const actions = getLegalActions(state, makeConfig({
+      fortify: { ...defaultFortify, maxFortifiesPerTurn: 1 },
+    }));
+    expect(actions).toEqual([{ type: "EndTurn" }]);
+  });
+
   test("returns Fortify actions for valid from/to pairs", () => {
     // P1 owns T1(3) and T2(2), connected via adjacency
     const state = makeState({
