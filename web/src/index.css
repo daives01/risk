@@ -152,7 +152,7 @@
   }
 
   .app-main {
-    padding: 1rem;
+    padding: 0.75rem;
     background: var(--app-bg);
   }
 
@@ -208,6 +208,7 @@
 
   .app-list {
     border: 1px solid var(--app-border);
+    background: var(--app-surface);
   }
 
   .app-list-row {
@@ -219,11 +220,22 @@
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid color-mix(in oklab, var(--app-border), black 35%);
     font-size: 0.875rem;
-    transition: background 120ms ease, color 120ms ease;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
   }
 
   .app-list-row:last-child {
     border-bottom: 0;
+  }
+
+  .app-list-row:hover,
+  .app-list-row:focus-visible {
+    background: color-mix(in oklab, var(--app-accent), transparent 86%);
+    color: var(--app-accent);
+  }
+
+  .app-list-row:focus-visible {
+    outline: 1px solid var(--app-accent);
+    outline-offset: -1px;
   }
 
   .app-list-row.is-selected {
@@ -242,6 +254,41 @@
     background: var(--app-surface);
     padding: 0.75rem;
     font-size: 0.875rem;
+  }
+
+  .home-overview-grid {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .app-status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 66px;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid var(--app-border);
+  }
+
+  .app-status-pill.status-active {
+    color: #7bd88f;
+    border-color: color-mix(in oklab, #7bd88f, var(--app-border) 55%);
+    background: color-mix(in oklab, #7bd88f, transparent 90%);
+  }
+
+  .app-status-pill.status-lobby {
+    color: #7cb7ff;
+    border-color: color-mix(in oklab, #7cb7ff, var(--app-border) 55%);
+    background: color-mix(in oklab, #7cb7ff, transparent 90%);
+  }
+
+  .app-status-pill.status-finished {
+    color: var(--app-muted);
+    border-color: var(--app-border);
+    background: color-mix(in oklab, var(--app-muted), transparent 92%);
   }
 
   .page-shell {
@@ -287,11 +334,16 @@
 @media (min-width: 1024px) {
   .app-layout {
     display: grid;
-    grid-template-columns: 220px 1fr;
+    grid-template-columns: 205px 1fr;
     min-height: 0;
   }
 
+  .home-overview-grid {
+    grid-template-columns: minmax(0, 1.45fr) minmax(300px, 1fr);
+    align-items: start;
+  }
+
   .app-stats-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
