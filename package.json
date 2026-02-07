@@ -7,8 +7,11 @@
     "dev:web": "bun --filter web dev",
     "dev:backend": "convex dev",
     "seed:maps": "bun scripts/seed-maps.ts",
+    "lint": "bun --filter web lint",
+    "build": "bun --filter risk-engine build && bun --filter web build",
     "typecheck": "tsc --build && tsc -p convex/tsconfig.json",
-    "test": "bun test"
+    "test": "bun test",
+    "check": "bun run typecheck && bun run lint && bun run test && bun run build"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.10.10",

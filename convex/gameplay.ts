@@ -6,6 +6,7 @@ import { authComponent } from "./auth.js";
 import { applyAction, ActionError, calculateReinforcements, createDeck, createRng, defaultRuleset } from "risk-engine";
 import type { Action, CardId, GameState, PlayerId, GraphMap, TerritoryId, GameEvent } from "risk-engine";
 import type { Id } from "./_generated/dataModel";
+import { resolveEngineTeamsConfig, resolveTeamModeConfig } from "./gameTeams";
 
 const ACTION_RATE_LIMIT_MS = 500;
 
@@ -66,6 +67,7 @@ export const submitAction = mutation({
 
     const state = game.state as GameState;
     if (!state) throw new Error("Game has no state");
+    const teamsConfig = resolveEngineTeamsConfig(resolveTeamModeConfig(game));
 
     // Optimistic concurrency check
     if (state.stateVersion !== args.expectedVersion) {
@@ -110,7 +112,7 @@ export const submitAction = mutation({
         defaultRuleset.combat,
         defaultRuleset.fortify,
         defaultRuleset.cards,
-        defaultRuleset.teams,
+        teamsConfig,
       );
     } catch (e) {
       if (e instanceof ActionError) {
@@ -176,6 +178,7 @@ export const submitReinforcementPlacements = mutation({
 
     const state = game.state as GameState;
     if (!state) throw new Error("Game has no state");
+    const teamsConfig = resolveEngineTeamsConfig(resolveTeamModeConfig(game));
     if (state.stateVersion !== args.expectedVersion) {
       throw new Error(
         `Version mismatch: expected ${args.expectedVersion}, current ${state.stateVersion}`,
@@ -228,7 +231,7 @@ export const submitReinforcementPlacements = mutation({
           defaultRuleset.combat,
           defaultRuleset.fortify,
           defaultRuleset.cards,
-          defaultRuleset.teams,
+          teamsConfig,
         );
       } catch (e) {
         if (e instanceof ActionError) {
@@ -288,6 +291,7 @@ export const resign = mutation({
 
     const state = game.state as GameState;
     if (!state) throw new Error("Game has no state");
+    const teamsConfig = resolveEngineTeamsConfig(resolveTeamModeConfig(game));
 
     const callerId = String(user._id);
     const playerDoc = await ctx.db
@@ -329,11 +333,14 @@ export const resign = mutation({
       discard: [...state.deck.discard, ...resignerCards],
     };
 
-    // Check if only 1 alive player remains
+    // Check if only 1 alive player/team remains
     const alivePlayers = state.turnOrder.filter(
       (pid) => newPlayers[pid]!.status === "alive",
     );
-    const isGameOver = alivePlayers.length <= 1;
+    const aliveTeams = new Set(
+      alivePlayers.map((pid) => newPlayers[pid]!.teamId ?? `solo:${pid}`),
+    );
+    const isGameOver = teamsConfig.teamsEnabled ? aliveTeams.size <= 1 : alivePlayers.length <= 1;
 
     // If it's the resigning player's turn, advance to next alive player
     let newTurn = state.turn;
@@ -365,9 +372,10 @@ export const resign = mutation({
 
       const { calculateReinforcements } = await import("risk-engine");
       const reinforcementResult = calculateReinforcements(
-        { territories: newTerritories } as GameState,
+        { territories: newTerritories, players: newPlayers } as GameState,
         nextPlayerId,
         graphMap,
+        teamsConfig,
       );
 
       newTurn = {
@@ -405,8 +413,13 @@ export const resign = mutation({
 
     const events = [
       { type: "PlayerEliminated", eliminatedId: playerId, byId: playerId, cardsTransferred: resignerCards },
-      ...(isGameOver && alivePlayers.length === 1
-        ? [{ type: "GameEnded", winningPlayerId: alivePlayers[0] }]
+      ...(isGameOver
+        ? [{
+            type: "GameEnded",
+            ...(teamsConfig.teamsEnabled
+              ? { winningTeamId: alivePlayers[0] ? newPlayers[alivePlayers[0]]!.teamId : undefined }
+              : { winningPlayerId: alivePlayers[0] }),
+          }]
         : []),
     ];
 
@@ -560,6 +573,7 @@ function createInitialStateFromSeed(
   currentState: GameState,
   graphMap: GraphMap,
   playerIds: PlayerId[],
+  teamsConfig: ReturnType<typeof resolveEngineTeamsConfig>,
 ): GameState {
   const territoryIds = Object.keys(graphMap.territories) as TerritoryId[];
   const setup = defaultRuleset.setup;
@@ -601,9 +615,12 @@ function createInitialStateFromSeed(
     }
   }
 
-  const players: Record<string, { status: "alive" }> = {};
+  const players: GameState["players"] = {};
   for (const pid of playerIds) {
-    players[pid] = { status: "alive" };
+    players[pid] = {
+      status: "alive",
+      ...(currentState.players[pid]?.teamId ? { teamId: currentState.players[pid]!.teamId } : {}),
+    };
   }
 
   const deckResult = createDeck(defaultRuleset.cards.deckDefinition, territoryIds, rng);
@@ -612,9 +629,10 @@ function createInitialStateFromSeed(
 
   const firstPlayer = turnOrder[0]!;
   const reinforcementResult = calculateReinforcements(
-    { territories } as GameState,
+    { territories, players } as GameState,
     firstPlayer,
     graphMap,
+    teamsConfig,
   );
 
   return {
@@ -645,6 +663,7 @@ function applyResignForTimeline(
   state: GameState,
   playerId: PlayerId,
   graphMap: GraphMap,
+  teamsConfig: ReturnType<typeof resolveEngineTeamsConfig>,
 ): GameState {
   const playerState = state.players[playerId];
   if (!playerState || playerState.status !== "alive") return state;
@@ -669,7 +688,8 @@ function applyResignForTimeline(
   };
 
   const alivePlayers = state.turnOrder.filter((pid) => newPlayers[pid]!.status === "alive");
-  const isGameOver = alivePlayers.length <= 1;
+  const aliveTeams = new Set(alivePlayers.map((pid) => newPlayers[pid]!.teamId ?? `solo:${pid}`));
+  const isGameOver = teamsConfig.teamsEnabled ? aliveTeams.size <= 1 : alivePlayers.length <= 1;
 
   let newTurn = state.turn;
   let newReinforcements = state.reinforcements;
@@ -691,9 +711,10 @@ function applyResignForTimeline(
     const nextPlayerId = turnOrder[nextIndex]!;
     const newRound = wrapped ? state.turn.round + 1 : state.turn.round;
     const reinforcementResult = calculateReinforcements(
-      { territories: newTerritories } as GameState,
+      { territories: newTerritories, players: newPlayers } as GameState,
       nextPlayerId,
       graphMap,
+      teamsConfig,
     );
 
     newTurn = {
@@ -753,6 +774,7 @@ export const getHistoryTimeline = query({
       .unique();
     if (!mapDoc) return [];
     const graphMap = mapDoc.graphMap as unknown as GraphMap;
+    const teamsConfig = resolveEngineTeamsConfig(resolveTeamModeConfig(game));
 
     const playerDocs = await ctx.db
       .query("gamePlayers")
@@ -770,7 +792,7 @@ export const getHistoryTimeline = query({
       .order("asc")
       .take(limit ?? 500);
 
-    let simState = createInitialStateFromSeed(state, graphMap, playerIds);
+    let simState = createInitialStateFromSeed(state, graphMap, playerIds, teamsConfig);
     const timeline: Array<{
       index: number;
       actionType: string;
@@ -792,7 +814,7 @@ export const getHistoryTimeline = query({
 
       try {
         if (actionType === "Resign") {
-          simState = applyResignForTimeline(simState, actorId, graphMap);
+          simState = applyResignForTimeline(simState, actorId, graphMap, teamsConfig);
         } else if (actionType === "PlaceReinforcementsBatch") {
           const placements = Array.isArray(action.placements) ? action.placements : [];
           for (const placement of placements) {
@@ -812,7 +834,7 @@ export const getHistoryTimeline = query({
               defaultRuleset.combat,
               defaultRuleset.fortify,
               defaultRuleset.cards,
-              defaultRuleset.teams,
+              teamsConfig,
             );
             simState = result.state;
           }
@@ -825,7 +847,7 @@ export const getHistoryTimeline = query({
             defaultRuleset.combat,
             defaultRuleset.fortify,
             defaultRuleset.cards,
-            defaultRuleset.teams,
+            teamsConfig,
           );
           simState = result.state;
         }

@@ -1,5 +1,10 @@
 import { query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
+import {
+  defaultMapPlayerLimits,
+  resolveMapPlayerLimits,
+  validateMapPlayerLimits,
+} from "./mapPlayerLimits";
 
 const graphMapValidator = v.object({
   territories: v.record(
@@ -35,6 +40,11 @@ const visualValidator = v.object({
   ),
 });
 
+const mapPlayerLimitsValidator = v.object({
+  minPlayers: v.number(),
+  maxPlayers: v.number(),
+});
+
 export const list = query({
   handler: async (ctx) => {
     const docs = await ctx.db
@@ -45,6 +55,10 @@ export const list = query({
     return Promise.all(
       docs.map(async (doc) => ({
         ...doc,
+        playerLimits: resolveMapPlayerLimits(
+          doc.playerLimits,
+          Object.keys(doc.graphMap.territories).length,
+        ),
         imageUrl: await ctx.storage.getUrl(doc.visual.imageStorageId),
       })),
     );
@@ -61,6 +75,10 @@ export const getByMapId = query({
     if (!doc || doc.authoring.status !== "published") return null;
     return {
       ...doc,
+      playerLimits: resolveMapPlayerLimits(
+        doc.playerLimits,
+        Object.keys(doc.graphMap.territories).length,
+      ),
       imageUrl: await ctx.storage.getUrl(doc.visual.imageStorageId),
     };
   },
@@ -72,10 +90,20 @@ export const upsert = internalMutation({
     name: v.string(),
     graphMap: graphMapValidator,
     visual: visualValidator,
+    playerLimits: v.optional(mapPlayerLimitsValidator),
     authoringStatus: v.optional(v.union(v.literal("draft"), v.literal("published"))),
   },
-  handler: async (ctx, { mapId, name, graphMap, visual, authoringStatus }) => {
+  handler: async (ctx, { mapId, name, graphMap, visual, playerLimits, authoringStatus }) => {
     const now = Date.now();
+    const resolvedPlayerLimits =
+      playerLimits ?? defaultMapPlayerLimits(Object.keys(graphMap.territories).length);
+    const playerLimitErrors = validateMapPlayerLimits(
+      resolvedPlayerLimits,
+      Object.keys(graphMap.territories).length,
+    );
+    if (playerLimitErrors.length > 0) {
+      throw new Error(playerLimitErrors.join(", "));
+    }
     const authoring = {
       status: authoringStatus ?? "published",
       updatedAt: now,
@@ -91,6 +119,7 @@ export const upsert = internalMutation({
         name,
         graphMap,
         visual,
+        playerLimits: resolvedPlayerLimits,
         authoring,
         createdAt: now,
       });
@@ -101,6 +130,7 @@ export const upsert = internalMutation({
       name,
       graphMap,
       visual,
+      playerLimits: resolvedPlayerLimits,
       authoring,
       createdAt: now,
     });

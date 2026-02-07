@@ -11,10 +11,12 @@
 import type * as adminMaps from "../adminMaps.js";
 import type * as auth from "../auth.js";
 import type * as emails from "../emails.js";
+import type * as gameTeams from "../gameTeams.js";
 import type * as gameplay from "../gameplay.js";
 import type * as games from "../games.js";
 import type * as http from "../http.js";
 import type * as lobby from "../lobby.js";
+import type * as mapPlayerLimits from "../mapPlayerLimits.js";
 import type * as maps from "../maps.js";
 import type * as seed from "../seed.js";
 import type * as sendEmail from "../sendEmail.js";
@@ -29,10 +31,12 @@ declare const fullApi: ApiFromModules<{
   adminMaps: typeof adminMaps;
   auth: typeof auth;
   emails: typeof emails;
+  gameTeams: typeof gameTeams;
   gameplay: typeof gameplay;
   games: typeof games;
   http: typeof http;
   lobby: typeof lobby;
+  mapPlayerLimits: typeof mapPlayerLimits;
   maps: typeof maps;
   seed: typeof seed;
   sendEmail: typeof sendEmail;

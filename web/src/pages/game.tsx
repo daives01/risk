@@ -58,6 +58,12 @@ export default function GamePage() {
   const remainingReinforcements = state?.reinforcements?.remaining ?? 0;
   const uncommittedReinforcements = Math.max(0, remainingReinforcements - queuedReinforcementTotal);
   const isPlacementPhase = state?.turn.phase === "Reinforcement";
+  const myTeamId = myEnginePlayerId && state ? state.players[myEnginePlayerId]?.teamId : undefined;
+  const isTeammateOwner = useCallback((ownerId: string) => {
+    if (!state || !myEnginePlayerId || !myTeamId) return false;
+    if (ownerId === myEnginePlayerId || ownerId === "neutral") return false;
+    return state.players[ownerId]?.teamId === myTeamId;
+  }, [myEnginePlayerId, myTeamId, state]);
 
   const displayedTerritories = useMemo(() => {
     if (!state) return {};
@@ -84,18 +90,31 @@ export default function GamePage() {
     if (state.turn.phase === "Reinforcement") {
       if (uncommittedReinforcements <= 0) return ids;
       for (const [territoryId, territory] of Object.entries(state.territories)) {
-        if (territory.ownerId === myEnginePlayerId) ids.add(territoryId);
+        if (territory.ownerId === myEnginePlayerId || isTeammateOwner(territory.ownerId)) {
+          ids.add(territoryId);
+        }
       }
     }
 
-    if (state.turn.phase === "Attack" || state.turn.phase === "Fortify") {
+    if (state.turn.phase === "Attack") {
       for (const [territoryId, territory] of Object.entries(state.territories)) {
         if (territory.ownerId === myEnginePlayerId && territory.armies >= 2) ids.add(territoryId);
       }
     }
 
+    if (state.turn.phase === "Fortify") {
+      for (const [territoryId, territory] of Object.entries(state.territories)) {
+        if (
+          (territory.ownerId === myEnginePlayerId || isTeammateOwner(territory.ownerId)) &&
+          territory.armies >= 2
+        ) {
+          ids.add(territoryId);
+        }
+      }
+    }
+
     return ids;
-  }, [graphMap, myEnginePlayerId, state, uncommittedReinforcements]);
+  }, [graphMap, isTeammateOwner, myEnginePlayerId, state, uncommittedReinforcements]);
 
   const validToIds = useMemo(() => {
     const ids = new Set<string>();
@@ -105,20 +124,25 @@ export default function GamePage() {
       const neighbors = graphMap.adjacency[selectedFrom] ?? [];
       for (const neighborId of neighbors) {
         const territory = state.territories[neighborId];
-        if (territory && territory.ownerId !== myEnginePlayerId) ids.add(neighborId);
+        if (!territory) continue;
+        if (territory.ownerId === myEnginePlayerId || isTeammateOwner(territory.ownerId)) continue;
+        ids.add(neighborId);
       }
     }
 
     if (state.turn.phase === "Fortify") {
       for (const [territoryId, territory] of Object.entries(state.territories)) {
-        if (territoryId !== selectedFrom && territory.ownerId === myEnginePlayerId) {
+        if (
+          territoryId !== selectedFrom &&
+          (territory.ownerId === myEnginePlayerId || isTeammateOwner(territory.ownerId))
+        ) {
           ids.add(territoryId);
         }
       }
     }
 
     return ids;
-  }, [graphMap, myEnginePlayerId, selectedFrom, state]);
+  }, [graphMap, isTeammateOwner, myEnginePlayerId, selectedFrom, state]);
 
   const submitAction = useCallback(
     async (action: Action) => {

@@ -136,7 +136,8 @@ export default function AdminMapsPage() {
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {map.mapId} · {Object.keys(map.graphMap.territories).length} territories
+                      {map.mapId} · {Object.keys(map.graphMap.territories).length} territories ·{" "}
+                      {map.playerLimits.minPlayers}-{map.playerLimits.maxPlayers} players
                     </div>
                   </button>
                 ))}

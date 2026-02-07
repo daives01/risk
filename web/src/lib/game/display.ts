@@ -39,7 +39,13 @@ export function formatEvent(event: Record<string, unknown>, playerMap: PlayerRef
     case "PlayerEliminated":
       return `${playerName(event.eliminatedId)} was eliminated`;
     case "GameEnded":
-      return `${playerName(event.winningPlayerId)} won the game`;
+      if (typeof event.winningPlayerId === "string") {
+        return `${playerName(event.winningPlayerId)} won the game`;
+      }
+      if (typeof event.winningTeamId === "string") {
+        return `${event.winningTeamId} won the game`;
+      }
+      return "Game ended";
     case "ReinforcementsGranted":
       return `${playerName(event.playerId)} received ${event.amount} reinforcements`;
     default:

@@ -1,12 +1,25 @@
 import { describe, expect, test } from "bun:test";
 import { calculateReinforcements } from "./reinforcements.js";
-import type { GameState, PlayerId, TerritoryId, ContinentId } from "./types.js";
+import type { GameState, PlayerId, TerritoryId, ContinentId, TeamId } from "./types.js";
+import type { TeamsConfig } from "./config.js";
 import type { GraphMap } from "./map.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
 const P1 = "p1" as PlayerId;
 const P2 = "p2" as PlayerId;
+const P3 = "p3" as PlayerId;
+const TEAM_A = "teamA" as TeamId;
+const TEAM_B = "teamB" as TeamId;
+const teamsEnabled: TeamsConfig = {
+  teamsEnabled: true,
+  preventAttackingTeammates: true,
+  allowPlaceOnTeammate: true,
+  allowFortifyWithTeammate: true,
+  allowFortifyThroughTeammates: true,
+  winCondition: "lastTeamStanding",
+  continentBonusRecipient: "majorityHolderOnTeam",
+};
 
 function tid(id: string): TerritoryId {
   return id as TerritoryId;
@@ -202,5 +215,52 @@ describe("calculateReinforcements", () => {
     expect(result.total).toBe(5);
     expect(result.sources.territory).toBe(5);
     expect(Object.keys(result.sources)).toEqual(["territory"]);
+  });
+
+  test("team-owned continent bonus goes to majority holder", () => {
+    const state = makeState({
+      t1: P1,
+      t2: P1,
+      t3: P2,
+      t4: P3,
+    });
+    const players = {
+      ...state.players,
+      p1: { status: "alive" as const, teamId: TEAM_A },
+      p2: { status: "alive" as const, teamId: TEAM_A },
+      p3: { status: "alive" as const, teamId: TEAM_B },
+    };
+    const map = makeMap(["t1", "t2", "t3", "t4"], {
+      alpha: { territoryIds: ["t1", "t2", "t3"], bonus: 5 },
+    });
+
+    const p1Result = calculateReinforcements({ ...state, players }, P1, map, teamsEnabled);
+    const p2Result = calculateReinforcements({ ...state, players }, P2, map, teamsEnabled);
+
+    expect(p1Result.sources.alpha).toBe(5);
+    expect(p2Result.sources.alpha).toBeUndefined();
+  });
+
+  test("team-owned continent tie uses deterministic playerId tie-break", () => {
+    const state = makeState({
+      t1: P1,
+      t2: P2,
+      t3: P3,
+    });
+    const players = {
+      ...state.players,
+      p1: { status: "alive" as const, teamId: TEAM_A },
+      p2: { status: "alive" as const, teamId: TEAM_A },
+      p3: { status: "alive" as const, teamId: TEAM_B },
+    };
+    const map = makeMap(["t1", "t2", "t3"], {
+      alpha: { territoryIds: ["t1", "t2"], bonus: 5 },
+    });
+
+    const p1Result = calculateReinforcements({ ...state, players }, P1, map, teamsEnabled);
+    const p2Result = calculateReinforcements({ ...state, players }, P2, map, teamsEnabled);
+
+    expect(p1Result.sources.alpha).toBe(5);
+    expect(p2Result.sources.alpha).toBeUndefined();
   });
 });

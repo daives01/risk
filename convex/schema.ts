@@ -37,6 +37,11 @@ const mapAuthoring = v.object({
   publishedAt: v.optional(v.number()),
 });
 
+const mapPlayerLimits = v.object({
+  minPlayers: v.number(),
+  maxPlayers: v.number(),
+});
+
 export default defineSchema({
   games: defineTable({
     name: v.string(),
@@ -48,6 +53,10 @@ export default defineSchema({
     ),
     visibility: v.union(v.literal("public"), v.literal("unlisted")),
     maxPlayers: v.number(),
+    teamModeEnabled: v.optional(v.boolean()),
+    teamAssignmentStrategy: v.optional(
+      v.union(v.literal("manual"), v.literal("balancedRandom")),
+    ),
     createdBy: v.string(),
     createdAt: v.number(),
     startedAt: v.optional(v.number()),
@@ -62,6 +71,7 @@ export default defineSchema({
     role: v.union(v.literal("host"), v.literal("player")),
     joinedAt: v.number(),
     enginePlayerId: v.optional(v.string()),
+    teamId: v.optional(v.string()),
   })
     .index("by_gameId", ["gameId"])
     .index("by_userId", ["userId"])
@@ -92,6 +102,7 @@ export default defineSchema({
     name: v.string(),
     graphMap,
     visual: mapVisual,
+    playerLimits: v.optional(mapPlayerLimits),
     authoring: mapAuthoring,
     createdAt: v.number(),
   })

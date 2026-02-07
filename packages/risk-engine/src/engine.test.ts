@@ -15,6 +15,7 @@ import type {
   OccupyResolved,
   PlayerEliminated,
   PlayerId,
+  TeamId,
   PlaceReinforcements,
   ReinforcementsGranted,
   ReinforcementsPlaced,
@@ -1039,6 +1040,58 @@ describe("Win condition", () => {
     expect(result.state.turn.phase).toBe("Attack");
     const elimEvent = result.events.find((e) => e.type === "PlayerEliminated");
     expect(elimEvent).toBeUndefined();
+  });
+
+  test("team game ends with winningTeamId when last enemy team is eliminated", () => {
+    const teamA = "teamA" as TeamId;
+    const teamB = "teamB" as TeamId;
+    const teamsConfig: TeamsConfig = {
+      teamsEnabled: true,
+      preventAttackingTeammates: true,
+      allowPlaceOnTeammate: true,
+      allowFortifyWithTeammate: true,
+      allowFortifyThroughTeammates: true,
+      winCondition: "lastTeamStanding",
+      continentBonusRecipient: "majorityHolderOnTeam",
+    };
+
+    const state = makeAttackState({
+      players: {
+        p1: { status: "alive", teamId: teamA },
+        p2: { status: "alive", teamId: teamA },
+        p3: { status: "alive", teamId: teamB },
+      },
+      turnOrder: [P1, P2, P3],
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P2, armies: 2 },
+        [T3]: { ownerId: P3, armies: 1 },
+      },
+    });
+
+    for (let seed = 0; seed < 100; seed++) {
+      const s = { ...state, rng: { seed, index: 0 } };
+      const result = applyAction(
+        s,
+        P1,
+        attack(T1, T3),
+        testMap,
+        defaultCombat,
+        undefined,
+        undefined,
+        teamsConfig,
+      );
+      const attackEvent = result.events[0] as AttackResolved;
+      if (attackEvent.defenderLosses !== 1) continue;
+
+      expect(result.state.turn.phase).toBe("GameOver");
+      const gameEndedEvent = result.events.find((e) => e.type === "GameEnded") as GameEnded;
+      expect(gameEndedEvent.winningTeamId).toBe(teamA);
+      expect(gameEndedEvent.winningPlayerId).toBeUndefined();
+      return;
+    }
+
+    throw new Error("No capture occurred in 100 seeds");
   });
 });
 

@@ -4,6 +4,11 @@ import { authComponent } from "./auth.js";
 import { components } from "./_generated/api.js";
 import { validateAuthoredMap } from "risk-engine";
 import type { GraphMap, MapVisual } from "risk-engine";
+import {
+  defaultMapPlayerLimits,
+  resolveMapPlayerLimits,
+  validateMapPlayerLimits,
+} from "./mapPlayerLimits";
 
 const graphMapValidator = v.object({
   territories: v.record(
@@ -29,6 +34,11 @@ const graphMapValidator = v.object({
 const anchorValidator = v.object({
   x: v.number(),
   y: v.number(),
+});
+
+const mapPlayerLimitsValidator = v.object({
+  minPlayers: v.number(),
+  maxPlayers: v.number(),
 });
 
 async function requireAdmin(ctx: any) {
@@ -93,6 +103,10 @@ export const listAdminMaps = query({
     return Promise.all(
       maps.map(async (m) => ({
         ...m,
+        playerLimits: resolveMapPlayerLimits(
+          m.playerLimits,
+          Object.keys(m.graphMap.territories).length,
+        ),
         imageUrl: await ctx.storage.getUrl(m.visual.imageStorageId),
       })),
     );
@@ -113,6 +127,10 @@ export const getDraft = query({
 
     return {
       ...map,
+      playerLimits: resolveMapPlayerLimits(
+        map.playerLimits,
+        Object.keys(map.graphMap.territories).length,
+      ),
       imageUrl: await ctx.storage.getUrl(map.visual.imageStorageId),
     };
   },
@@ -129,10 +147,16 @@ export const createDraft = mutation({
       imageHeight: v.number(),
       territoryAnchors: v.record(v.string(), anchorValidator),
     }),
+    playerLimits: v.optional(mapPlayerLimitsValidator),
   },
-  handler: async (ctx, { mapId, name, graphMap, visual }) => {
+  handler: async (ctx, { mapId, name, graphMap, visual, playerLimits }) => {
     await requireAdmin(ctx);
     const now = Date.now();
+    const resolvedPlayerLimits = playerLimits ?? defaultMapPlayerLimits();
+    const playerLimitsErrors = validateMapPlayerLimits(resolvedPlayerLimits);
+    if (playerLimitsErrors.length > 0) {
+      throw new Error(playerLimitsErrors.join(", "));
+    }
 
     const existing = await ctx.db
       .query("maps")
@@ -147,6 +171,7 @@ export const createDraft = mutation({
       name,
       graphMap,
       visual,
+      playerLimits: resolvedPlayerLimits,
       authoring: {
         status: "draft",
         updatedAt: now,
@@ -161,9 +186,14 @@ export const saveGraph = mutation({
     mapId: v.string(),
     name: v.optional(v.string()),
     graphMap: graphMapValidator,
+    playerLimits: mapPlayerLimitsValidator,
   },
-  handler: async (ctx, { mapId, name, graphMap }) => {
+  handler: async (ctx, { mapId, name, graphMap, playerLimits }) => {
     await requireAdmin(ctx);
+    const playerLimitsErrors = validateMapPlayerLimits(playerLimits);
+    if (playerLimitsErrors.length > 0) {
+      throw new Error(playerLimitsErrors.join(", "));
+    }
 
     const map = await ctx.db
       .query("maps")
@@ -174,6 +204,7 @@ export const saveGraph = mutation({
     await ctx.db.patch(map._id, {
       ...(name ? { name } : {}),
       graphMap,
+      playerLimits,
       authoring: {
         status: "draft",
         updatedAt: Date.now(),
@@ -253,14 +284,27 @@ export const publish = mutation({
     const continentErrors = validateContinentAssignments(
       map.graphMap as unknown as GraphMap,
     );
+    const playerLimits = resolveMapPlayerLimits(
+      map.playerLimits,
+      Object.keys(map.graphMap.territories).length,
+    );
+    const playerLimitsErrors = validateMapPlayerLimits(
+      playerLimits,
+      Object.keys(map.graphMap.territories).length,
+    );
 
-    const errors = [...authoredValidation.errors, ...continentErrors];
+    const errors = [
+      ...authoredValidation.errors,
+      ...continentErrors,
+      ...playerLimitsErrors,
+    ];
     if (errors.length > 0) {
       throw new Error(`Map publish validation failed:\n${errors.join("\n")}`);
     }
 
     const now = Date.now();
     await ctx.db.patch(map._id, {
+      playerLimits,
       authoring: {
         status: "published",
         updatedAt: now,
@@ -269,6 +313,27 @@ export const publish = mutation({
     });
 
     return { publishedAt: now };
+  },
+});
+
+export const backfillPlayerLimits = mutation({
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+
+    const maps = await ctx.db.query("maps").collect();
+    let updated = 0;
+
+    for (const map of maps) {
+      if (map.playerLimits) continue;
+      await ctx.db.patch(map._id, {
+        playerLimits: defaultMapPlayerLimits(
+          Object.keys(map.graphMap.territories).length,
+        ),
+      });
+      updated += 1;
+    }
+
+    return { updated };
   },
 });
 

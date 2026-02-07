@@ -24,6 +24,10 @@ type EditorMap = {
     imageHeight: number;
     territoryAnchors: Record<string, Anchor>;
   };
+  playerLimits: {
+    minPlayers: number;
+    maxPlayers: number;
+  };
   authoring: { status: "draft" | "published"; updatedAt: number; publishedAt?: number };
   imageUrl: string | null;
 };
@@ -52,6 +56,8 @@ export default function AdminMapEditorPage() {
   const [imageStorageId, setImageStorageId] = useState<Id<"_storage"> | null>(null);
   const [imageWidth, setImageWidth] = useState(1);
   const [imageHeight, setImageHeight] = useState(1);
+  const [minPlayers, setMinPlayers] = useState(2);
+  const [maxPlayers, setMaxPlayers] = useState(6);
 
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<string | null>(null);
   const [linkFromId, setLinkFromId] = useState<string | null>(null);
@@ -95,6 +101,8 @@ export default function AdminMapEditorPage() {
     setImageStorageId(getDraft.visual.imageStorageId as Id<"_storage">);
     setImageWidth(getDraft.visual.imageWidth);
     setImageHeight(getDraft.visual.imageHeight);
+    setMinPlayers(getDraft.playerLimits.minPlayers);
+    setMaxPlayers(getDraft.playerLimits.maxPlayers);
   }, [getDraft]);
 
   const graphForPersist = useMemo<EditorGraphMap>(() => {
@@ -151,6 +159,18 @@ export default function AdminMapEditorPage() {
     continents,
     territoryToContinents,
   });
+  const playerLimitsError = useMemo(() => {
+    if (!Number.isInteger(minPlayers) || minPlayers < 2) {
+      return "minPlayers must be an integer >= 2";
+    }
+    if (!Number.isInteger(maxPlayers)) {
+      return "maxPlayers must be an integer";
+    }
+    if (maxPlayers < minPlayers) {
+      return "maxPlayers must be greater than or equal to minPlayers";
+    }
+    return null;
+  }, [minPlayers, maxPlayers]);
 
   const territoryIds = useMemo(() => Object.keys(territories).sort(), [territories]);
 
@@ -379,12 +399,21 @@ export default function AdminMapEditorPage() {
   }
 
   async function handleSaveDraft() {
+    if (playerLimitsError) {
+      toast.error(playerLimitsError);
+      return;
+    }
+
     setSaving(true);
     try {
       await saveGraph({
         mapId,
         name: name.trim(),
         graphMap: graphForPersist,
+        playerLimits: {
+          minPlayers,
+          maxPlayers,
+        },
       });
       await saveAnchors({
         mapId,
@@ -422,6 +451,28 @@ export default function AdminMapEditorPage() {
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={() => navigate("/admin/maps")}>Back</Button>
               <Input value={name} onChange={(e) => setName(e.target.value)} className="w-80" />
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Players</span>
+                <Input
+                  type="number"
+                  min={2}
+                  value={minPlayers}
+                  onChange={(event) =>
+                    setMinPlayers(Number.parseInt(event.target.value, 10) || 0)
+                  }
+                  className="w-20"
+                />
+                <span className="text-muted-foreground">to</span>
+                <Input
+                  type="number"
+                  min={2}
+                  value={maxPlayers}
+                  onChange={(event) =>
+                    setMaxPlayers(Number.parseInt(event.target.value, 10) || 0)
+                  }
+                  className="w-20"
+                />
+              </div>
               <span className="text-xs uppercase text-muted-foreground">{getDraft.authoring.status}</span>
             </div>
             <div className="flex gap-2">
@@ -580,6 +631,7 @@ export default function AdminMapEditorPage() {
                   {validation.errors.map((error) => (
                     <p key={error} className="text-red-600">• {error}</p>
                   ))}
+                  {playerLimitsError && <p className="text-red-600">• {playerLimitsError}</p>}
                   {validation.warnings.map((warning) => (
                     <p key={warning} className="text-amber-600">• {warning}</p>
                   ))}

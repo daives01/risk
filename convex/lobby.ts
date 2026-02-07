@@ -11,9 +11,21 @@ import type {
   CardId,
   GameState,
   PlayerId,
+  TeamId,
   TerritoryId,
   GraphMap,
 } from "risk-engine";
+import {
+  resolveMapPlayerLimits,
+  validateMapPlayerLimits,
+} from "./mapPlayerLimits";
+import {
+  createBalancedTeamAssignments,
+  resolveEngineTeamsConfig,
+  resolveTeamModeConfig,
+  validateTeamAssignments,
+  type TeamId as LobbyTeamId,
+} from "./gameTeams";
 
 function generateInviteCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -32,6 +44,10 @@ export const createGame = mutation({
       v.union(v.literal("public"), v.literal("unlisted")),
     ),
     maxPlayers: v.optional(v.number()),
+    teamModeEnabled: v.optional(v.boolean()),
+    teamAssignmentStrategy: v.optional(
+      v.union(v.literal("manual"), v.literal("balancedRandom")),
+    ),
   },
   handler: async (ctx, args) => {
     const user = await authComponent.safeGetAuthUser(ctx);
@@ -46,9 +62,18 @@ export const createGame = mutation({
       throw new Error("Map not found or not published");
     }
 
-    const maxPlayers = args.maxPlayers ?? 6;
-    if (maxPlayers < 2 || maxPlayers > 6) {
-      throw new Error("maxPlayers must be between 2 and 6");
+    const territoryCount = Object.keys(map.graphMap.territories).length;
+    const playerLimits = resolveMapPlayerLimits(map.playerLimits, territoryCount);
+    const playerLimitsErrors = validateMapPlayerLimits(playerLimits, territoryCount);
+    if (playerLimitsErrors.length > 0) {
+      throw new Error(`Map is misconfigured: ${playerLimitsErrors.join(", ")}`);
+    }
+
+    const maxPlayers = args.maxPlayers ?? playerLimits.maxPlayers;
+    if (maxPlayers < playerLimits.minPlayers || maxPlayers > playerLimits.maxPlayers) {
+      throw new Error(
+        `maxPlayers must be between ${playerLimits.minPlayers} and ${playerLimits.maxPlayers} for this map`,
+      );
     }
 
     const gameId = await ctx.db.insert("games", {
@@ -57,6 +82,8 @@ export const createGame = mutation({
       status: "lobby",
       visibility: args.visibility ?? "unlisted",
       maxPlayers,
+      teamModeEnabled: args.teamModeEnabled ?? false,
+      teamAssignmentStrategy: args.teamAssignmentStrategy ?? "manual",
       createdBy: String(user._id),
       createdAt: Date.now(),
     });
@@ -191,15 +218,86 @@ export const getLobby = query({
         createdBy: game.createdBy,
         createdAt: game.createdAt,
         startedAt: game.startedAt ?? null,
+        teamModeEnabled: game.teamModeEnabled ?? false,
+        teamAssignmentStrategy: game.teamAssignmentStrategy ?? "manual",
       },
       players: players.map((p) => ({
         userId: p.userId,
         displayName: p.displayName,
         role: p.role,
         joinedAt: p.joinedAt,
+        teamId: p.teamId ?? null,
       })),
       inviteCode: invite?.code ?? null,
     };
+  },
+});
+
+export const setPlayerTeam = mutation({
+  args: {
+    gameId: v.id("games"),
+    userId: v.string(),
+    teamId: v.union(v.literal("team-1"), v.literal("team-2")),
+  },
+  handler: async (ctx, { gameId, userId, teamId }) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+
+    const game = await ctx.db.get(gameId);
+    if (!game) throw new Error("Game not found");
+    if (game.status !== "lobby") throw new Error("Game is not in lobby");
+    if (game.createdBy !== String(user._id)) {
+      throw new Error("Only the host can assign teams");
+    }
+    if (!game.teamModeEnabled) {
+      throw new Error("Team mode is not enabled for this game");
+    }
+
+    const playerDoc = await ctx.db
+      .query("gamePlayers")
+      .withIndex("by_gameId_userId", (q) =>
+        q.eq("gameId", gameId).eq("userId", userId),
+      )
+      .unique();
+    if (!playerDoc) throw new Error("Player not in this game");
+
+    await ctx.db.patch(playerDoc._id, { teamId });
+  },
+});
+
+export const rebalanceTeams = mutation({
+  args: {
+    gameId: v.id("games"),
+  },
+  handler: async (ctx, { gameId }) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+
+    const game = await ctx.db.get(gameId);
+    if (!game) throw new Error("Game not found");
+    if (game.status !== "lobby") throw new Error("Game is not in lobby");
+    if (game.createdBy !== String(user._id)) {
+      throw new Error("Only the host can rebalance teams");
+    }
+    if (!game.teamModeEnabled) {
+      throw new Error("Team mode is not enabled for this game");
+    }
+
+    const playerDocs = await ctx.db
+      .query("gamePlayers")
+      .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
+      .collect();
+
+    const assignments = createBalancedTeamAssignments(
+      playerDocs.map((playerDoc) => playerDoc.userId),
+      `${gameId}:lobby-teams`,
+    );
+
+    for (const playerDoc of playerDocs) {
+      await ctx.db.patch(playerDoc._id, {
+        teamId: assignments[playerDoc.userId]!,
+      });
+    }
   },
 });
 
@@ -226,10 +324,6 @@ export const startGame = mutation({
       .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
       .collect();
 
-    if (playerDocs.length < 2) {
-      throw new Error("Need at least 2 players to start");
-    }
-
     // Fetch map
     const mapDoc = await ctx.db
       .query("maps")
@@ -240,13 +334,54 @@ export const startGame = mutation({
     }
 
     const graphMap = mapDoc.graphMap as unknown as GraphMap;
+    const territoryCount = Object.keys(graphMap.territories).length;
+    const playerLimits = resolveMapPlayerLimits(mapDoc.playerLimits, territoryCount);
+    const playerLimitsErrors = validateMapPlayerLimits(playerLimits, territoryCount);
+    if (playerLimitsErrors.length > 0) {
+      throw new Error(`Map is misconfigured: ${playerLimitsErrors.join(", ")}`);
+    }
+
+    if (playerDocs.length < playerLimits.minPlayers) {
+      throw new Error(
+        `Need at least ${playerLimits.minPlayers} players to start this map`,
+      );
+    }
+    if (playerDocs.length > playerLimits.maxPlayers) {
+      throw new Error(
+        `This map allows at most ${playerLimits.maxPlayers} players`,
+      );
+    }
+
     const territoryIds = Object.keys(graphMap.territories) as TerritoryId[];
     const setup = defaultRuleset.setup;
+    const teamMode = resolveTeamModeConfig(game);
+    const teamsConfig = resolveEngineTeamsConfig(teamMode);
 
     // Build engine player IDs (use index-based IDs for determinism)
     const playerIds: PlayerId[] = playerDocs.map(
       (_, i) => `p${i}` as PlayerId,
     );
+
+    let teamAssignmentsByUserId: Record<string, LobbyTeamId> = {};
+    if (teamMode.enabled) {
+      if (teamMode.assignmentStrategy === "balancedRandom") {
+        teamAssignmentsByUserId = createBalancedTeamAssignments(
+          playerDocs.map((playerDoc) => playerDoc.userId),
+          `${gameId}:start-teams`,
+        );
+      } else {
+        teamAssignmentsByUserId = Object.fromEntries(
+          playerDocs.map((playerDoc) => [playerDoc.userId, playerDoc.teamId as LobbyTeamId]),
+        );
+      }
+      const assignmentErrors = validateTeamAssignments(
+        playerDocs.map((playerDoc) => playerDoc.userId),
+        teamAssignmentsByUserId,
+      );
+      if (assignmentErrors.length > 0) {
+        throw new Error(assignmentErrors[0]);
+      }
+    }
 
     // Seed the RNG
     const seed = `${gameId}-${Date.now()}`;
@@ -305,9 +440,15 @@ export const startGame = mutation({
     }
 
     // Build players record
-    const players: Record<string, { status: "alive" }> = {};
-    for (const pid of playerIds) {
-      players[pid] = { status: "alive" };
+    const players: Record<string, { status: "alive"; teamId?: TeamId }> = {};
+    for (let i = 0; i < playerIds.length; i++) {
+      const pid = playerIds[i]!;
+      const playerDoc = playerDocs[i]!;
+      const teamId = teamMode.enabled ? teamAssignmentsByUserId[playerDoc.userId] : undefined;
+      players[pid] = {
+        status: "alive",
+        ...(teamId ? { teamId: teamId as TeamId } : {}),
+      };
     }
 
     // Create card deck
@@ -326,9 +467,10 @@ export const startGame = mutation({
     // Calculate reinforcements for first player
     const firstPlayer = turnOrder[0]!;
     const reinforcementResult = calculateReinforcements(
-      { territories } as GameState,
+      { territories, players } as GameState,
       firstPlayer,
       graphMap,
+      teamsConfig,
     );
 
     const engineState: GameState = {
@@ -358,6 +500,9 @@ export const startGame = mutation({
     for (let i = 0; i < playerDocs.length; i++) {
       await ctx.db.patch(playerDocs[i]!._id, {
         enginePlayerId: playerIds[i],
+        ...(teamMode.enabled
+          ? { teamId: teamAssignmentsByUserId[playerDocs[i]!.userId]! }
+          : { teamId: undefined }),
       });
     }
 

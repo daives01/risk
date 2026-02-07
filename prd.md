@@ -27,9 +27,9 @@ Date: 2026-02-07
 ## Execution Tracker
 
 ### Milestones
-- [ ] Milestone 1: Map-Configurable Player Counts (P0)
-- [ ] Milestone 2: Full Team Games (P0)
-- [ ] Milestone 3: Async Game Support (Turn Timers + Weekend Exclusion) (P0)
+- [x] Milestone 1: Map-Configurable Player Counts (P0)
+- [x] Milestone 2: Full Team Games (P0)
+- [x] Milestone 3: Async Game Support (Turn Timers + Weekend Exclusion) (P0)
 - [ ] Milestone 4: Game Start Ruleset Configuration (P1)
 - [ ] Milestone 5: Pre-Game Player Color Selection (P1)
 - [ ] Milestone 6: In-Game Chat (Global + Team) (P1)

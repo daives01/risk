@@ -1,0 +1,5 @@
+# Ralphy Progress Log
+
+- [✓] 2026-02-07 15:51 - Milestone 1: Map-Configurable Player Counts (P0)
+- [✓] 2026-02-07 16:04 - Milestone 2: Full Team Games (P0)
+- [✓] 2026-02-07 16:07 - Milestone 3: Async Game Support (Turn Timers + Weekend Exclusion) (P0)

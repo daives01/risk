@@ -18,6 +18,7 @@ import type {
   PlayerEliminated,
   PlayerState,
   PlayerId,
+  TeamId,
   PlaceReinforcements,
   ReinforcementsGranted,
   ReinforcementsPlaced,
@@ -48,6 +49,38 @@ export class ActionError extends Error {
     super(message);
     this.name = "ActionError";
   }
+}
+
+function resolveWinner(
+  players: Record<string, PlayerState>,
+  turnOrder: readonly PlayerId[],
+  teamsConfig?: TeamsConfig,
+): { winningPlayerId?: PlayerId; winningTeamId?: TeamId } | null {
+  const alivePlayers = turnOrder.filter((pid) => players[pid]!.status === "alive");
+  if (alivePlayers.length === 0) return null;
+
+  if (!teamsConfig?.teamsEnabled || teamsConfig.winCondition !== "lastTeamStanding") {
+    if (alivePlayers.length !== 1) return null;
+    return { winningPlayerId: alivePlayers[0] };
+  }
+
+  const aliveTeams = new Set<string>();
+  for (const playerId of alivePlayers) {
+    const teamId = players[playerId]?.teamId;
+    if (teamId) {
+      aliveTeams.add(teamId);
+    } else {
+      // Players without team assignment count as separate teams.
+      aliveTeams.add(`solo:${playerId}`);
+    }
+  }
+
+  if (aliveTeams.size !== 1) return null;
+  const winningTeamId = players[alivePlayers[0]!]!.teamId;
+  return {
+    ...(alivePlayers.length === 1 ? { winningPlayerId: alivePlayers[0] } : {}),
+    ...(winningTeamId ? { winningTeamId } : {}),
+  };
 }
 
 // ── Action handlers ───────────────────────────────────────────────────
@@ -353,16 +386,12 @@ function handleAttack(
         };
         events.push(eliminatedEvent);
 
-        // Check win condition: only 1 alive player remaining
-        const playersRecord = newPlayers;
-        const alivePlayers = state.turnOrder.filter(
-          (pid) => playersRecord[pid]!.status === "alive",
-        );
-        if (alivePlayers.length === 1) {
+        const winner = resolveWinner(newPlayers, state.turnOrder, teamsConfig);
+        if (winner) {
           newPhase = "GameOver";
           const gameEndedEvent: GameEnded = {
             type: "GameEnded",
-            winningPlayerId: alivePlayers[0],
+            ...winner,
           };
           events.push(gameEndedEvent);
         }
@@ -783,6 +812,7 @@ function handleEndTurn(
   playerId: PlayerId,
   map: GraphMap,
   cardsConfig?: CardsConfig,
+  teamsConfig?: TeamsConfig,
 ): ActionResult {
   // Phase check: valid in Fortify phase
   if (state.turn.phase !== "Fortify") {
@@ -861,7 +891,12 @@ function handleEndTurn(
   events.push(turnAdvancedEvent);
 
   // Calculate reinforcements for next player
-  const reinforcementResult = calculateReinforcements(state, nextPlayerId, map);
+  const reinforcementResult = calculateReinforcements(
+    state,
+    nextPlayerId,
+    map,
+    teamsConfig,
+  );
 
   const reinforcementsGrantedEvent: ReinforcementsGranted = {
     type: "ReinforcementsGranted",
@@ -921,7 +956,7 @@ export function applyAction(
       return handleFortify(state, playerId, action, map, fortifyConfig, teamsConfig);
     case "EndTurn":
       if (!map) throw new ActionError("GraphMap is required for EndTurn actions");
-      return handleEndTurn(state, playerId, map, cardsConfig);
+      return handleEndTurn(state, playerId, map, cardsConfig, teamsConfig);
     case "TradeCards":
       if (!cardsConfig) throw new ActionError("CardsConfig is required for TradeCards actions");
       return handleTradeCards(state, playerId, action, cardsConfig);

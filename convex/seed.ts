@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { classicMap } from "risk-maps";
 import { validateMap } from "risk-engine";
 import type { GraphMap } from "risk-engine";
+import { defaultMapPlayerLimits } from "./mapPlayerLimits";
 
 interface MapDef {
   mapId: string;
@@ -99,6 +100,9 @@ export const seedClassicDraft = mutation({
     await ctx.db.patch(map._id, {
       name: map.name?.trim() ? map.name : "Classic Risk",
       graphMap: graphMapForDb,
+      playerLimits: defaultMapPlayerLimits(
+        Object.keys(classicMap.territories).length,
+      ),
       visual: {
         imageStorageId: map.visual.imageStorageId,
         imageWidth: map.visual.imageWidth,

@@ -54,6 +54,7 @@ export const getGameView = query({
       displayName: p.displayName,
       role: p.role,
       enginePlayerId: p.enginePlayerId ?? null,
+      teamId: p.teamId ?? null,
     }));
 
     if (game.status !== "active" && game.status !== "finished") {
@@ -64,6 +65,8 @@ export const getGameView = query({
         status: game.status,
         visibility: game.visibility,
         maxPlayers: game.maxPlayers,
+        teamModeEnabled: game.teamModeEnabled ?? false,
+        teamAssignmentStrategy: game.teamAssignmentStrategy ?? "manual",
         createdAt: game.createdAt,
         startedAt: game.startedAt ?? null,
         finishedAt: game.finishedAt ?? null,
@@ -81,6 +84,8 @@ export const getGameView = query({
       status: game.status,
       visibility: game.visibility,
       maxPlayers: game.maxPlayers,
+      teamModeEnabled: game.teamModeEnabled ?? false,
+      teamAssignmentStrategy: game.teamAssignmentStrategy ?? "manual",
       createdAt: game.createdAt,
       startedAt: game.startedAt ?? null,
       finishedAt: game.finishedAt ?? null,
@@ -113,6 +118,7 @@ export const getGameViewAsPlayer = query({
       displayName: p.displayName,
       role: p.role,
       enginePlayerId: p.enginePlayerId ?? null,
+      teamId: p.teamId ?? null,
     }));
 
     // Find the caller's enginePlayerId
@@ -127,6 +133,8 @@ export const getGameViewAsPlayer = query({
         status: game.status,
         visibility: game.visibility,
         maxPlayers: game.maxPlayers,
+        teamModeEnabled: game.teamModeEnabled ?? false,
+        teamAssignmentStrategy: game.teamAssignmentStrategy ?? "manual",
         createdAt: game.createdAt,
         startedAt: game.startedAt ?? null,
         finishedAt: game.finishedAt ?? null,
@@ -166,6 +174,8 @@ export const getGameViewAsPlayer = query({
       status: game.status,
       visibility: game.visibility,
       maxPlayers: game.maxPlayers,
+      teamModeEnabled: game.teamModeEnabled ?? false,
+      teamAssignmentStrategy: game.teamAssignmentStrategy ?? "manual",
       createdAt: game.createdAt,
       startedAt: game.startedAt ?? null,
       finishedAt: game.finishedAt ?? null,
@@ -193,6 +203,7 @@ export const listPublicGames = query({
         mapId: g.mapId,
         status: g.status,
         maxPlayers: g.maxPlayers,
+        teamModeEnabled: g.teamModeEnabled ?? false,
         createdAt: g.createdAt,
         startedAt: g.startedAt ?? null,
       }));
@@ -221,6 +232,7 @@ export const listMyGames = query({
           mapId: game.mapId,
           status: game.status,
           maxPlayers: game.maxPlayers,
+          teamModeEnabled: game.teamModeEnabled ?? false,
           createdAt: game.createdAt,
           startedAt: game.startedAt ?? null,
           finishedAt: game.finishedAt ?? null,
