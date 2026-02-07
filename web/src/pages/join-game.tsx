@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { useMutation } from "convex/react";
 import { api } from "@backend/_generated/api";
@@ -14,14 +14,12 @@ export default function JoinGamePage() {
   const joinGame = useMutation(api.lobby.joinGameByInvite);
 
   const [error, setError] = useState<string | null>(null);
-  const [joining, setJoining] = useState(false);
-  const [attempted, setAttempted] = useState(false);
+  const [joining, setJoining] = useState(true);
+  const attemptedRef = useRef(false);
 
   useEffect(() => {
-    if (!session || !code || attempted) return;
-
-    setAttempted(true);
-    setJoining(true);
+    if (!session || !code || attemptedRef.current) return;
+    attemptedRef.current = true;
 
     joinGame({ code })
       .then(({ gameId }) => {
@@ -31,7 +29,7 @@ export default function JoinGamePage() {
         setError(err instanceof Error ? err.message : "Failed to join game");
       })
       .finally(() => setJoining(false));
-  }, [attempted, code, joinGame, navigate, session]);
+  }, [code, joinGame, navigate, session]);
 
   if (sessionPending) {
     return <div className="page-shell flex items-center justify-center">Loading...</div>;

@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { NumberStepper } from "@/components/ui/number-stepper";
 import { useMapPanZoom } from "@/lib/use-map-pan-zoom";
+import { isTypingTarget } from "@/lib/keyboard-shortcuts";
 
 interface GraphMapLike {
   territories: Record<string, { name?: string }>;
@@ -96,7 +97,11 @@ export function MapCanvas({
   battleOverlay,
 }: MapCanvasProps) {
   const [zoomLocked, setZoomLocked] = useState(true);
-  const panZoom = useMapPanZoom({ minScale: 0.85, maxScale: 1.75, zoomStep: 0.1 });
+  const { containerRef, handlers, transformStyle, scale, zoomIn, zoomOut, reset } = useMapPanZoom({
+    minScale: 0.85,
+    maxScale: 1.75,
+    zoomStep: 0.1,
+  });
   const frameAspect = 16 / 9;
   const imageAspect = visual.imageWidth / visual.imageHeight;
 
@@ -115,7 +120,7 @@ export function MapCanvas({
     const drawWidth = imageAspect / frameAspect;
     const left = (1 - drawWidth) / 2;
     return { left, top: 0, width: drawWidth, height: 1 };
-  }, [imageAspect]);
+  }, [frameAspect, imageAspect]);
 
   const projectedAnchors = useMemo(() => {
     const result: Record<string, { x: number; y: number }> = {};
@@ -155,12 +160,7 @@ export function MapCanvas({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const isTyping =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.isContentEditable;
-      if (isTyping) return;
+      if (isTypingTarget(event.target)) return;
 
       if (event.key.toLowerCase() === "l") {
         event.preventDefault();
@@ -171,19 +171,19 @@ export function MapCanvas({
       if (zoomLocked) return;
       if (event.key === "=" || event.key === "+") {
         event.preventDefault();
-        panZoom.zoomIn();
+        zoomIn();
       } else if (event.key === "-" || event.key === "_") {
         event.preventDefault();
-        panZoom.zoomOut();
+        zoomOut();
       } else if (event.key === "0") {
         event.preventDefault();
-        panZoom.reset();
+        reset();
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [panZoom, zoomLocked]);
+  }, [reset, zoomIn, zoomLocked, zoomOut]);
 
   if (!imageUrl) {
     return (
@@ -211,17 +211,17 @@ export function MapCanvas({
           </button>
           <button
             type="button"
-            onClick={panZoom.zoomOut}
+            onClick={zoomOut}
             disabled={zoomLocked}
             title="Zoom out (-)"
             className="rounded border px-2 py-1 transition hover:bg-muted"
           >
             -
           </button>
-          <span className="w-12 text-center">{Math.round(panZoom.scale * 100)}%</span>
+          <span className="w-12 text-center">{Math.round(scale * 100)}%</span>
           <button
             type="button"
-            onClick={panZoom.zoomIn}
+            onClick={zoomIn}
             disabled={zoomLocked}
             title="Zoom in (+)"
             className="rounded border px-2 py-1 transition hover:bg-muted"
@@ -230,7 +230,7 @@ export function MapCanvas({
           </button>
           <button
             type="button"
-            onClick={panZoom.reset}
+            onClick={reset}
             title="Reset zoom (0)"
             className="rounded border px-2 py-1 transition hover:bg-muted"
           >
@@ -240,16 +240,16 @@ export function MapCanvas({
       </div>
 
       <div
-        ref={panZoom.containerRef}
+        ref={containerRef}
         className={cn(
           "relative mx-auto aspect-video w-full overflow-hidden rounded-md bg-muted touch-none",
           zoomLocked && "touch-auto",
         )}
-        {...(zoomLocked ? {} : panZoom.handlers)}
+        {...(zoomLocked ? {} : handlers)}
       >
         <div
           className="relative h-full w-full"
-          style={panZoom.transformStyle}
+          style={transformStyle}
           onPointerDown={() => {
             if (interactive && onClearSelection) onClearSelection();
           }}

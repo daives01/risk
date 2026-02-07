@@ -7,6 +7,7 @@ import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ShortcutHint } from "@/components/ui/shortcut-hint";
+import { hasModifierKey, isTypingTarget } from "@/lib/keyboard-shortcuts";
 
 type HomeTab = "overview" | "history" | "account";
 
@@ -80,19 +81,13 @@ export default function HomePage() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const isTyping =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        (target as HTMLElement | null)?.isContentEditable;
-
       if (event.key === "Escape") {
         (document.activeElement as HTMLElement | null)?.blur?.();
         return;
       }
 
-      if (!isTyping) {
-        if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (!isTypingTarget(event.target)) {
+        if (hasModifierKey(event)) return;
         const key = event.key.toLowerCase();
 
         if (key === "1") setTab("overview");

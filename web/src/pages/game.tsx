@@ -1,175 +1,34 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { useMutation, useQuery } from "convex/react";
-import { Flag, History, Pause, Play, SkipBack, SkipForward, Users } from "lucide-react";
-import { api } from "@backend/_generated/api";
+import { Flag, History, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import type { Id } from "@backend/_generated/dataModel";
-import type { Action, CardId, GraphMap, Phase, TerritoryId } from "risk-engine";
+import type { Action, CardId, TerritoryId } from "risk-engine";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { ShortcutHint } from "@/components/ui/shortcut-hint";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { MapCanvas } from "@/components/game/map-canvas";
+import { GameEventsCard, GameHandCard, GamePlayersCard } from "@/components/game/game-panels";
 import { authClient } from "@/lib/auth-client";
+import { adaptMapDoc, adaptView } from "@/lib/game/adapters";
+import { formatEvent, getPlayerColor, getPlayerName } from "@/lib/game/display";
+import { PHASE_COPY } from "@/lib/game/types";
+import type { ReinforcementDraft } from "@/lib/game/types";
+import { useGameActions } from "@/lib/game/use-game-actions";
+import { useGameRuntimeQueries, useGameViewQueries } from "@/lib/game/use-game-queries";
+import { useGameShortcuts } from "@/lib/game/use-game-shortcuts";
 import { toast } from "sonner";
-
-type PublicState = {
-  players: Record<string, { status: string; teamId?: string }>;
-  turnOrder: string[];
-  territories: Record<string, { ownerId: string; armies: number }>;
-  turn: { currentPlayerId: string; phase: Phase; round: number };
-  pending?: {
-    type: "Occupy";
-    from: string;
-    to: string;
-    minMove: number;
-    maxMove: number;
-  };
-  reinforcements?: { remaining: number; sources?: Record<string, number> };
-  capturedThisTurn: boolean;
-  tradesCompleted: number;
-  deckCount: number;
-  discardCount: number;
-  handSizes: Record<string, number>;
-  stateVersion: number;
-};
-
-type HandCard = { cardId: string; kind: string; territoryId?: string };
-type MapVisual = {
-  imageStorageId: string;
-  imageWidth: number;
-  imageHeight: number;
-  territoryAnchors: Record<string, { x: number; y: number }>;
-};
-
-type GameAction = {
-  _id: string;
-  index: number;
-  events: Array<{ type: string; [key: string]: unknown }>;
-};
-type ReinforcementDraft = { territoryId: string; count: number };
-type HistoryFrame = {
-  index: number;
-  actionType: string;
-  label: string;
-  state: PublicState;
-};
-
-const PLAYER_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#f97316", "#14b8a6"];
-const NEUTRAL_COLOR = "#64748b";
-
-const PHASE_COPY: Record<Phase, { title: string; description: string }> = {
-  Setup: {
-    title: "Setting Up",
-    description: "Assign territories and prepare your opening position.",
-  },
-  Reinforcement: {
-    title: "Place",
-    description: "Set a placement count, click territories to queue placements, then confirm.",
-  },
-  Attack: {
-    title: "Attack",
-    description: "Choose source and target territories to resolve battles.",
-  },
-  Occupy: {
-    title: "Occupy",
-    description: "Move armies into your newly captured territory.",
-  },
-  Fortify: {
-    title: "Fortify",
-    description: "Move armies between your territories, then end turn.",
-  },
-  GameOver: {
-    title: "Game Over",
-    description: "The match is complete.",
-  },
-};
-
-function getPlayerColor(playerId: string, turnOrder: string[]) {
-  if (playerId === "neutral") return NEUTRAL_COLOR;
-  const idx = turnOrder.indexOf(playerId);
-  return PLAYER_COLORS[idx % PLAYER_COLORS.length] ?? NEUTRAL_COLOR;
-}
-
-function getPlayerName(
-  enginePlayerId: string,
-  players: Array<{ displayName: string; enginePlayerId: string | null }>,
-) {
-  return players.find((player) => player.enginePlayerId === enginePlayerId)?.displayName ?? enginePlayerId;
-}
-
-function formatEvent(
-  event: Record<string, unknown>,
-  playerMap: Array<{ displayName: string; enginePlayerId: string | null }>,
-) {
-  const playerName = (id: unknown) =>
-    typeof id === "string" ? getPlayerName(id, playerMap) : "Unknown";
-
-  switch (event.type) {
-    case "ReinforcementsPlaced":
-      return `${playerName(event.playerId)} placed ${event.count} armies on ${event.territoryId}`;
-    case "AttackResolved":
-      return `${event.from} attacked ${event.to} (${event.attackerLosses}/${event.defenderLosses} losses)`;
-    case "TerritoryCaptured":
-      return `${playerName(event.newOwnerId)} captured ${event.to}`;
-    case "OccupyResolved":
-      return `${playerName(event.playerId)} moved ${event.moved} armies to ${event.to}`;
-    case "FortifyResolved":
-      return `${playerName(event.playerId)} fortified ${event.from} to ${event.to} (${event.moved})`;
-    case "CardsTraded":
-      return `${playerName(event.playerId)} traded cards for ${event.value} armies`;
-    case "CardDrawn":
-      return `${playerName(event.playerId)} drew a card`;
-    case "TurnEnded":
-      return `${playerName(event.playerId)} ended their turn`;
-    case "TurnAdvanced":
-      return `${playerName(event.nextPlayerId)} starts round ${event.round}`;
-    case "PlayerEliminated":
-      return `${playerName(event.eliminatedId)} was eliminated`;
-    case "GameEnded":
-      return `${playerName(event.winningPlayerId)} won the game`;
-    case "ReinforcementsGranted":
-      return `${playerName(event.playerId)} received ${event.amount} reinforcements`;
-    default:
-      return String(event.type ?? "Event");
-  }
-}
 
 export default function GamePage() {
   const { gameId } = useParams<{ gameId: string }>();
   const { data: session } = authClient.useSession();
 
   const typedGameId = gameId as Id<"games"> | undefined;
-
-  const playerView = useQuery(
-    api.games.getGameViewAsPlayer,
-    session && typedGameId ? { gameId: typedGameId } : "skip",
-  );
-  const publicView = useQuery(api.games.getGameView, typedGameId ? { gameId: typedGameId } : "skip");
-
-  const view = playerView ?? publicView;
-  const myEnginePlayerId =
-    playerView && "myEnginePlayerId" in playerView ? playerView.myEnginePlayerId : null;
-  const myHand: HandCard[] | null =
-    playerView && "myHand" in playerView ? (playerView.myHand as HandCard[] | null) : null;
-
-  const mapDoc = useQuery(api.maps.getByMapId, view?.mapId ? { mapId: view.mapId } : "skip");
-  const graphMap = mapDoc?.graphMap as GraphMap | undefined;
-  const mapVisual = mapDoc?.visual as MapVisual | undefined;
-  const mapImageUrl = mapDoc && "imageUrl" in mapDoc ? (mapDoc.imageUrl as string | null) : null;
-
-  const recentActions = useQuery(
-    api.gameplay.listRecentActions,
-    typedGameId ? { gameId: typedGameId, limit: 40 } : "skip",
-  ) as GameAction[] | undefined;
-  const historyTimeline = useQuery(
-    api.gameplay.getHistoryTimeline,
-    typedGameId ? { gameId: typedGameId, limit: 500 } : "skip",
-  ) as HistoryFrame[] | undefined;
-
-  const submitActionMutation = useMutation(api.gameplay.submitAction);
-  const submitReinforcementPlacementsMutation = useMutation(api.gameplay.submitReinforcementPlacements);
-  const resignMutation = useMutation(api.gameplay.resign);
+  const { playerView, publicView } = useGameViewQueries(session, typedGameId);
+  const { view, myEnginePlayerId, myHand, playerMap, state } = adaptView(playerView, publicView);
+  const { mapDoc, recentActions, historyTimeline } = useGameRuntimeQueries(typedGameId, view?.mapId);
+  const { graphMap, mapVisual, mapImageUrl } = adaptMapDoc(mapDoc);
+  const { submitActionMutation, submitReinforcementPlacementsMutation, resignMutation } = useGameActions();
 
   const [selectedFrom, setSelectedFrom] = useState<string | null>(null);
   const [selectedTo, setSelectedTo] = useState<string | null>(null);
@@ -184,7 +43,6 @@ export default function GamePage() {
   const [historyPlaying, setHistoryPlaying] = useState(false);
   const [historyFrameIndex, setHistoryFrameIndex] = useState(0);
 
-  const state = view?.state as PublicState | null | undefined;
   const phase = state?.turn.phase ?? "GameOver";
   const isSpectator = !myEnginePlayerId;
   const isMyTurn = !!myEnginePlayerId && !!state && state.turn.currentPlayerId === myEnginePlayerId;
@@ -193,7 +51,6 @@ export default function GamePage() {
   const historyMaxIndex = Math.max(0, historyCount - 1);
   const historyAtEnd = historyFrameIndex >= historyMaxIndex;
 
-  const playerMap = view?.players ?? [];
   const queuedReinforcementTotal = useMemo(
     () => reinforcementDrafts.reduce((sum, draft) => sum + draft.count, 0),
     [reinforcementDrafts],
@@ -496,105 +353,29 @@ export default function GamePage() {
     setSelectedTo(null);
   }, [historyOpen]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const isTyping =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.isContentEditable;
-      if (isTyping) return;
-
-      const key = event.key.toLowerCase();
-      const withCommand = event.metaKey || event.ctrlKey;
-
-      if (event.key === "Escape") {
-        setSelectedFrom(null);
-        setSelectedTo(null);
-        return;
-      }
-
-      if (!withCommand) {
-        if (key === "h") {
-          event.preventDefault();
-          setHistoryOpen((prev) => !prev);
-          setHistoryPlaying(false);
-          return;
-        }
-
-        if (historyOpen) {
-          if (event.key === "[") {
-            event.preventDefault();
-            setHistoryFrameIndex((prev) => Math.max(0, prev - 1));
-            return;
-          }
-          if (event.key === "]") {
-            event.preventDefault();
-            setHistoryFrameIndex((prev) => Math.min(historyMaxIndex, prev + 1));
-            return;
-          }
-          if (key === "p" && !historyAtEnd) {
-            event.preventDefault();
-            setHistoryPlaying((prev) => !prev);
-            return;
-          }
-          if (key === "r") {
-            event.preventDefault();
-            setHistoryFrameIndex(0);
-            setHistoryPlaying(false);
-            return;
-          }
-        }
-
-        if (!historyOpen && isMyTurn && phase === "Reinforcement") {
-          if (key === "u" && reinforcementDrafts.length > 0) {
-            event.preventDefault();
-            handleUndoPlacement();
-            return;
-          }
-          if (key === "c" && reinforcementDrafts.length > 0 && !controlsDisabled) {
-            event.preventDefault();
-            void handleConfirmPlacements();
-            return;
-          }
-        }
-        return;
-      }
-
-      if (!historyOpen && isMyTurn && event.key === "Enter") {
-        if (phase === "Reinforcement" && reinforcementDrafts.length > 0 && !controlsDisabled) {
-          event.preventDefault();
-          void handleConfirmPlacements();
-          return;
-        }
-        if (phase === "Attack" && !state.pending) {
-          event.preventDefault();
-          handleEndAttackPhase();
-          return;
-        }
-        if (phase === "Fortify") {
-          event.preventDefault();
-          handleEndTurn();
-        }
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
-    controlsDisabled,
-    handleConfirmPlacements,
-    handleEndAttackPhase,
-    handleEndTurn,
-    handleUndoPlacement,
+  useGameShortcuts({
+    historyOpen,
     historyAtEnd,
     historyMaxIndex,
-    historyOpen,
     isMyTurn,
     phase,
-    reinforcementDrafts.length,
-    state?.pending,
-  ]);
+    reinforcementDraftCount: reinforcementDrafts.length,
+    controlsDisabled,
+    hasPendingOccupy: !!state?.pending,
+    onToggleHistory: () => setHistoryOpen((prev) => !prev),
+    onSetHistoryPlaying: setHistoryPlaying,
+    onSetHistoryFrameIndex: setHistoryFrameIndex,
+    onClearSelection: () => {
+      setSelectedFrom(null);
+      setSelectedTo(null);
+    },
+    onUndoPlacement: handleUndoPlacement,
+    onConfirmPlacements: () => {
+      void handleConfirmPlacements();
+    },
+    onEndAttackPhase: handleEndAttackPhase,
+    onEndTurn: handleEndTurn,
+  });
 
   if (!typedGameId) {
     return <div className="page-shell flex items-center justify-center">Invalid game URL</div>;
@@ -907,99 +688,28 @@ export default function GamePage() {
             </CardContent>
           </Card>
 
-          <Card className="glass-panel border-0 py-0">
-            <CardHeader className="py-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Users className="size-4" />
-                Players
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 pb-4">
-              {playerStats.map((player) => {
-                const isCurrent = player.playerId === displayState.turn.currentPlayerId;
-                const isDefeated = player.status === "defeated";
-                const color = getPlayerColor(player.playerId, displayState.turnOrder);
-
-                return (
-                  <div
-                    key={player.playerId}
-                    className={`rounded-lg border px-3 py-2 ${isCurrent ? "border-primary/70 bg-primary/10" : "bg-background/80"} ${
-                      isDefeated ? "opacity-55" : ""
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="size-2.5 rounded-full" style={{ backgroundColor: color }} />
-                        <span className={`text-sm font-semibold ${isDefeated ? "line-through" : ""}`}>
-                          {getPlayerName(player.playerId, playerMap)}
-                        </span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {player.territories}T / {player.armies}A / {player.cards}C
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
+          <GamePlayersCard
+            playerStats={playerStats}
+            displayState={displayState}
+            playerMap={playerMap}
+            getPlayerColor={getPlayerColor}
+            getPlayerName={getPlayerName}
+          />
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <Card className="glass-panel border-0 py-0">
-              <CardHeader className="py-4">
-                <CardTitle className="text-base">Recent Events</CardTitle>
-              </CardHeader>
-              <CardContent className="max-h-64 space-y-2 overflow-y-auto pb-4 text-sm">
-                {flattenedEvents.length === 0 && (
-                  <p className="text-muted-foreground">No actions yet.</p>
-                )}
-                {flattenedEvents.map((event) => (
-                  <p key={event.key} className="rounded-md border bg-background/80 px-3 py-2 text-muted-foreground">
-                    {event.text}
-                  </p>
-                ))}
-              </CardContent>
-            </Card>
+            <GameEventsCard flattenedEvents={flattenedEvents} />
 
             {myHand && (
-              <Card className="glass-panel border-0 py-0">
-                <CardHeader className="py-4">
-                  <CardTitle className="text-base">Cards ({myHand.length})</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 pb-4">
-                  <div className="flex flex-wrap gap-2">
-                    {myHand.map((card) => {
-                      const selected = selectedCardIds.has(card.cardId);
-                      return (
-                        <button
-                          key={card.cardId}
-                          type="button"
-                          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                            selected
-                              ? "border-primary bg-primary/15 text-primary"
-                              : "border-border bg-background/80 hover:border-primary/50"
-                          }`}
-                          onClick={() => toggleCard(card.cardId)}
-                        >
-                          {card.kind}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <Button
-                    className="w-full"
-                    disabled={controlsDisabled || phase !== "Reinforcement" || selectedCardIds.size !== 3}
-                    onClick={handleTrade}
-                  >
-                    Trade Selected Cards
-                  </Button>
-                  {isMyTurn && (
-                    <div className="px-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      {phaseLabel}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <GameHandCard
+                myHand={myHand}
+                selectedCardIds={selectedCardIds}
+                onToggleCard={toggleCard}
+                onTrade={handleTrade}
+                controlsDisabled={controlsDisabled}
+                phase={phase}
+                isMyTurn={isMyTurn}
+                phaseLabel={phaseLabel}
+              />
             )}
           </div>
         </div>

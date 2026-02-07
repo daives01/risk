@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { hasModifierKey, isTypingTarget } from "@/lib/keyboard-shortcuts";
 
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -9,11 +10,6 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])",
   "[role='button']",
 ].join(", ");
-
-function isTypingTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
-}
 
 function isVisible(element: HTMLElement) {
   if (element.getAttribute("aria-hidden") === "true") return false;
@@ -55,7 +51,7 @@ export function GlobalKeyboardNav() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
-      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (hasModifierKey(event)) return;
       if (isTypingTarget(event.target)) return;
 
       const key = event.key.toLowerCase();

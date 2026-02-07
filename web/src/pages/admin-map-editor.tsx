@@ -8,17 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { validateMap, validateVisual } from "risk-engine";
+import type { Anchor, EditorContinent, EditorGraphMap, TerritoryInfo } from "@/lib/map-editor-validation";
+import { normalizeAdjacency, useMapEditorValidation } from "@/lib/map-editor-validation";
 import { useMapPanZoom } from "@/lib/use-map-pan-zoom";
-
-type TerritoryInfo = { name?: string; tags?: string[] };
-type Anchor = { x: number; y: number };
-type EditorContinent = { territoryIds: string[]; bonus: number };
-type EditorGraphMap = {
-  territories: Record<string, TerritoryInfo>;
-  adjacency: Record<string, string[]>;
-  continents?: Record<string, EditorContinent>;
-};
+import { readImageDimensions, uploadImage } from "@/lib/map-upload";
 
 type EditorMap = {
   _id: string;
@@ -35,78 +28,6 @@ type EditorMap = {
   imageUrl: string | null;
 };
 
-async function uploadImage(uploadUrl: string, file: File) {
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: { "Content-Type": file.type || "application/octet-stream" },
-    body: file,
-  });
-  if (!response.ok) throw new Error("Image upload failed");
-  const body = (await response.json()) as { storageId: string };
-  return body.storageId;
-}
-
-async function readImageDimensions(file: File) {
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("Failed to read image dimensions"));
-      img.src = objectUrl;
-    });
-    return { width: image.naturalWidth, height: image.naturalHeight };
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
-function normalizeAdjacency(graph: EditorGraphMap): Record<string, string[]> {
-  const territoryIds = new Set(Object.keys(graph.territories));
-  const normalized: Record<string, string[]> = {};
-
-  for (const territoryId of territoryIds) {
-    normalized[territoryId] = [];
-  }
-
-  for (const [territoryId, neighbors] of Object.entries(graph.adjacency)) {
-    if (!territoryIds.has(territoryId)) continue;
-    for (const neighborId of neighbors) {
-      if (!territoryIds.has(neighborId)) continue;
-      if (!normalized[territoryId]!.includes(neighborId)) {
-        normalized[territoryId]!.push(neighborId);
-      }
-      if (!normalized[neighborId]!.includes(territoryId)) {
-        normalized[neighborId]!.push(territoryId);
-      }
-    }
-  }
-
-  return normalized;
-}
-
-function graphConnectedTerritories(graph: EditorGraphMap) {
-  const territoryIds = Object.keys(graph.territories);
-  if (territoryIds.length <= 1) return { disconnected: [] as string[] };
-
-  const visited = new Set<string>();
-  const queue: string[] = [territoryIds[0]!];
-  visited.add(territoryIds[0]!);
-
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    for (const neighbor of graph.adjacency[current] ?? []) {
-      if (!visited.has(neighbor)) {
-        visited.add(neighbor);
-        queue.push(neighbor);
-      }
-    }
-  }
-
-  return {
-    disconnected: territoryIds.filter((territoryId) => !visited.has(territoryId)),
-  };
-}
 
 export default function AdminMapEditorPage() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
@@ -220,49 +141,29 @@ export default function AdminMapEditorPage() {
     return next;
   }, [continents, territories]);
 
-  const validation = useMemo(() => {
-    const mapValidation = validateMap(graphForPersist as any);
-    const visualValidation = validateVisual(graphForPersist as any, {
-      imageStorageId: imageStorageId || "missing",
-      imageWidth,
-      imageHeight,
-      territoryAnchors: anchors,
-    });
-    const connection = graphConnectedTerritories(graphForPersist);
-
-    const continentErrors: string[] = [];
-    for (const territoryId of Object.keys(territories)) {
-      if ((territoryToContinents[territoryId] ?? []).length === 0) {
-        continentErrors.push(`Territory \"${territoryId}\" has no continent assignment`);
-      }
-    }
-    for (const [continentId, continent] of Object.entries(continents)) {
-      const bonus = continent.bonus;
-      if (!Number.isInteger(bonus) || bonus <= 0) {
-        continentErrors.push(`Continent \"${continentId}\" bonus must be a positive integer`);
-      }
-    }
-
-    return {
-      errors: [...mapValidation.errors, ...visualValidation.errors, ...continentErrors],
-      warnings:
-        connection.disconnected.length > 0
-          ? [`Disconnected territories: ${connection.disconnected.join(", ")}`]
-          : [],
-    };
-  }, [graphForPersist, imageStorageId, imageWidth, imageHeight, anchors, territories, continents, territoryToContinents]);
+  const validation = useMapEditorValidation({
+    graphForPersist,
+    imageStorageId,
+    imageWidth,
+    imageHeight,
+    anchors,
+    territories,
+    continents,
+    territoryToContinents,
+  });
 
   const territoryIds = useMemo(() => Object.keys(territories).sort(), [territories]);
 
-  const panZoom = useMapPanZoom({ minScale: 1, maxScale: 6, zoomStep: 0.25 });
+  const { containerRef, handlers, transformStyle, scale, zoomIn, zoomOut, reset, toNormalized } =
+    useMapPanZoom({ minScale: 1, maxScale: 6, zoomStep: 0.25 });
 
   const setAnchorAt = useCallback(
     (territoryId: string, clientX: number, clientY: number) => {
-      const point = panZoom.toNormalized(clientX, clientY);
+      const point = toNormalized(clientX, clientY);
       if (!point) return;
       setAnchors((prev) => ({ ...prev, [territoryId]: point }));
     },
-    [panZoom.toNormalized],
+    [toNormalized],
   );
 
   useEffect(() => {
@@ -544,24 +445,24 @@ export default function AdminMapEditorPage() {
             <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
               <p>Pinch/wheel zoom, drag pan, drag marker to reposition.</p>
               <div className="flex items-center gap-1">
-                <Button size="xs" variant="outline" onClick={panZoom.zoomOut}>-</Button>
-                <span className="w-12 text-center">{Math.round(panZoom.scale * 100)}%</span>
-                <Button size="xs" variant="outline" onClick={panZoom.zoomIn}>+</Button>
-                <Button size="xs" variant="outline" onClick={panZoom.reset}>Reset</Button>
+                <Button size="xs" variant="outline" onClick={zoomOut}>-</Button>
+                <span className="w-12 text-center">{Math.round(scale * 100)}%</span>
+                <Button size="xs" variant="outline" onClick={zoomIn}>+</Button>
+                <Button size="xs" variant="outline" onClick={reset}>Reset</Button>
               </div>
             </div>
 
             <div
-              ref={panZoom.containerRef}
+              ref={containerRef}
               className="relative overflow-hidden rounded-lg border bg-muted touch-none"
               style={{ aspectRatio: `${imageWidth} / ${imageHeight}` }}
-              {...panZoom.handlers}
+              {...handlers}
               onClick={(event) => {
                 if (!selectedTerritoryId) return;
                 setAnchorAt(selectedTerritoryId, event.clientX, event.clientY);
               }}
             >
-              <div className="relative h-full w-full" style={panZoom.transformStyle}>
+              <div className="relative h-full w-full" style={transformStyle}>
                 {getDraft.imageUrl ? (
                   <img src={getDraft.imageUrl} alt="Map" className="h-full w-full object-contain" draggable={false} />
                 ) : (

@@ -7,36 +7,8 @@ import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { readImageDimensions, uploadImage } from "@/lib/map-upload";
 import { toast } from "sonner";
-
-async function uploadImage(uploadUrl: string, file: File) {
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: { "Content-Type": file.type || "application/octet-stream" },
-    body: file,
-  });
-  if (!response.ok) {
-    throw new Error("Image upload failed");
-  }
-  const body = (await response.json()) as { storageId: string };
-  return body.storageId;
-}
-
-async function readImageDimensions(file: File) {
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error("Failed to read image dimensions"));
-      img.src = objectUrl;
-    });
-
-    return { width: image.naturalWidth, height: image.naturalHeight };
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
 
 export default function AdminMapsPage() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
