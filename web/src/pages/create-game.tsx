@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 type RulesetOverridesInput = {
   fortify: { fortifyMode: "adjacent" | "connected"; maxFortifiesPerTurn?: number };
@@ -37,6 +39,43 @@ const CARD_INCREMENT_PRESETS = {
   },
 } as const;
 
+const FORTIFY_MODE_OPTIONS = [
+  { value: "connected", label: "Connected path" },
+  { value: "adjacent", label: "Adjacent only" },
+] as const;
+
+const MAX_FORTIFY_OPTIONS = [
+  { value: "unlimited", label: "Unlimited" },
+  { value: "0", label: "0" },
+  { value: "1", label: "1" },
+  { value: "2", label: "2" },
+  { value: "3", label: "3" },
+] as const;
+
+const TEAM_ASSIGNMENT_OPTIONS = [
+  { value: "manual", label: "Manual in lobby" },
+  { value: "balancedRandom", label: "Balanced random" },
+] as const;
+
+function RulesSwitch({
+  label,
+  checked,
+  onCheckedChange,
+  disabled,
+}: {
+  label: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3 border border-border/75 bg-background/65 px-3 py-2">
+      <span className="text-sm text-foreground">{label}</span>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
+    </label>
+  );
+}
+
 export default function CreateGamePage() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const navigate = useNavigate();
@@ -50,7 +89,7 @@ export default function CreateGamePage() {
   const [teamModeEnabled, setTeamModeEnabled] = useState(false);
   const [teamAssignmentStrategy, setTeamAssignmentStrategy] = useState<"manual" | "balancedRandom">("manual");
   const [fortifyMode, setFortifyMode] = useState<"adjacent" | "connected">("connected");
-  const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | "unlimited">("unlimited");
+  const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | "unlimited">(3);
   const [forcedTradeHandSize, setForcedTradeHandSize] = useState(5);
   const [cardIncrementPreset, setCardIncrementPreset] = useState<keyof typeof CARD_INCREMENT_PRESETS>("classic");
   const [allowPlaceOnTeammate, setAllowPlaceOnTeammate] = useState(true);
@@ -185,18 +224,18 @@ export default function CreateGamePage() {
 
               <div className="space-y-2">
                 <Label htmlFor="maxPlayers">Max Players</Label>
-                <select
-                  id="maxPlayers"
-                  value={maxPlayers}
-                  onChange={(event) => setMaxPlayers(Number(event.target.value))}
-                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
-                >
-                  {allowedPlayerCounts.map((numPlayers) => (
-                    <option key={numPlayers} value={numPlayers}>
-                      {numPlayers} players
-                    </option>
-                  ))}
-                </select>
+                <Select value={String(maxPlayers)} onValueChange={(value) => setMaxPlayers(Number(value))}>
+                  <SelectTrigger id="maxPlayers">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allowedPlayerCounts.map((numPlayers) => (
+                      <SelectItem key={numPlayers} value={String(numPlayers)}>
+                        {numPlayers} players
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-3 rounded-lg border bg-background/70 p-3">
@@ -204,37 +243,42 @@ export default function CreateGamePage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="fortifyMode">Fortify Mode</Label>
-                  <select
-                    id="fortifyMode"
+                  <Select
                     value={fortifyMode}
-                    onChange={(event) => setFortifyMode(event.target.value as "adjacent" | "connected")}
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                    onValueChange={(value) => setFortifyMode(value as "adjacent" | "connected")}
                   >
-                    <option value="connected">Connected path</option>
-                    <option value="adjacent">Adjacent only</option>
-                  </select>
+                    <SelectTrigger id="fortifyMode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FORTIFY_MODE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="maxFortifiesPerTurn">Fortifies Per Turn</Label>
-                  <select
-                    id="maxFortifiesPerTurn"
-                    value={maxFortifiesPerTurn}
-                    onChange={(event) =>
-                      setMaxFortifiesPerTurn(
-                        event.target.value === "unlimited"
-                          ? "unlimited"
-                          : Number(event.target.value),
-                      )
+                  <Select
+                    value={String(maxFortifiesPerTurn)}
+                    onValueChange={(value) =>
+                      setMaxFortifiesPerTurn(value === "unlimited" ? "unlimited" : Number(value))
                     }
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
                   >
-                    <option value="unlimited">Unlimited</option>
-                    <option value={0}>0</option>
-                    <option value={1}>1</option>
-                    <option value={2}>2</option>
-                    <option value={3}>3</option>
-                  </select>
+                    <SelectTrigger id="maxFortifiesPerTurn">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MAX_FORTIFY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
@@ -251,65 +295,67 @@ export default function CreateGamePage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="cardIncrementPreset">Card Reward Increment</Label>
-                  <select
-                    id="cardIncrementPreset"
+                  <Select
                     value={cardIncrementPreset}
-                    onChange={(event) => setCardIncrementPreset(event.target.value as keyof typeof CARD_INCREMENT_PRESETS)}
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                    onValueChange={(value) =>
+                      setCardIncrementPreset(value as keyof typeof CARD_INCREMENT_PRESETS)
+                    }
                   >
-                    {(Object.entries(CARD_INCREMENT_PRESETS) as Array<[keyof typeof CARD_INCREMENT_PRESETS, (typeof CARD_INCREMENT_PRESETS)[keyof typeof CARD_INCREMENT_PRESETS]]>).map(([key, preset]) => (
-                      <option key={key} value={key}>{preset.label}</option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="cardIncrementPreset">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.entries(CARD_INCREMENT_PRESETS) as Array<[keyof typeof CARD_INCREMENT_PRESETS, (typeof CARD_INCREMENT_PRESETS)[keyof typeof CARD_INCREMENT_PRESETS]]>).map(([key, preset]) => (
+                        <SelectItem key={key} value={key}>
+                          {preset.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
-                  <input
-                    id="teamModeEnabled"
-                    type="checkbox"
-                    checked={teamModeEnabled}
-                    onChange={(event) => setTeamModeEnabled(event.target.checked)}
-                  />
-                  Enable team mode
-                </label>
+                <RulesSwitch
+                  checked={teamModeEnabled}
+                  onCheckedChange={setTeamModeEnabled}
+                  label="Enable team mode"
+                />
 
                 {teamModeEnabled && (
                   <div className="space-y-2 rounded-md border border-border/70 bg-background/60 p-3">
                     <Label htmlFor="teamAssignmentStrategy">Team Assignment</Label>
-                    <select
-                      id="teamAssignmentStrategy"
+                    <Select
                       value={teamAssignmentStrategy}
-                      onChange={(event) => setTeamAssignmentStrategy(event.target.value as "manual" | "balancedRandom")}
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                      onValueChange={(value) =>
+                        setTeamAssignmentStrategy(value as "manual" | "balancedRandom")
+                      }
                     >
-                      <option value="manual">Manual in lobby</option>
-                      <option value="balancedRandom">Balanced random</option>
-                    </select>
+                      <SelectTrigger id="teamAssignmentStrategy">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TEAM_ASSIGNMENT_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
 
-                    <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={allowPlaceOnTeammate}
-                        onChange={(event) => setAllowPlaceOnTeammate(event.target.checked)}
-                      />
-                      Allow placing on teammate
-                    </label>
-                    <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={allowFortifyWithTeammate}
-                        onChange={(event) => setAllowFortifyWithTeammate(event.target.checked)}
-                      />
-                      Allow fortify with teammate
-                    </label>
-                    <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={allowFortifyThroughTeammates}
-                        onChange={(event) => setAllowFortifyThroughTeammates(event.target.checked)}
-                      />
-                      Allow fortify through teammate chain
-                    </label>
+                    <RulesSwitch
+                      checked={allowPlaceOnTeammate}
+                      onCheckedChange={setAllowPlaceOnTeammate}
+                      label="Allow placing on teammate"
+                    />
+                    <RulesSwitch
+                      checked={allowFortifyWithTeammate}
+                      onCheckedChange={setAllowFortifyWithTeammate}
+                      label="Allow fortify with teammate"
+                    />
+                    <RulesSwitch
+                      checked={allowFortifyThroughTeammates}
+                      onCheckedChange={setAllowFortifyThroughTeammates}
+                      label="Allow fortify through teammate chain"
+                    />
                   </div>
                 )}
               </div>

@@ -1,4 +1,4 @@
-import { PLAYER_COLOR_PALETTE } from "risk-engine";
+import { PLAYER_COLOR_NAME_BY_HEX, PLAYER_COLOR_PALETTE } from "risk-engine";
 
 type LobbyPlayer = {
   userId: string;
@@ -32,6 +32,7 @@ export function getLobbyColorOptions(
 
   return PLAYER_COLOR_PALETTE.map((color) => ({
     color,
+    name: PLAYER_COLOR_NAME_BY_HEX[color] ?? color,
     disabled: takenByOthers.has(color),
   }));
 }

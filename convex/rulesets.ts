@@ -188,30 +188,48 @@ export function sanitizeRulesetOverrides(overrides?: RulesetOverrides): RulesetO
 
   const cards = overrides.cards
     ? {
-        forcedTradeHandSize: overrides.cards.forcedTradeHandSize,
-        tradeValues: overrides.cards.tradeValues,
-        tradeValueOverflow: overrides.cards.tradeValueOverflow,
+        ...(overrides.cards.forcedTradeHandSize !== undefined
+          ? { forcedTradeHandSize: overrides.cards.forcedTradeHandSize }
+          : {}),
+        ...(overrides.cards.tradeValues !== undefined
+          ? { tradeValues: overrides.cards.tradeValues }
+          : {}),
+        ...(overrides.cards.tradeValueOverflow !== undefined
+          ? { tradeValueOverflow: overrides.cards.tradeValueOverflow }
+          : {}),
       }
     : undefined;
   const teams = overrides.teams
     ? {
-        allowPlaceOnTeammate: overrides.teams.allowPlaceOnTeammate,
-        allowFortifyWithTeammate: overrides.teams.allowFortifyWithTeammate,
-        allowFortifyThroughTeammates: overrides.teams.allowFortifyThroughTeammates,
+        ...(overrides.teams.allowPlaceOnTeammate !== undefined
+          ? { allowPlaceOnTeammate: overrides.teams.allowPlaceOnTeammate }
+          : {}),
+        ...(overrides.teams.allowFortifyWithTeammate !== undefined
+          ? { allowFortifyWithTeammate: overrides.teams.allowFortifyWithTeammate }
+          : {}),
+        ...(overrides.teams.allowFortifyThroughTeammates !== undefined
+          ? { allowFortifyThroughTeammates: overrides.teams.allowFortifyThroughTeammates }
+          : {}),
       }
     : undefined;
   const fortify = overrides.fortify
     ? {
-        fortifyMode: overrides.fortify.fortifyMode,
-        maxFortifiesPerTurn: overrides.fortify.maxFortifiesPerTurn,
+        ...(overrides.fortify.fortifyMode !== undefined
+          ? { fortifyMode: overrides.fortify.fortifyMode }
+          : {}),
+        ...(overrides.fortify.maxFortifiesPerTurn !== undefined
+          ? { maxFortifiesPerTurn: overrides.fortify.maxFortifiesPerTurn }
+          : {}),
       }
     : undefined;
 
-  return {
-    ...(fortify ? { fortify } : {}),
-    ...(cards ? { cards } : {}),
-    ...(teams ? { teams } : {}),
+  const sanitized = {
+    ...(fortify && Object.keys(fortify).length > 0 ? { fortify } : {}),
+    ...(cards && Object.keys(cards).length > 0 ? { cards } : {}),
+    ...(teams && Object.keys(teams).length > 0 ? { teams } : {}),
   };
+
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined;
 }
 
 export function resolveRulesetFromOverrides(
