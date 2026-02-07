@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { ENGINE_VERSION } from "risk-engine";
 import type { GameState, PlayerId } from "risk-engine";
 import { authComponent } from "./auth.js";
+import { resolvePlayerColors } from "./playerColors";
 
 export const engineVersion = query({
   handler: async () => {
@@ -48,10 +49,12 @@ export const getGameView = query({
       .query("gamePlayers")
       .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
       .collect();
+    const playerColors = resolvePlayerColors(players);
 
     const playerMap = players.map((p) => ({
       userId: p.userId,
       displayName: p.displayName,
+      color: playerColors[p.userId]!,
       role: p.role,
       enginePlayerId: p.enginePlayerId ?? null,
       teamId: p.teamId ?? null,
@@ -116,10 +119,12 @@ export const getGameViewAsPlayer = query({
       .query("gamePlayers")
       .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
       .collect();
+    const playerColors = resolvePlayerColors(players);
 
     const playerMap = players.map((p) => ({
       userId: p.userId,
       displayName: p.displayName,
+      color: playerColors[p.userId]!,
       role: p.role,
       enginePlayerId: p.enginePlayerId ?? null,
       teamId: p.teamId ?? null,

@@ -28,3 +28,5 @@ export type { DeckCreationResult, DrawResult } from "./cards.js";
 export { canPlace, canAttack, canFortifyFrom, canFortifyTo, canTraverse } from "./permissions.js";
 export { getLegalActions } from "./legal-actions.js";
 export type { LegalActionsConfig } from "./legal-actions.js";
+export { PLAYER_COLOR_PALETTE, NEUTRAL_PLAYER_COLOR } from "./colors.js";
+export type { PlayerColor } from "./colors.js";

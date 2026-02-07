@@ -5,6 +5,7 @@ import {
   createRng,
   createDeck,
   calculateReinforcements,
+  PLAYER_COLOR_PALETTE,
 } from "risk-engine";
 import type {
   CardId,
@@ -31,6 +32,12 @@ import {
   rulesetOverridesValidator,
   type RulesetOverrides,
 } from "./rulesets";
+import {
+  canEditPlayerColor,
+  firstAvailablePlayerColor,
+  isPlayerColor,
+  resolvePlayerColors,
+} from "./playerColors";
 
 function generateInviteCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -85,6 +92,9 @@ export const createGame = mutation({
         `maxPlayers must be between ${playerLimits.minPlayers} and ${playerLimits.maxPlayers} for this map`,
       );
     }
+    if (maxPlayers > PLAYER_COLOR_PALETTE.length) {
+      throw new Error(`maxPlayers cannot exceed ${PLAYER_COLOR_PALETTE.length} due to color limits`);
+    }
 
     const rulesetOverrides = args.rulesetOverrides as RulesetOverrides | undefined;
     resolveRulesetFromOverrides(args.teamModeEnabled ?? false, rulesetOverrides);
@@ -107,6 +117,7 @@ export const createGame = mutation({
       gameId,
       userId: String(user._id),
       displayName: user.name,
+      color: PLAYER_COLOR_PALETTE[0],
       role: "host",
       joinedAt: Date.now(),
     });
@@ -163,10 +174,16 @@ export const joinGameByInvite = mutation({
       throw new Error("Game is full");
     }
 
+    const nextColor = firstAvailablePlayerColor(players);
+    if (!nextColor) {
+      throw new Error("No player colors are available in this lobby");
+    }
+
     await ctx.db.insert("gamePlayers", {
       gameId: invite.gameId,
       userId: String(user._id),
       displayName: user.name,
+      color: nextColor,
       role: "player",
       joinedAt: Date.now(),
     });
@@ -221,6 +238,8 @@ export const getLobby = query({
       .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
       .first();
 
+    const playerColors = resolvePlayerColors(players);
+
     return {
       game: {
         _id: game._id,
@@ -240,12 +259,53 @@ export const getLobby = query({
       players: players.map((p) => ({
         userId: p.userId,
         displayName: p.displayName,
+        color: playerColors[p.userId]!,
         role: p.role,
         joinedAt: p.joinedAt,
         teamId: p.teamId ?? null,
       })),
       inviteCode: invite?.code ?? null,
     };
+  },
+});
+
+export const setPlayerColor = mutation({
+  args: {
+    gameId: v.id("games"),
+    userId: v.string(),
+    color: v.string(),
+  },
+  handler: async (ctx, { gameId, userId, color }) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+
+    const game = await ctx.db.get(gameId);
+    if (!game) throw new Error("Game not found");
+    if (game.status !== "lobby") throw new Error("Game is not in lobby");
+
+    const callerUserId = String(user._id);
+    if (!canEditPlayerColor(callerUserId, game.createdBy, userId)) {
+      throw new Error("You do not have permission to change this player's color");
+    }
+    if (!isPlayerColor(color)) {
+      throw new Error("Invalid player color");
+    }
+
+    const playerDocs = await ctx.db
+      .query("gamePlayers")
+      .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
+      .collect();
+    const targetPlayer = playerDocs.find((playerDoc) => playerDoc.userId === userId);
+    if (!targetPlayer) throw new Error("Player not in this game");
+
+    const conflict = playerDocs.find(
+      (playerDoc) => playerDoc.userId !== userId && playerDoc.color === color,
+    );
+    if (conflict) {
+      throw new Error("Color already taken by another player");
+    }
+
+    await ctx.db.patch(targetPlayer._id, { color });
   },
 });
 
@@ -410,6 +470,7 @@ export const startGame = mutation({
     const playerIds: PlayerId[] = playerDocs.map(
       (_, i) => `p${i}` as PlayerId,
     );
+    const playerColors = resolvePlayerColors(playerDocs);
 
     let teamAssignmentsByUserId: Record<string, LobbyTeamId> = {};
     if (teamMode.enabled) {
@@ -550,6 +611,7 @@ export const startGame = mutation({
     for (let i = 0; i < playerDocs.length; i++) {
       await ctx.db.patch(playerDocs[i]!._id, {
         enginePlayerId: playerIds[i],
+        color: playerColors[playerDocs[i]!.userId]!,
         ...(teamMode.enabled
           ? { teamId: teamAssignmentsByUserId[playerDocs[i]!.userId]! }
           : { teamId: undefined }),

@@ -7,6 +7,7 @@ import type { Id } from "@backend/_generated/dataModel";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { canEditLobbyPlayerColor, getLobbyColorOptions } from "@/lib/lobby-player-colors";
 
 type RulesetOverridesInput = {
   combat: { allowAttackerDiceChoice: boolean };
@@ -31,6 +32,7 @@ export default function LobbyPage() {
   const setPlayerTeam = useMutation(api.lobby.setPlayerTeam);
   const rebalanceTeams = useMutation(api.lobby.rebalanceTeams);
   const setRulesetOverrides = useMutation(api.lobby.setRulesetOverrides);
+  const setPlayerColor = useMutation(api.lobby.setPlayerColor);
 
   const [copied, setCopied] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -45,6 +47,7 @@ export default function LobbyPage() {
   const [allowPlaceOnTeammate, setAllowPlaceOnTeammate] = useState(true);
   const [allowFortifyWithTeammate, setAllowFortifyWithTeammate] = useState(true);
   const [allowFortifyThroughTeammates, setAllowFortifyThroughTeammates] = useState(true);
+  const [pendingColorByUserId, setPendingColorByUserId] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -159,6 +162,27 @@ export default function LobbyPage() {
     }
   }
 
+  async function handleColorChange(targetUserId: string, color: string) {
+    if (!gameId) return;
+    setError(null);
+    setPendingColorByUserId((prev) => ({ ...prev, [targetUserId]: color }));
+    try {
+      await setPlayerColor({
+        gameId: gameId as Id<"games">,
+        userId: targetUserId,
+        color,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to set player color");
+    } finally {
+      setPendingColorByUserId((prev) => {
+        const next = { ...prev };
+        delete next[targetUserId];
+        return next;
+      });
+    }
+  }
+
   async function handleSaveRules() {
     if (!gameId) return;
     setError(null);
@@ -223,12 +247,31 @@ export default function LobbyPage() {
                 {lobby.players.map((player) => (
                   <div key={player.userId} className="flex items-center justify-between rounded-lg border bg-background/75 px-3 py-2">
                     <div className="flex items-center gap-2">
+                      <span className="size-3 rounded-full border border-white/40" style={{ backgroundColor: pendingColorByUserId[player.userId] ?? player.color }} />
                       <UserRoundPlus className="size-4 text-primary" />
                       <span className="font-medium">{player.displayName}</span>
                       {player.role === "host" && <span className="rounded-md bg-primary/15 px-1.5 py-0.5 text-xs text-primary">Host</span>}
                       {player.userId === userId && <span className="text-xs text-muted-foreground">(you)</span>}
                     </div>
                     <div className="flex items-center gap-2">
+                      {canEditLobbyPlayerColor(isHost, userId, player.userId) ? (
+                        <select
+                          value={pendingColorByUserId[player.userId] ?? player.color}
+                          onChange={(event) => {
+                            void handleColorChange(player.userId, event.target.value);
+                          }}
+                          disabled={Boolean(pendingColorByUserId[player.userId])}
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                        >
+                          {getLobbyColorOptions(lobby.players, player.userId, pendingColorByUserId).map((option) => (
+                            <option key={option.color} value={option.color} disabled={option.disabled}>
+                              {option.color}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{player.color}</span>
+                      )}
                       {teamModeEnabled && (
                         isHost ? (
                           <select

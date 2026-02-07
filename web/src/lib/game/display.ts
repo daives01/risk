@@ -1,12 +1,13 @@
-const PLAYER_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#f97316", "#14b8a6"];
-const NEUTRAL_COLOR = "#64748b";
+import { NEUTRAL_PLAYER_COLOR, PLAYER_COLOR_PALETTE } from "risk-engine";
 
-type PlayerRef = { displayName: string; enginePlayerId: string | null };
+type PlayerRef = { displayName: string; enginePlayerId: string | null; color?: string | null };
 
-export function getPlayerColor(playerId: string, turnOrder: string[]) {
-  if (playerId === "neutral") return NEUTRAL_COLOR;
+export function getPlayerColor(playerId: string, players: PlayerRef[], turnOrder: string[]) {
+  if (playerId === "neutral") return NEUTRAL_PLAYER_COLOR;
+  const explicitColor = players.find((player) => player.enginePlayerId === playerId)?.color;
+  if (explicitColor) return explicitColor;
   const idx = turnOrder.indexOf(playerId);
-  return PLAYER_COLORS[idx % PLAYER_COLORS.length] ?? NEUTRAL_COLOR;
+  return PLAYER_COLOR_PALETTE[idx % PLAYER_COLOR_PALETTE.length] ?? NEUTRAL_PLAYER_COLOR;
 }
 
 export function getPlayerName(enginePlayerId: string, players: PlayerRef[]) {
