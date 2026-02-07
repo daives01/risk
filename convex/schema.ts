@@ -110,6 +110,7 @@ export default defineSchema({
     senderEnginePlayerId: v.optional(v.string()),
     text: v.string(),
     createdAt: v.number(),
+    editedAt: v.optional(v.number()),
   })
     .index("by_gameId_createdAt", ["gameId", "createdAt"])
     .index("by_gameId_channel_createdAt", ["gameId", "channel", "createdAt"])

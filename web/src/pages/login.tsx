@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Shield } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,16 @@ import { AuthShell } from "@/components/auth/auth-shell";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const requestedRedirect = searchParams.get("redirect");
+  const redirectTarget =
+    requestedRedirect && requestedRedirect.startsWith("/") && !requestedRedirect.startsWith("//")
+      ? requestedRedirect
+      : "/";
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -25,7 +31,7 @@ export default function LoginPage() {
       if (result.error) {
         setError(result.error.message ?? "Sign in failed");
       } else {
-        navigate("/");
+        navigate(redirectTarget, { replace: true });
       }
     } catch {
       setError("An unexpected error occurred");

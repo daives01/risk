@@ -46,6 +46,7 @@ export type ChatMessage = {
   teamId: string | null;
   text: string;
   createdAt: number;
+  editedAt: number | null;
   senderUserId: string;
   senderDisplayName: string;
   senderEnginePlayerId: string | null;

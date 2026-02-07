@@ -18,6 +18,7 @@ export function useGameViewQueries(session: unknown, typedGameId: Id<"games"> | 
 
 export function useGameRuntimeQueries(
   typedGameId: Id<"games"> | undefined,
+  isAuthenticated: boolean,
   mapId?: string,
   chatChannel: ChatChannel = "global",
 ) {
@@ -35,7 +36,7 @@ export function useGameRuntimeQueries(
 
   const chatMessages = useQuery(
     api.gameChat.listMessages,
-    typedGameId
+    typedGameId && isAuthenticated
       ? {
           gameId: typedGameId,
           channel: chatChannel,

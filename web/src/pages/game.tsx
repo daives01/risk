@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Navigate, useLocation, useParams } from "react-router-dom";
 import { Flag, History, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import type { Id } from "@backend/_generated/dataModel";
 import type { Action, CardId, TerritoryId } from "risk-engine";
@@ -26,6 +26,7 @@ import {
 } from "@/lib/game/history-navigation";
 import { buildPlayerPanelStats } from "@/lib/game/player-stats";
 import { PHASE_COPY } from "@/lib/game/types";
+import type { ChatMessage } from "@/lib/game/types";
 import type { ChatChannel } from "@/lib/game/types";
 import type { ReinforcementDraft } from "@/lib/game/types";
 import { useGameActions } from "@/lib/game/use-game-actions";
@@ -35,15 +36,18 @@ import { toast } from "sonner";
 
 export default function GamePage() {
   const { gameId } = useParams<{ gameId: string }>();
-  const { data: session } = authClient.useSession();
+  const location = useLocation();
+  const { data: session, isPending: sessionPending } = authClient.useSession();
 
   const typedGameId = gameId as Id<"games"> | undefined;
   const { playerView, publicView } = useGameViewQueries(session, typedGameId);
   const { view, myEnginePlayerId, myHand, playerMap, state } = adaptView(playerView, publicView);
   const [chatChannel, setChatChannel] = useState<ChatChannel>("global");
   const [chatDraft, setChatDraft] = useState("");
+  const [chatEditingMessageId, setChatEditingMessageId] = useState<string | null>(null);
   const { mapDoc, recentActions, historyTimeline, chatMessages } = useGameRuntimeQueries(
     typedGameId,
+    !!session,
     view?.mapId,
     chatChannel,
   );
@@ -53,6 +57,8 @@ export default function GamePage() {
     submitReinforcementPlacementsMutation,
     resignMutation,
     sendGameChatMessageMutation,
+    editGameChatMessageMutation,
+    deleteGameChatMessageMutation,
   } = useGameActions();
 
   const [selectedFrom, setSelectedFrom] = useState<string | null>(null);
@@ -87,6 +93,7 @@ export default function GamePage() {
   const isPlacementPhase = state?.turn.phase === "Reinforcement";
   const myTeamId = myEnginePlayerId && state ? state.players[myEnginePlayerId]?.teamId : undefined;
   const canUseTeamChat = !!view?.teamModeEnabled && !!myTeamId;
+  const canSendChat = !isSpectator && !historyOpen && view?.status === "active";
   const isTeammateOwner = useCallback((ownerId: string) => {
     if (!state || !myEnginePlayerId || !myTeamId) return false;
     if (ownerId === myEnginePlayerId || ownerId === "neutral") return false;
@@ -365,16 +372,59 @@ export default function GamePage() {
     const text = chatDraft.trim();
     if (!text) return;
     try {
-      await sendGameChatMessageMutation({
-        gameId: typedGameId,
-        channel: chatChannel,
-        text,
-      });
+      if (chatEditingMessageId) {
+        await editGameChatMessageMutation({
+          messageId: chatEditingMessageId as Id<"gameChatMessages">,
+          text,
+        });
+      } else {
+        await sendGameChatMessageMutation({
+          gameId: typedGameId,
+          channel: chatChannel,
+          text,
+        });
+      }
       setChatDraft("");
+      setChatEditingMessageId(null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not send message");
+      toast.error(error instanceof Error ? error.message : "Could not update chat message");
     }
-  }, [chatChannel, chatDraft, sendGameChatMessageMutation, typedGameId]);
+  }, [
+    chatChannel,
+    chatDraft,
+    chatEditingMessageId,
+    editGameChatMessageMutation,
+    sendGameChatMessageMutation,
+    typedGameId,
+  ]);
+
+  const handleStartEditChatMessage = useCallback((message: ChatMessage) => {
+    setChatEditingMessageId(message._id);
+    setChatDraft(message.text);
+  }, []);
+
+  const handleCancelEditChatMessage = useCallback(() => {
+    setChatEditingMessageId(null);
+    setChatDraft("");
+  }, []);
+
+  const handleDeleteChatMessage = useCallback(
+    async (messageId: string) => {
+      if (!confirm("Delete this message?")) return;
+      try {
+        await deleteGameChatMessageMutation({
+          messageId: messageId as Id<"gameChatMessages">,
+        });
+        if (chatEditingMessageId === messageId) {
+          setChatEditingMessageId(null);
+          setChatDraft("");
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not delete message");
+      }
+    },
+    [chatEditingMessageId, deleteGameChatMessageMutation],
+  );
 
   const flattenedEvents = useMemo(() => {
     if (!recentActions) return [];
@@ -432,6 +482,15 @@ export default function GamePage() {
     }
   }, [canUseTeamChat, chatChannel]);
 
+  useEffect(() => {
+    if (!chatEditingMessageId) return;
+    const messageStillExists = (chatMessages ?? []).some((message) => message._id === chatEditingMessageId);
+    if (!messageStillExists) {
+      setChatEditingMessageId(null);
+      setChatDraft("");
+    }
+  }, [chatEditingMessageId, chatMessages]);
+
   const jumpToTurnBoundary = useCallback(
     (direction: "prev" | "next") => {
       if (historyFrames.length === 0) return;
@@ -466,9 +525,17 @@ export default function GamePage() {
     setHighlightFilter((prev) => toggleTeamHighlight(prev, teamId));
   }, []);
 
-  const handleClearHighlight = useCallback(() => {
-    setHighlightFilter("none");
-  }, []);
+  useEffect(() => {
+    if (highlightFilter === "none") return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest("[data-map-canvas-zone='true']")) return;
+      setHighlightFilter("none");
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [highlightFilter]);
 
   useGameShortcuts({
     historyOpen,
@@ -479,7 +546,6 @@ export default function GamePage() {
     reinforcementDraftCount: reinforcementDrafts.length,
     controlsDisabled,
     hasPendingOccupy: !!state?.pending,
-    hasHighlight: highlightFilter !== "none",
     onToggleHistory: () => setHistoryOpen((prev) => !prev),
     onSetHistoryPlaying: setHistoryPlaying,
     onSetHistoryFrameIndex: setHistoryFrameIndex,
@@ -489,7 +555,6 @@ export default function GamePage() {
       setSelectedFrom(null);
       setSelectedTo(null);
     },
-    onClearHighlight: handleClearHighlight,
     onUndoPlacement: handleUndoPlacement,
     onConfirmPlacements: () => {
       void handleConfirmPlacements();
@@ -504,11 +569,19 @@ export default function GamePage() {
     () => (displayState ? resolveHighlightedTerritoryIds(displayState, highlightFilter) : new Set<string>()),
     [displayState, highlightFilter],
   );
-  const hasHighlight = highlightFilter !== "none";
   const playerStats = useMemo(() => (displayState ? buildPlayerPanelStats(displayState) : []), [displayState]);
 
   if (!typedGameId) {
     return <div className="page-shell flex items-center justify-center">Invalid game URL</div>;
+  }
+
+  if (sessionPending) {
+    return <div className="page-shell flex items-center justify-center">Loading game...</div>;
+  }
+
+  if (!session) {
+    const redirectPath = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />;
   }
 
   if (view === undefined || graphMap === undefined || mapVisual === undefined) {
@@ -540,6 +613,12 @@ export default function GamePage() {
           {showPhaseTitle && (
             <span className="shrink-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               {phaseCopy.title}
+            </span>
+          )}
+
+          {!historyOpen && !isMyTurn && displayPhase !== "GameOver" && (
+            <span className="shrink-0 text-sm text-muted-foreground">
+              It's {getPlayerName(resolvedDisplayState.turn.currentPlayerId, playerMap)}'s turn
             </span>
           )}
 
@@ -770,23 +849,12 @@ export default function GamePage() {
                 <ShortcutHint shortcut="mod+enter" />
               </Button>
             )}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              title="Clear highlight (X)"
-              disabled={!hasHighlight}
-              onClick={handleClearHighlight}
-            >
-              Clear Highlight
-              <ShortcutHint shortcut="x" />
-            </Button>
           </div>
         </div>
 
         <div className="flex min-w-0 flex-col gap-1">
           <Card className="glass-panel overflow-hidden border-0 py-0">
-            <CardContent className="p-1 sm:p-2">
+            <CardContent className="p-1 sm:p-2" data-map-canvas-zone="true">
               <MapCanvas
                 map={graphMap}
                 visual={mapVisual}
@@ -879,7 +947,6 @@ export default function GamePage() {
             activeHighlight={highlightFilter}
             onTogglePlayerHighlight={handleTogglePlayerHighlight}
             onToggleTeamHighlight={handleToggleTeamHighlight}
-            onClearHighlight={handleClearHighlight}
             getPlayerColor={resolvePlayerColor}
             getPlayerName={getPlayerName}
           />
@@ -891,11 +958,22 @@ export default function GamePage() {
               <GameChatCard
                 messages={chatMessages ?? []}
                 activeChannel={chatChannel}
+                teamGameEnabled={!!view.teamModeEnabled}
                 teamAvailable={canUseTeamChat}
-                canSend={!isSpectator && !historyOpen && view.status === "active"}
+                canSend={canSendChat}
                 draftText={chatDraft}
+                editingMessageId={chatEditingMessageId}
                 onSetDraftText={setChatDraft}
-                onSelectChannel={setChatChannel}
+                onSelectChannel={(nextChannel) => {
+                  setChatChannel(nextChannel);
+                  setChatEditingMessageId(null);
+                  setChatDraft("");
+                }}
+                onStartEditMessage={handleStartEditChatMessage}
+                onCancelEditMessage={handleCancelEditChatMessage}
+                onDeleteMessage={(messageId) => {
+                  void handleDeleteChatMessage(messageId);
+                }}
                 onSend={() => {
                   void handleSendChatMessage();
                 }}

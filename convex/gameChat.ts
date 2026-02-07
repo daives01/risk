@@ -100,6 +100,7 @@ export const listMessages = query({
       teamId: message.teamId ?? null,
       text: message.text,
       createdAt: message.createdAt,
+      editedAt: message.editedAt ?? null,
       senderUserId: message.senderUserId,
       senderDisplayName: message.senderDisplayName,
       senderEnginePlayerId: message.senderEnginePlayerId ?? null,
@@ -137,5 +138,46 @@ export const sendMessage = mutation({
       text,
       createdAt: Date.now(),
     });
+  },
+});
+
+async function getOwnedMessageForUpdate(ctx: MutationCtx, messageId: Id<"gameChatMessages">) {
+  const message = await ctx.db.get(messageId);
+  if (!message) throw new Error("Message not found");
+
+  const { game, callerId } = await getMembershipContext(ctx, message.gameId);
+  if (game.status !== "active") {
+    throw new Error("Chat messages can only be edited while the game is active");
+  }
+  if (message.senderUserId !== callerId) {
+    throw new Error("You can only modify your own messages");
+  }
+
+  return { message };
+}
+
+export const editMessage = mutation({
+  args: {
+    messageId: v.id("gameChatMessages"),
+    text: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await getOwnedMessageForUpdate(ctx, args.messageId);
+    const text = normalizeChatMessage(args.text);
+
+    await ctx.db.patch(args.messageId, {
+      text,
+      editedAt: Date.now(),
+    });
+  },
+});
+
+export const deleteMessage = mutation({
+  args: {
+    messageId: v.id("gameChatMessages"),
+  },
+  handler: async (ctx, args) => {
+    await getOwnedMessageForUpdate(ctx, args.messageId);
+    await ctx.db.delete(args.messageId);
   },
 });

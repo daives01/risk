@@ -11,14 +11,12 @@ interface UseGameShortcutsOptions {
   reinforcementDraftCount: number;
   controlsDisabled: boolean;
   hasPendingOccupy: boolean;
-  hasHighlight: boolean;
   onToggleHistory: () => void;
   onSetHistoryPlaying: (next: boolean | ((prev: boolean) => boolean)) => void;
   onSetHistoryFrameIndex: (next: number | ((prev: number) => number)) => void;
   onJumpHistoryTurnBoundary: (direction: "prev" | "next") => void;
   onJumpHistoryEvent: (kind: "capture" | "elimination") => void;
   onClearSelection: () => void;
-  onClearHighlight: () => void;
   onUndoPlacement: () => void;
   onConfirmPlacements: () => void;
   onEndAttackPhase: () => void;
@@ -34,14 +32,12 @@ export function useGameShortcuts({
   reinforcementDraftCount,
   controlsDisabled,
   hasPendingOccupy,
-  hasHighlight,
   onToggleHistory,
   onSetHistoryPlaying,
   onSetHistoryFrameIndex,
   onJumpHistoryTurnBoundary,
   onJumpHistoryEvent,
   onClearSelection,
-  onClearHighlight,
   onUndoPlacement,
   onConfirmPlacements,
   onEndAttackPhase,
@@ -123,10 +119,6 @@ export function useGameShortcuts({
           }
         }
 
-        if (key === "x" && hasHighlight) {
-          event.preventDefault();
-          onClearHighlight();
-        }
         return;
       }
 
@@ -152,13 +144,11 @@ export function useGameShortcuts({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     controlsDisabled,
-    hasHighlight,
     hasPendingOccupy,
     historyAtEnd,
     historyMaxIndex,
     historyOpen,
     isMyTurn,
-    onClearHighlight,
     onClearSelection,
     onConfirmPlacements,
     onEndAttackPhase,
