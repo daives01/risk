@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import type { Anchor, EditorContinent, EditorGraphMap, TerritoryInfo } from "@/lib/map-editor-validation";
 import { normalizeAdjacency, useMapEditorValidation } from "@/lib/map-editor-validation";
+import { buildMapImportPrompt, parseMapImportJson, type ParsedMapImport } from "@/lib/map-import";
 import { useMapPanZoom } from "@/lib/use-map-pan-zoom";
 import { readImageDimensions, uploadImage } from "@/lib/map-upload";
 
@@ -31,6 +32,27 @@ type EditorMap = {
   authoring: { status: "draft" | "published"; updatedAt: number; publishedAt?: number };
   imageUrl: string | null;
 };
+
+type ImportPreview = {
+  parsed: ParsedMapImport;
+  summary: {
+    territoryCount: number;
+    continentCount: number;
+    edgeCount: number;
+    addedTerritories: number;
+    removedTerritories: number;
+    renamedTerritories: number;
+    importedAnchorCount: number;
+    playerLimitsIncluded: boolean;
+  };
+};
+
+function countEdges(adjacency: Record<string, string[]>) {
+  return Object.entries(adjacency).reduce(
+    (count, [from, neighbors]) => count + neighbors.filter((to) => from < to).length,
+    0,
+  );
+}
 
 
 export default function AdminMapEditorPage() {
@@ -80,6 +102,9 @@ export default function AdminMapEditorPage() {
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [replacingImage, setReplacingImage] = useState(false);
+  const [importJsonText, setImportJsonText] = useState("");
+  const [importParseErrors, setImportParseErrors] = useState<string[]>([]);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
 
   useEffect(() => {
     if (!getDraft) return;
@@ -443,6 +468,91 @@ export default function AdminMapEditorPage() {
     }
   }
 
+  async function handleImportFile(file: File | null) {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      setImportJsonText(text);
+      setImportPreview(null);
+      setImportParseErrors([]);
+    } catch {
+      toast.error("Failed to read import file");
+    }
+  }
+
+  function handlePreviewImport() {
+    const trimmed = importJsonText.trim();
+    if (!trimmed) {
+      setImportPreview(null);
+      setImportParseErrors(["Paste JSON or choose a file first"]);
+      return;
+    }
+
+    const result = parseMapImportJson(trimmed);
+    if (!result.value) {
+      setImportPreview(null);
+      setImportParseErrors(result.errors);
+      return;
+    }
+    const parsed = result.value;
+
+    const importedTerritoryIds = Object.keys(parsed.graphMap.territories);
+    const importedTerritoryIdSet = new Set(importedTerritoryIds);
+    const currentTerritoryIds = Object.keys(territories);
+    const currentTerritoryIdSet = new Set(currentTerritoryIds);
+
+    const renamedTerritories = importedTerritoryIds.filter((territoryId) => {
+      if (!currentTerritoryIdSet.has(territoryId)) return false;
+      const incomingName = parsed.graphMap.territories[territoryId]?.name?.trim() ?? "";
+      const existingName = territories[territoryId]?.name?.trim() ?? "";
+      return incomingName !== existingName;
+    }).length;
+
+    setImportParseErrors([]);
+    setImportPreview({
+      parsed: result.value,
+      summary: {
+        territoryCount: importedTerritoryIds.length,
+        continentCount: Object.keys(parsed.graphMap.continents ?? {}).length,
+        edgeCount: countEdges(parsed.graphMap.adjacency),
+        addedTerritories: importedTerritoryIds.filter((territoryId) => !currentTerritoryIdSet.has(territoryId)).length,
+        removedTerritories: currentTerritoryIds.filter((territoryId) => !importedTerritoryIdSet.has(territoryId)).length,
+        renamedTerritories,
+        importedAnchorCount: Object.keys(parsed.anchors).length,
+        playerLimitsIncluded: parsed.playerLimits !== null,
+      },
+    });
+  }
+
+  function handleApplyImport() {
+    if (!importPreview) return;
+    setTerritories(importPreview.parsed.graphMap.territories);
+    setAdjacency(normalizeAdjacency(importPreview.parsed.graphMap));
+    setContinents(importPreview.parsed.graphMap.continents ?? {});
+    setAnchors(importPreview.parsed.anchors);
+    if (importPreview.parsed.playerLimits) {
+      setMinPlayers(importPreview.parsed.playerLimits.minPlayers);
+      setMaxPlayers(importPreview.parsed.playerLimits.maxPlayers);
+    }
+    setSelectedTerritoryId(null);
+    setLinkFromId(null);
+    setActiveContinentId(
+      Object.keys(importPreview.parsed.graphMap.continents ?? {}).sort()[0] ?? null,
+    );
+    setImportPreview(null);
+    setImportParseErrors([]);
+    toast.success("Import applied locally. Save draft to persist.");
+  }
+
+  async function handleCopyPrompt() {
+    try {
+      await navigator.clipboard.writeText(buildMapImportPrompt());
+      toast.success("Prompt copied");
+    } catch {
+      toast.error("Failed to copy prompt");
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background p-4 text-foreground">
       <div className="mx-auto grid w-full max-w-7xl gap-4 lg:grid-cols-[1fr_380px]">
@@ -642,6 +752,80 @@ export default function AdminMapEditorPage() {
         </div>
 
         <div className="flex flex-col gap-3">
+          <Card>
+            <CardHeader>
+              <CardTitle>Import JSON</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <textarea
+                value={importJsonText}
+                onChange={(event) => {
+                  setImportJsonText(event.target.value);
+                  setImportPreview(null);
+                  setImportParseErrors([]);
+                }}
+                placeholder="Paste map seed JSON"
+                className="min-h-40 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  type="file"
+                  accept="application/json,.json,text/plain"
+                  className="max-w-56"
+                  onChange={(event) => void handleImportFile(event.target.files?.[0] ?? null)}
+                />
+                <Button size="xs" variant="outline" onClick={handleCopyPrompt}>
+                  Copy Prompt
+                </Button>
+                <Button size="xs" onClick={handlePreviewImport}>
+                  Preview
+                </Button>
+                <Button size="xs" onClick={handleApplyImport} disabled={!importPreview}>
+                  Apply Import
+                </Button>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => {
+                    setImportJsonText("");
+                    setImportPreview(null);
+                    setImportParseErrors([]);
+                  }}
+                >
+                  Clear
+                </Button>
+              </div>
+
+              {importParseErrors.length > 0 && (
+                <div className="rounded-md border border-red-400/60 bg-red-500/10 p-2 text-xs text-red-700">
+                  {importParseErrors.map((error) => (
+                    <p key={error}>• {error}</p>
+                  ))}
+                </div>
+              )}
+
+              {importPreview && (
+                <div className="space-y-1 rounded-md border border-blue-400/50 bg-blue-500/10 p-2 text-xs">
+                  <p>
+                    {importPreview.summary.territoryCount} territories, {importPreview.summary.edgeCount} edges,{" "}
+                    {importPreview.summary.continentCount} continents
+                  </p>
+                  <p>
+                    +{importPreview.summary.addedTerritories} added, -{importPreview.summary.removedTerritories} removed,{" "}
+                    {importPreview.summary.renamedTerritories} renamed
+                  </p>
+                  <p>
+                    {importPreview.summary.importedAnchorCount} anchors included
+                    {importPreview.summary.playerLimitsIncluded ? ", player limits included" : ", no player limits"}
+                  </p>
+                  {importPreview.parsed.warnings.map((warning) => (
+                    <p key={warning} className="text-amber-700">• {warning}</p>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>Territories</CardTitle>
