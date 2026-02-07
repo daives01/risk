@@ -6,6 +6,7 @@ import { authComponent } from "./auth.js";
 import { applyAction, ActionError, calculateReinforcements, createDeck, createRng } from "risk-engine";
 import type { Action, CardId, GameState, PlayerId, GraphMap, TerritoryId, GameEvent, RulesetConfig } from "risk-engine";
 import type { Id } from "./_generated/dataModel";
+import { summarizeTimelineFrame } from "./historyTimeline";
 import { resolveEffectiveRuleset, type RulesetOverrides } from "./rulesets";
 
 const ACTION_RATE_LIMIT_MS = 500;
@@ -764,21 +765,6 @@ function applyResignForTimeline(
   };
 }
 
-function describeTimelineStep(action: Record<string, unknown>, events: GameEvent[]): string {
-  const firstEvent = events[0];
-  if (firstEvent?.type === "ReinforcementsPlaced") return "Placed armies";
-  if (firstEvent?.type === "AttackResolved") return "Attack resolved";
-  if (firstEvent?.type === "TerritoryCaptured") return "Territory captured";
-  if (firstEvent?.type === "OccupyResolved") return "Occupy move";
-  if (firstEvent?.type === "FortifyResolved") return "Fortified";
-  if (firstEvent?.type === "TurnAdvanced") return "Turn advanced";
-  if (firstEvent?.type === "GameEnded") return "Game ended";
-
-  const actionType = typeof action.type === "string" ? action.type : "Action";
-  if (actionType === "PlaceReinforcementsBatch") return "Placement batch confirmed";
-  return actionType;
-}
-
 export const getHistoryTimeline = query({
   args: {
     gameId: v.id("games"),
@@ -822,12 +808,24 @@ export const getHistoryTimeline = query({
       index: number;
       actionType: string;
       label: string;
+      actorId: string | null;
+      turnRound: number;
+      turnPlayerId: string;
+      turnPhase: string;
+      hasCapture: boolean;
+      eliminatedPlayerIds: string[];
       state: TimelinePublicState;
     }> = [
       {
         index: -1,
         actionType: "Start",
         label: "Game start",
+        actorId: null,
+        turnRound: simState.turn.round,
+        turnPlayerId: simState.turn.currentPlayerId,
+        turnPhase: simState.turn.phase,
+        hasCapture: false,
+        eliminatedPlayerIds: [],
         state: toTimelinePublicState(simState),
       },
     ];
@@ -881,10 +879,23 @@ export const getHistoryTimeline = query({
       }
 
       const events = actionDoc.events as GameEvent[];
+      const summary = summarizeTimelineFrame({
+        action,
+        actionType,
+        actorId: actionDoc.playerId ?? null,
+        events,
+        state: simState,
+      });
       timeline.push({
         index: actionDoc.index,
         actionType,
-        label: describeTimelineStep(action, events),
+        label: summary.label,
+        actorId: summary.actorId,
+        turnRound: summary.turnRound,
+        turnPlayerId: summary.turnPlayerId,
+        turnPhase: summary.turnPhase,
+        hasCapture: summary.hasCapture,
+        eliminatedPlayerIds: summary.eliminatedPlayerIds,
         state: toTimelinePublicState(simState),
       });
     }
