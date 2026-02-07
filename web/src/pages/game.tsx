@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
-import { Flag, Pause, Play, Shield, SkipBack, SkipForward, Users } from "lucide-react";
+import { Flag, History, Pause, Play, SkipBack, SkipForward, Users } from "lucide-react";
 import { api } from "@backend/_generated/api";
 import type { Id } from "@backend/_generated/dataModel";
 import type { Action, CardId, GraphMap, Phase, TerritoryId } from "risk-engine";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ShortcutHint } from "@/components/ui/shortcut-hint";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { MapCanvas } from "@/components/game/map-canvas";
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
@@ -559,15 +561,21 @@ export default function GamePage() {
         return;
       }
 
-      if (!historyOpen && isMyTurn && phase === "Attack" && !state.pending && key === "e") {
-        event.preventDefault();
-        handleEndAttackPhase();
-        return;
-      }
-
-      if (!historyOpen && isMyTurn && phase === "Fortify" && event.key === "Enter") {
-        event.preventDefault();
-        handleEndTurn();
+      if (!historyOpen && isMyTurn && event.key === "Enter") {
+        if (phase === "Reinforcement" && reinforcementDrafts.length > 0 && !controlsDisabled) {
+          event.preventDefault();
+          void handleConfirmPlacements();
+          return;
+        }
+        if (phase === "Attack" && !state.pending) {
+          event.preventDefault();
+          handleEndAttackPhase();
+          return;
+        }
+        if (phase === "Fortify") {
+          event.preventDefault();
+          handleEndTurn();
+        }
       }
     };
 
@@ -609,6 +617,7 @@ export default function GamePage() {
   const displayPhase = displayState.turn.phase;
   const phaseLabel = displayPhase === "Reinforcement" ? "Place" : displayPhase;
   const phaseCopy = PHASE_COPY[displayPhase] ?? PHASE_COPY.GameOver;
+  const showPhaseTitle = historyOpen || isMyTurn || !["Reinforcement", "Attack", "Fortify"].includes(displayPhase);
   const winnerId = displayState.turnOrder.find((playerId) => displayState.players[playerId]?.status === "alive") ?? null;
   const playbackTerritories = historyOpen ? displayState.territories : displayedTerritories;
 
@@ -634,7 +643,11 @@ export default function GamePage() {
     <div className="page-shell soft-grid overflow-x-hidden">
       <div className="page-container max-w-none flex min-h-[calc(100vh-2rem)] flex-col gap-1">
         <div className="glass-panel flex min-h-12 items-center gap-2 overflow-x-auto px-2 py-1.5">
-          <span className="shrink-0 rounded border bg-background/70 px-2 py-1 text-sm font-semibold">{phaseCopy.title}</span>
+          {showPhaseTitle && (
+            <span className="shrink-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              {phaseCopy.title}
+            </span>
+          )}
 
           {!historyOpen && isMyTurn && phase === "Reinforcement" && (
             <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-sm">
@@ -678,44 +691,7 @@ export default function GamePage() {
               >
                 Undo All
               </Button>
-              <Button
-                type="button"
-                size="xs"
-                disabled={controlsDisabled || reinforcementDrafts.length === 0}
-                onClick={handleConfirmPlacements}
-              >
-                <Shield className="size-4" />
-                Confirm
-              </Button>
               <span className="text-xs text-muted-foreground">{queuedReinforcementTotal}</span>
-            </div>
-          )}
-
-          {!historyOpen && isMyTurn && phase === "Attack" && !state.pending && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              title="End attack phase (Cmd/Ctrl+E)"
-              disabled={controlsDisabled}
-              onClick={handleEndAttackPhase}
-              className="shrink-0"
-            >
-              End Attack
-            </Button>
-          )}
-
-          {!historyOpen && isMyTurn && phase === "Fortify" && (
-            <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-              <Button
-                size="sm"
-                variant="outline"
-                title="End turn (Cmd/Ctrl+Enter)"
-                disabled={controlsDisabled}
-                onClick={handleEndTurn}
-              >
-                End Turn
-              </Button>
             </div>
           )}
 
@@ -726,25 +702,36 @@ export default function GamePage() {
           )}
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
-            {!isSpectator && (
-              <Button variant="outline" size="sm" onClick={handleResign} title="Resign game">
-                <Flag className="size-4" />
-                Resign
-              </Button>
-            )}
-            <Button
-              variant={historyOpen ? "default" : "outline"}
-              size="sm"
-              type="button"
-              title="Toggle history (H)"
-              onClick={() => {
-                setHistoryOpen((prev) => !prev);
-                setHistoryPlaying(false);
-              }}
-              disabled={historyCount === 0}
-            >
-              History
-            </Button>
+            <TooltipProvider>
+              {!isSpectator && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="icon-sm" onClick={handleResign} aria-label="Resign game">
+                      <Flag className="size-4" aria-hidden="true" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Resign game</TooltipContent>
+                </Tooltip>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={historyOpen ? "default" : "outline"}
+                    size="icon-sm"
+                    type="button"
+                    aria-label="Toggle history"
+                    onClick={() => {
+                      setHistoryOpen((prev) => !prev);
+                      setHistoryPlaying(false);
+                    }}
+                    disabled={historyCount === 0}
+                  >
+                    <History className="size-4" aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Toggle history (H)</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             {historyOpen && (
               <>
                 <Button
@@ -793,6 +780,43 @@ export default function GamePage() {
                   {historyFrameIndex + 1}/{historyCount}
                 </span>
               </>
+            )}
+            {!historyOpen && isMyTurn && phase === "Reinforcement" && (
+              <Button
+                type="button"
+                size="sm"
+                title="Confirm placements (Cmd/Ctrl+Enter)"
+                disabled={controlsDisabled || reinforcementDrafts.length === 0}
+                onClick={() => void handleConfirmPlacements()}
+              >
+                Confirm
+                <ShortcutHint shortcut="mod+enter" />
+              </Button>
+            )}
+            {!historyOpen && isMyTurn && phase === "Attack" && !state.pending && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                title="End attack phase (Cmd/Ctrl+Enter)"
+                disabled={controlsDisabled}
+                onClick={handleEndAttackPhase}
+              >
+                End Attack
+                <ShortcutHint shortcut="mod+enter" />
+              </Button>
+            )}
+            {!historyOpen && isMyTurn && phase === "Fortify" && (
+              <Button
+                size="sm"
+                variant="outline"
+                title="End turn (Cmd/Ctrl+Enter)"
+                disabled={controlsDisabled}
+                onClick={handleEndTurn}
+              >
+                End Turn
+                <ShortcutHint shortcut="mod+enter" />
+              </Button>
             )}
           </div>
         </div>
@@ -969,7 +993,11 @@ export default function GamePage() {
                   >
                     Trade Selected Cards
                   </Button>
-                  <div className="rounded-lg border bg-background/80 px-3 py-2 text-xs text-muted-foreground">{phaseLabel}</div>
+                  {isMyTurn && (
+                    <div className="px-0.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      {phaseLabel}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useQuery } from "convex/react";
 import { Plus } from "lucide-react";
@@ -6,6 +6,7 @@ import { api } from "@backend/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ShortcutHint } from "@/components/ui/shortcut-hint";
 
 type HomeTab = "overview" | "games" | "account";
 
@@ -50,6 +51,13 @@ export default function HomePage() {
   useEffect(() => {
     setSelectedIndex(0);
   }, [filteredGames]);
+
+  const openGame = useCallback(
+    (game: MyGame) => {
+      navigate(game.status === "lobby" ? `/g/${game._id}` : `/play/${game._id}`);
+    },
+    [navigate],
+  );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -113,11 +121,7 @@ export default function HomePage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [filteredGames, navigate, selectedIndex, tab]);
-
-  function openGame(game: MyGame) {
-    navigate(game.status === "lobby" ? `/g/${game._id}` : `/play/${game._id}`);
-  }
+  }, [filteredGames, openGame, selectedIndex, tab]);
 
   function submitJoinCode(event: React.FormEvent) {
     event.preventDefault();
@@ -146,13 +150,37 @@ export default function HomePage() {
       <div className="app-layout">
         <aside className="app-sidebar">
           <div className="app-menu">
-            <button type="button" onClick={() => setTab("overview")} className={`app-menu-item ${tab === "overview" ? "is-active" : ""}`}>[1] OVERVIEW</button>
-            <button type="button" onClick={() => setTab("games")} className={`app-menu-item ${tab === "games" ? "is-active" : ""}`}>[2] GAMES</button>
-            <button type="button" onClick={() => setTab("account")} className={`app-menu-item ${tab === "account" ? "is-active" : ""}`}>[3] ACCOUNT</button>
+            <button
+              type="button"
+              onClick={() => setTab("overview")}
+              className={`app-menu-item flex items-center justify-between ${tab === "overview" ? "is-active" : ""}`}
+            >
+              <span>OVERVIEW</span>
+              <ShortcutHint shortcut="1" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("games")}
+              className={`app-menu-item flex items-center justify-between ${tab === "games" ? "is-active" : ""}`}
+            >
+              <span>GAMES</span>
+              <ShortcutHint shortcut="2" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("account")}
+              className={`app-menu-item flex items-center justify-between ${tab === "account" ? "is-active" : ""}`}
+            >
+              <span>ACCOUNT</span>
+              <ShortcutHint shortcut="3" />
+            </button>
           </div>
           <div className="app-sidebar-actions">
-            <Button className="w-full" onClick={() => navigate("/games/new")}>
-              <Plus className="size-4" /> NEW GAME
+            <Button className="w-full justify-between" onClick={() => navigate("/games/new")}>
+              <span className="inline-flex items-center gap-2">
+                <Plus className="size-4" /> NEW GAME
+              </span>
+              <ShortcutHint shortcut="n" />
             </Button>
             <Button variant="outline" className="w-full" onClick={() => authClient.signOut()}>
               SIGN OUT
