@@ -9,13 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { validateMap, validateVisual } from "risk-engine";
+import { useMapPanZoom } from "@/lib/use-map-pan-zoom";
 
-type TerritoryInfo = { name?: string; continentId?: string; tags?: string[] };
+type TerritoryInfo = { name?: string; tags?: string[] };
 type Anchor = { x: number; y: number };
+type EditorContinent = { territoryIds: string[]; bonus: number };
 type EditorGraphMap = {
   territories: Record<string, TerritoryInfo>;
   adjacency: Record<string, string[]>;
-  continents?: Record<string, { territoryIds: string[]; bonus: number }>;
+  continents?: Record<string, EditorContinent>;
 };
 
 type EditorMap = {
@@ -121,20 +123,27 @@ export default function AdminMapEditorPage() {
   const publish = useMutation(api.adminMaps.publish);
   const generateUploadUrl = useMutation(api.adminMaps.generateUploadUrl);
 
-  const mapRef = useRef<HTMLDivElement | null>(null);
-
   const [name, setName] = useState("");
   const [territories, setTerritories] = useState<Record<string, TerritoryInfo>>({});
   const [adjacency, setAdjacency] = useState<Record<string, string[]>>({});
   const [anchors, setAnchors] = useState<Record<string, Anchor>>({});
-  const [continentBonuses, setContinentBonuses] = useState<Record<string, number>>({});
+  const [continents, setContinents] = useState<Record<string, EditorContinent>>({});
   const [imageStorageId, setImageStorageId] = useState<Id<"_storage"> | null>(null);
   const [imageWidth, setImageWidth] = useState(1);
   const [imageHeight, setImageHeight] = useState(1);
 
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<string | null>(null);
   const [linkFromId, setLinkFromId] = useState<string | null>(null);
-  const [draggingTerritoryId, setDraggingTerritoryId] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<{
+    territoryId: string;
+    pointerId: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
+  const dragMovedRef = useRef(false);
+  const [territoryFilter, setTerritoryFilter] = useState("");
+  const [activeContinentId, setActiveContinentId] = useState<string | null>(null);
+  const territoryCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const [newTerritoryId, setNewTerritoryId] = useState("");
   const [newTerritoryName, setNewTerritoryName] = useState("");
@@ -148,24 +157,20 @@ export default function AdminMapEditorPage() {
   useEffect(() => {
     if (!getDraft) return;
     setName(getDraft.name);
-
-    const hydratedTerritories: Record<string, TerritoryInfo> = { ...getDraft.graphMap.territories };
-    const hydratedBonuses: Record<string, number> = {};
-
-    for (const [continentId, continent] of Object.entries(getDraft.graphMap.continents ?? {})) {
-      hydratedBonuses[continentId] = continent.bonus;
-      for (const territoryId of continent.territoryIds) {
-        hydratedTerritories[territoryId] = {
-          ...(hydratedTerritories[territoryId] ?? {}),
-          continentId,
-        };
-      }
-    }
-
-    setTerritories(hydratedTerritories);
+    setTerritories({ ...getDraft.graphMap.territories });
     setAdjacency(normalizeAdjacency(getDraft.graphMap));
+    setContinents(
+      Object.fromEntries(
+        Object.entries(getDraft.graphMap.continents ?? {}).map(([continentId, continent]) => [
+          continentId,
+          {
+            bonus: continent.bonus,
+            territoryIds: [...continent.territoryIds],
+          },
+        ]),
+      ),
+    );
     setAnchors(getDraft.visual.territoryAnchors);
-    setContinentBonuses(hydratedBonuses);
     setImageStorageId(getDraft.visual.imageStorageId as Id<"_storage">);
     setImageWidth(getDraft.visual.imageWidth);
     setImageHeight(getDraft.visual.imageHeight);
@@ -178,29 +183,42 @@ export default function AdminMapEditorPage() {
       continents: {},
     });
 
-    const continents: Record<string, { territoryIds: string[]; bonus: number }> = {};
-    for (const [continentId, bonus] of Object.entries(continentBonuses)) {
-      continents[continentId] = {
-        territoryIds: [],
-        bonus,
+    const territorySet = new Set(Object.keys(territories));
+    const normalizedContinents: Record<string, EditorContinent> = {};
+    for (const [continentId, continent] of Object.entries(continents)) {
+      const normalizedTerritoryIds = [...new Set(continent.territoryIds)].filter((territoryId) =>
+        territorySet.has(territoryId),
+      );
+      normalizedContinents[continentId] = {
+        bonus: Math.max(1, Math.floor(continent.bonus)),
+        territoryIds: normalizedTerritoryIds,
       };
-    }
-
-    for (const [territoryId, info] of Object.entries(territories)) {
-      const continentId = info.continentId;
-      if (!continentId) continue;
-      if (!continents[continentId]) {
-        continents[continentId] = { territoryIds: [], bonus: 1 };
-      }
-      continents[continentId]!.territoryIds.push(territoryId);
     }
 
     return {
       territories,
       adjacency: normalizedAdjacency,
-      continents,
+      continents: normalizedContinents,
     };
-  }, [territories, adjacency, continentBonuses]);
+  }, [territories, adjacency, continents]);
+
+  const territoryToContinents = useMemo(() => {
+    const next: Record<string, string[]> = {};
+    for (const territoryId of Object.keys(territories)) next[territoryId] = [];
+
+    for (const [continentId, continent] of Object.entries(continents)) {
+      for (const territoryId of continent.territoryIds) {
+        if (!next[territoryId]) continue;
+        next[territoryId]!.push(continentId);
+      }
+    }
+
+    for (const territoryId of Object.keys(next)) {
+      next[territoryId] = next[territoryId]!.sort();
+    }
+
+    return next;
+  }, [continents, territories]);
 
   const validation = useMemo(() => {
     const mapValidation = validateMap(graphForPersist as any);
@@ -214,12 +232,12 @@ export default function AdminMapEditorPage() {
 
     const continentErrors: string[] = [];
     for (const territoryId of Object.keys(territories)) {
-      const continentId = territories[territoryId]?.continentId;
-      if (!continentId) {
+      if ((territoryToContinents[territoryId] ?? []).length === 0) {
         continentErrors.push(`Territory \"${territoryId}\" has no continent assignment`);
       }
     }
-    for (const [continentId, bonus] of Object.entries(continentBonuses)) {
+    for (const [continentId, continent] of Object.entries(continents)) {
+      const bonus = continent.bonus;
       if (!Number.isInteger(bonus) || bonus <= 0) {
         continentErrors.push(`Continent \"${continentId}\" bonus must be a positive integer`);
       }
@@ -232,49 +250,42 @@ export default function AdminMapEditorPage() {
           ? [`Disconnected territories: ${connection.disconnected.join(", ")}`]
           : [],
     };
-  }, [graphForPersist, imageStorageId, imageWidth, imageHeight, anchors, territories, continentBonuses]);
+  }, [graphForPersist, imageStorageId, imageWidth, imageHeight, anchors, territories, continents, territoryToContinents]);
 
   const territoryIds = useMemo(() => Object.keys(territories).sort(), [territories]);
 
-  const getNormalizedPoint = useCallback((clientX: number, clientY: number) => {
-    const node = mapRef.current;
-    if (!node) return null;
-    const rect = node.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return null;
-
-    const x = (clientX - rect.left) / rect.width;
-    const y = (clientY - rect.top) / rect.height;
-
-    return {
-      x: Math.max(0, Math.min(1, x)),
-      y: Math.max(0, Math.min(1, y)),
-    };
-  }, []);
+  const panZoom = useMapPanZoom({ minScale: 1, maxScale: 6, zoomStep: 0.25 });
 
   const setAnchorAt = useCallback(
     (territoryId: string, clientX: number, clientY: number) => {
-      const point = getNormalizedPoint(clientX, clientY);
+      const point = panZoom.toNormalized(clientX, clientY);
       if (!point) return;
       setAnchors((prev) => ({ ...prev, [territoryId]: point }));
     },
-    [getNormalizedPoint],
+    [panZoom.toNormalized],
   );
 
   useEffect(() => {
-    if (!draggingTerritoryId) return;
+    if (!dragging) return;
 
-    const onMove = (event: MouseEvent) => {
-      setAnchorAt(draggingTerritoryId, event.clientX, event.clientY);
+    const onMove = (event: PointerEvent) => {
+      if (event.pointerId !== dragging.pointerId) return;
+      if (Math.hypot(event.clientX - dragging.startX, event.clientY - dragging.startY) > 4) {
+        dragMovedRef.current = true;
+      }
+      setAnchorAt(dragging.territoryId, event.clientX, event.clientY);
     };
-    const onUp = () => setDraggingTerritoryId(null);
+    const onUp = (event: PointerEvent) => {
+      if (event.pointerId === dragging.pointerId) setDragging(null);
+    };
 
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
     return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
     };
-  }, [draggingTerritoryId, setAnchorAt]);
+  }, [dragging, setAnchorAt]);
 
   const toggleAdjacency = useCallback((a: string, b: string) => {
     if (a === b) return;
@@ -297,6 +308,60 @@ export default function AdminMapEditorPage() {
       return next;
     });
   }, []);
+
+  const toggleTerritoryInContinent = useCallback((continentId: string, territoryId: string) => {
+    setContinents((prev) => {
+      const continent = prev[continentId] ?? { bonus: 1, territoryIds: [] };
+      const territoryIds = new Set(continent.territoryIds);
+      if (territoryIds.has(territoryId)) {
+        territoryIds.delete(territoryId);
+      } else {
+        territoryIds.add(territoryId);
+      }
+
+      return {
+        ...prev,
+        [continentId]: {
+          ...continent,
+          territoryIds: [...territoryIds].sort(),
+        },
+      };
+    });
+  }, []);
+
+  const graphEdges = useMemo(() => {
+    return Object.entries(adjacency).flatMap(([from, neighbors]) =>
+      neighbors.filter((to) => from < to).map((to) => ({ from, to })),
+    );
+  }, [adjacency]);
+
+  const filteredTerritoryIds = useMemo(() => {
+    const search = territoryFilter.trim().toLowerCase();
+    if (!search) return territoryIds;
+    return territoryIds.filter((territoryId) => {
+      const info = territories[territoryId];
+      return (
+        territoryId.toLowerCase().includes(search) ||
+        (info?.name ?? "").toLowerCase().includes(search) ||
+        (territoryToContinents[territoryId] ?? []).some((continentId) =>
+          continentId.toLowerCase().includes(search),
+        )
+      );
+    });
+  }, [territoryFilter, territories, territoryIds, territoryToContinents]);
+
+  useEffect(() => {
+    if (activeContinentId && !continents[activeContinentId]) {
+      setActiveContinentId(null);
+    }
+  }, [activeContinentId, continents]);
+
+  useEffect(() => {
+    if (!selectedTerritoryId) return;
+    const selectedCard = territoryCardRefs.current[selectedTerritoryId];
+    if (!selectedCard) return;
+    selectedCard.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedTerritoryId, filteredTerritoryIds]);
 
   if (sessionPending) {
     return <div className="flex min-h-screen items-center justify-center">Loading...</div>;
@@ -333,6 +398,15 @@ export default function AdminMapEditorPage() {
       },
     }));
     setAdjacency((prev) => ({ ...prev, [id]: [] }));
+    if (activeContinentId) {
+      setContinents((prev) => ({
+        ...prev,
+        [activeContinentId]: {
+          ...(prev[activeContinentId] ?? { territoryIds: [], bonus: 1 }),
+          territoryIds: [...new Set([...(prev[activeContinentId]?.territoryIds ?? []), id])].sort(),
+        },
+      }));
+    }
     setNewTerritoryId("");
     setNewTerritoryName("");
     setSelectedTerritoryId(id);
@@ -359,6 +433,17 @@ export default function AdminMapEditorPage() {
       delete next[territoryId];
       return next;
     });
+    setContinents((prev) =>
+      Object.fromEntries(
+        Object.entries(prev).map(([continentId, continent]) => [
+          continentId,
+          {
+            ...continent,
+            territoryIds: continent.territoryIds.filter((id) => id !== territoryId),
+          },
+        ]),
+      ),
+    );
 
     if (selectedTerritoryId === territoryId) setSelectedTerritoryId(null);
     if (linkFromId === territoryId) setLinkFromId(null);
@@ -455,64 +540,131 @@ export default function AdminMapEditorPage() {
             </div>
           </div>
 
-          <div
-            ref={mapRef}
-            className="relative overflow-hidden rounded-lg border bg-muted"
-            style={{ aspectRatio: `${imageWidth} / ${imageHeight}` }}
-            onClick={(event) => {
-              if (!selectedTerritoryId) return;
-              setAnchorAt(selectedTerritoryId, event.clientX, event.clientY);
-            }}
-          >
-            {getDraft.imageUrl ? (
-              <img src={getDraft.imageUrl} alt="Map" className="h-full w-full object-contain" draggable={false} />
-            ) : (
-              <div className="flex h-full min-h-[320px] items-center justify-center text-sm text-muted-foreground">
-                Missing map image
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <p>Pinch/wheel zoom, drag pan, drag marker to reposition.</p>
+              <div className="flex items-center gap-1">
+                <Button size="xs" variant="outline" onClick={panZoom.zoomOut}>-</Button>
+                <span className="w-12 text-center">{Math.round(panZoom.scale * 100)}%</span>
+                <Button size="xs" variant="outline" onClick={panZoom.zoomIn}>+</Button>
+                <Button size="xs" variant="outline" onClick={panZoom.reset}>Reset</Button>
               </div>
-            )}
+            </div>
 
-            {territoryIds.map((territoryId) => {
-              const anchor = anchors[territoryId];
-              if (!anchor) return null;
+            <div
+              ref={panZoom.containerRef}
+              className="relative overflow-hidden rounded-lg border bg-muted touch-none"
+              style={{ aspectRatio: `${imageWidth} / ${imageHeight}` }}
+              {...panZoom.handlers}
+              onClick={(event) => {
+                if (!selectedTerritoryId) return;
+                setAnchorAt(selectedTerritoryId, event.clientX, event.clientY);
+              }}
+            >
+              <div className="relative h-full w-full" style={panZoom.transformStyle}>
+                {getDraft.imageUrl ? (
+                  <img src={getDraft.imageUrl} alt="Map" className="h-full w-full object-contain" draggable={false} />
+                ) : (
+                  <div className="flex h-full min-h-[320px] items-center justify-center text-sm text-muted-foreground">
+                    Missing map image
+                  </div>
+                )}
 
-              const isSelected = selectedTerritoryId === territoryId;
-              const isLinkFrom = linkFromId === territoryId;
+                <svg className="pointer-events-none absolute inset-0 h-full w-full">
+                  {graphEdges.map(({ from, to }) => {
+                    const fromAnchor = anchors[from];
+                    const toAnchor = anchors[to];
+                    if (!fromAnchor || !toAnchor) return null;
 
-              return (
-                <button
-                  key={territoryId}
-                  type="button"
-                  className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 px-2 py-1 text-xs font-semibold text-white ${
-                    isLinkFrom
-                      ? "border-red-500 bg-red-600"
-                      : isSelected
-                        ? "border-blue-500 bg-blue-600"
-                        : "border-white/70 bg-black/70"
-                  }`}
-                  style={{ left: `${anchor.x * 100}%`, top: `${anchor.y * 100}%` }}
-                  onClick={(event) => {
-                    event.stopPropagation();
+                    const touchesSelected =
+                      selectedTerritoryId === from || selectedTerritoryId === to;
+                    const touchesLinkSource = linkFromId === from || linkFromId === to;
 
-                    if (linkFromId && linkFromId !== territoryId) {
-                      toggleAdjacency(linkFromId, territoryId);
-                      setLinkFromId(null);
-                      return;
-                    }
+                    return (
+                      <line
+                        key={`${from}-${to}`}
+                        x1={`${fromAnchor.x * 100}%`}
+                        y1={`${fromAnchor.y * 100}%`}
+                        x2={`${toAnchor.x * 100}%`}
+                        y2={`${toAnchor.y * 100}%`}
+                        stroke={touchesLinkSource ? "rgba(239,68,68,0.95)" : touchesSelected ? "rgba(59,130,246,0.95)" : "rgba(255,255,255,0.3)"}
+                        strokeWidth={touchesLinkSource || touchesSelected ? 3 : 1.5}
+                      />
+                    );
+                  })}
+                </svg>
 
-                    setSelectedTerritoryId(territoryId);
-                  }}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setSelectedTerritoryId(territoryId);
-                    setDraggingTerritoryId(territoryId);
-                  }}
-                >
-                  {territories[territoryId]?.name ?? territoryId}
-                </button>
-              );
-            })}
+                {territoryIds.map((territoryId) => {
+                  const anchor = anchors[territoryId];
+                  if (!anchor) return null;
+
+                  const isSelected = selectedTerritoryId === territoryId;
+                  const isLinkFrom = linkFromId === territoryId;
+                  const isInActiveContinent =
+                    !!activeContinentId &&
+                    (territoryToContinents[territoryId] ?? []).includes(activeContinentId);
+                  const showLabel = isSelected || isLinkFrom;
+
+                  return (
+                    <button
+                      key={territoryId}
+                      type="button"
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 p-2 text-xs font-semibold text-white ${
+                        isLinkFrom
+                          ? "border-red-500 bg-red-600"
+                          : isSelected
+                            ? "border-blue-500 bg-blue-600"
+                            : isInActiveContinent
+                              ? "border-emerald-400 bg-emerald-700/90"
+                            : "border-white/70 bg-black/70"
+                      }`}
+                      style={{ left: `${anchor.x * 100}%`, top: `${anchor.y * 100}%` }}
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setSelectedTerritoryId(territoryId);
+                        dragMovedRef.current = false;
+                        setDragging({
+                          territoryId,
+                          pointerId: event.pointerId,
+                          startX: event.clientX,
+                          startY: event.clientY,
+                        });
+                      }}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (dragMovedRef.current) {
+                          dragMovedRef.current = false;
+                          return;
+                        }
+
+                        if (linkFromId && linkFromId !== territoryId) {
+                          toggleAdjacency(linkFromId, territoryId);
+                          setLinkFromId(null);
+                          return;
+                        }
+
+                        if (activeContinentId) {
+                          toggleTerritoryInContinent(activeContinentId, territoryId);
+                          setSelectedTerritoryId(territoryId);
+                          return;
+                        }
+
+                        setSelectedTerritoryId(territoryId);
+                      }}
+                      title={territories[territoryId]?.name ?? territoryId}
+                    >
+                      <span className="block h-1.5 w-1.5 rounded-full bg-white/90" />
+                      {showLabel && (
+                        <span className="pointer-events-none absolute left-1/2 top-[-0.45rem] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded border bg-black/80 px-2 py-0.5 text-[10px] leading-none text-white">
+                          {territories[territoryId]?.name ?? territoryId}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <Card>
@@ -547,10 +699,29 @@ export default function AdminMapEditorPage() {
                 <Input placeholder="name" value={newTerritoryName} onChange={(e) => setNewTerritoryName(e.target.value)} />
                 <Button onClick={handleAddTerritory}>Add</Button>
               </div>
+              <Input
+                placeholder="filter territories"
+                value={territoryFilter}
+                onChange={(event) => setTerritoryFilter(event.target.value)}
+              />
 
               <div className="max-h-[280px] space-y-2 overflow-auto">
-                {territoryIds.map((territoryId) => (
-                  <div key={territoryId} className="rounded-md border p-2">
+                {filteredTerritoryIds.map((territoryId) => (
+                  <div
+                    key={territoryId}
+                    ref={(node) => {
+                      territoryCardRefs.current[territoryId] = node;
+                    }}
+                    className={`rounded-md border p-2 ${
+                      selectedTerritoryId === territoryId
+                        ? "border-blue-400/80 bg-blue-500/10"
+                        : linkFromId === territoryId
+                          ? "border-red-400/80 bg-red-500/10"
+                          : activeContinentId && (territoryToContinents[territoryId] ?? []).includes(activeContinentId)
+                            ? "border-emerald-400/70 bg-emerald-500/10"
+                          : ""
+                    }`}
+                  >
                     <div className="mb-2 flex items-center justify-between">
                       <button
                         type="button"
@@ -572,19 +743,6 @@ export default function AdminMapEditorPage() {
                       placeholder="Name"
                     />
                     <div className="mt-2 flex gap-2">
-                      <Input
-                        placeholder="continent id"
-                        value={territories[territoryId]?.continentId ?? ""}
-                        onChange={(e) =>
-                          setTerritories((prev) => ({
-                            ...prev,
-                            [territoryId]: {
-                              ...prev[territoryId],
-                              continentId: e.target.value.trim() || undefined,
-                            },
-                          }))
-                        }
-                      />
                       <Button
                         size="xs"
                         variant={linkFromId === territoryId ? "default" : "outline"}
@@ -592,11 +750,32 @@ export default function AdminMapEditorPage() {
                       >
                         {linkFromId === territoryId ? "Cancel Link" : "Link"}
                       </Button>
+                      {activeContinentId && (
+                        <Button
+                          size="xs"
+                          variant={
+                            (territoryToContinents[territoryId] ?? []).includes(activeContinentId)
+                              ? "default"
+                              : "outline"
+                          }
+                          onClick={() => toggleTerritoryInContinent(activeContinentId, territoryId)}
+                        >
+                          {(territoryToContinents[territoryId] ?? []).includes(activeContinentId)
+                            ? `Remove ${activeContinentId}`
+                            : `Add ${activeContinentId}`}
+                        </Button>
+                      )}
                     </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Continents: {(territoryToContinents[territoryId] ?? []).join(", ") || "none"}
+                    </p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
                       {anchors[territoryId]
                         ? `x=${anchors[territoryId]!.x.toFixed(3)}, y=${anchors[territoryId]!.y.toFixed(3)}`
                         : "No anchor (select and click map)"}
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {(adjacency[territoryId] ?? []).length} links
                     </p>
                   </div>
                 ))}
@@ -625,49 +804,76 @@ export default function AdminMapEditorPage() {
                   onClick={() => {
                     const id = newContinentId.trim();
                     if (!id) return;
-                    setContinentBonuses((prev) => ({ ...prev, [id]: Math.max(1, newContinentBonus) }));
+                    setContinents((prev) => ({
+                      ...prev,
+                      [id]: prev[id] ?? { territoryIds: [], bonus: Math.max(1, newContinentBonus) },
+                    }));
+                    setActiveContinentId(id);
                     setNewContinentId("");
                   }}
                 >
                   Add
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Active continent: <strong>{activeContinentId ?? "none"}</strong>. Click map nodes to add/remove territories.
+              </p>
 
               <div className="space-y-2">
-                {Object.entries(continentBonuses).map(([continentId, bonus]) => (
-                  <div key={continentId} className="flex items-center gap-2 rounded-md border p-2">
-                    <span className="min-w-0 flex-1 truncate text-sm">{continentId}</span>
+                {Object.entries(continents)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([continentId, continent]) => (
+                  <div
+                    key={continentId}
+                    className={`flex items-center gap-2 rounded-md border p-2 ${
+                      activeContinentId === continentId ? "border-emerald-400/80 bg-emerald-500/10" : ""
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 truncate text-left text-sm"
+                      onClick={() => setActiveContinentId(continentId)}
+                    >
+                      {continentId}
+                      <span className="ml-2 text-[11px] text-muted-foreground">
+                        ({continent.territoryIds.length} territories)
+                      </span>
+                    </button>
                     <Input
                       className="w-20"
                       type="number"
                       min={1}
-                      value={bonus}
+                      value={continent.bonus}
                       onChange={(e) => {
                         const next = Number(e.target.value);
-                        setContinentBonuses((prev) => ({ ...prev, [continentId]: next }));
+                        setContinents((prev) => ({
+                          ...prev,
+                          [continentId]: {
+                            ...(prev[continentId] ?? { territoryIds: [], bonus: 1 }),
+                            bonus: next,
+                          },
+                        }));
                       }}
                     />
                     <Button
                       size="xs"
+                      variant={activeContinentId === continentId ? "default" : "outline"}
+                      onClick={() => setActiveContinentId(continentId)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="xs"
                       variant="ghost"
                       onClick={() => {
-                        setContinentBonuses((prev) => {
+                        setContinents((prev) => {
                           const next = { ...prev };
                           delete next[continentId];
                           return next;
                         });
-                        setTerritories((prev) => {
-                          const next: Record<string, TerritoryInfo> = { ...prev };
-                          for (const territoryId of Object.keys(next)) {
-                            if (next[territoryId]?.continentId === continentId) {
-                              next[territoryId] = {
-                                ...next[territoryId],
-                                continentId: undefined,
-                              };
-                            }
-                          }
-                          return next;
-                        });
+                        if (activeContinentId === continentId) {
+                          setActiveContinentId(null);
+                        }
                       }}
                     >
                       Remove
@@ -682,8 +888,9 @@ export default function AdminMapEditorPage() {
             <CardHeader>
               <CardTitle>Adjacency</CardTitle>
             </CardHeader>
-            <CardContent className="text-xs text-muted-foreground">
-              Click <strong>Link</strong> on a territory, then click another territory marker on the map to toggle a connection.
+            <CardContent className="space-y-2 text-xs text-muted-foreground">
+              <p>Click <strong>Link</strong> on a territory, then click another marker to toggle a connection.</p>
+              <p>{graphEdges.length} total edges across {territoryIds.length} territories.</p>
             </CardContent>
           </Card>
         </div>
