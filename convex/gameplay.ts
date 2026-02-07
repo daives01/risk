@@ -40,6 +40,29 @@ function getGameRuleset(game: {
   return resolveEffectiveRuleset(game);
 }
 
+function extractGameWinner(events: unknown[]): {
+  winningPlayerId?: string;
+  winningTeamId?: string;
+} {
+  const gameEnded = events.find(
+    (event): event is { type: "GameEnded"; winningPlayerId?: unknown; winningTeamId?: unknown } =>
+      typeof event === "object" &&
+      event !== null &&
+      "type" in event &&
+      (event as { type?: unknown }).type === "GameEnded",
+  );
+  if (!gameEnded) return {};
+
+  return {
+    ...(typeof gameEnded.winningPlayerId === "string"
+      ? { winningPlayerId: gameEnded.winningPlayerId }
+      : {}),
+    ...(typeof gameEnded.winningTeamId === "string"
+      ? { winningTeamId: gameEnded.winningTeamId }
+      : {}),
+  };
+}
+
 async function enforceRateLimit(
   db: GenericDatabaseReader<DataModel>,
   gameId: Id<"games">,
@@ -156,12 +179,19 @@ export const submitAction = mutation({
 
     // Check if game is over
     const isGameOver = result.state.turn.phase === "GameOver";
+    const winner = isGameOver ? extractGameWinner(result.events as unknown[]) : {};
 
     // Persist new state
     await ctx.db.patch(args.gameId, {
       state: result.state,
       stateVersion: result.state.stateVersion,
-      ...(isGameOver ? { status: "finished" as const, finishedAt: Date.now() } : {}),
+      ...(isGameOver
+        ? {
+            status: "finished" as const,
+            finishedAt: Date.now(),
+            ...winner,
+          }
+        : {}),
     });
 
     return {
@@ -280,11 +310,18 @@ export const submitReinforcementPlacements = mutation({
     });
 
     const isGameOver = nextState.turn.phase === "GameOver";
+    const winner = isGameOver ? extractGameWinner(events) : {};
 
     await ctx.db.patch(args.gameId, {
       state: nextState,
       stateVersion: nextState.stateVersion,
-      ...(isGameOver ? { status: "finished" as const, finishedAt: Date.now() } : {}),
+      ...(isGameOver
+        ? {
+            status: "finished" as const,
+            finishedAt: Date.now(),
+            ...winner,
+          }
+        : {}),
     });
 
     return {
@@ -443,6 +480,7 @@ export const resign = mutation({
           }]
         : []),
     ];
+    const winner = isGameOver ? extractGameWinner(events) : {};
 
     await ctx.db.insert("gameActions", {
       gameId,
@@ -458,7 +496,13 @@ export const resign = mutation({
     await ctx.db.patch(gameId, {
       state: newState,
       stateVersion: newState.stateVersion,
-      ...(isGameOver ? { status: "finished" as const, finishedAt: Date.now() } : {}),
+      ...(isGameOver
+        ? {
+            status: "finished" as const,
+            finishedAt: Date.now(),
+            ...winner,
+          }
+        : {}),
     });
 
     return { events, newVersion: newState.stateVersion };

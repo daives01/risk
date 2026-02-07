@@ -254,6 +254,16 @@ export const listMyGames = query({
       playerDocs.map(async (pd) => {
         const game = await ctx.db.get(pd.gameId);
         if (!game) return null;
+
+        let result: "won" | "lost" | null = null;
+        if (game.status === "finished") {
+          if (game.winningPlayerId) {
+            result = pd.enginePlayerId === game.winningPlayerId ? "won" : "lost";
+          } else if (game.winningTeamId) {
+            result = pd.teamId === game.winningTeamId ? "won" : "lost";
+          }
+        }
+
         return {
           _id: game._id,
           name: game.name,
@@ -264,8 +274,8 @@ export const listMyGames = query({
           createdAt: game.createdAt,
           startedAt: game.startedAt ?? null,
           finishedAt: game.finishedAt ?? null,
-          myRole: pd.role,
           myEnginePlayerId: pd.enginePlayerId ?? null,
+          result,
         };
       }),
     );

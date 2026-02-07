@@ -113,6 +113,20 @@ export const listAdminMaps = query({
   },
 });
 
+export const isCurrentUserAdmin = query({
+  handler: async (ctx) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) return false;
+
+    const admin = await ctx.db
+      .query("admins")
+      .withIndex("by_userId", (q: any) => q.eq("userId", String(user._id)))
+      .unique();
+
+    return Boolean(admin);
+  },
+});
+
 export const getDraft = query({
   args: { mapId: v.string() },
   handler: async (ctx, { mapId }) => {

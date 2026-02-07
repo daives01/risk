@@ -66,6 +66,8 @@ export default defineSchema({
     createdAt: v.number(),
     startedAt: v.optional(v.number()),
     finishedAt: v.optional(v.number()),
+    winningPlayerId: v.optional(v.string()),
+    winningTeamId: v.optional(v.string()),
     state: v.optional(v.any()),
     stateVersion: v.optional(v.number()),
   }),
