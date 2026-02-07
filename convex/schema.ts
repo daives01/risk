@@ -71,6 +71,7 @@ export default defineSchema({
     gameId: v.id("games"),
     userId: v.string(),
     displayName: v.string(),
+    color: v.optional(v.string()),
     role: v.union(v.literal("host"), v.literal("player")),
     joinedAt: v.number(),
     enginePlayerId: v.optional(v.string()),
@@ -100,6 +101,19 @@ export default defineSchema({
     .index("by_gameId", ["gameId"])
     .index("by_gameId_index", ["gameId", "index"])
     .index("by_gameId_playerId", ["gameId", "playerId"]),
+  gameChatMessages: defineTable({
+    gameId: v.id("games"),
+    channel: v.union(v.literal("global"), v.literal("team")),
+    teamId: v.optional(v.string()),
+    senderUserId: v.string(),
+    senderDisplayName: v.string(),
+    senderEnginePlayerId: v.optional(v.string()),
+    text: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_gameId_createdAt", ["gameId", "createdAt"])
+    .index("by_gameId_channel_createdAt", ["gameId", "channel", "createdAt"])
+    .index("by_gameId_channel_teamId_createdAt", ["gameId", "channel", "teamId", "createdAt"]),
   maps: defineTable({
     mapId: v.string(),
     name: v.string(),
