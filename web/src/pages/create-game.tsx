@@ -10,16 +10,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type RulesetOverridesInput = {
-  combat: { allowAttackerDiceChoice: boolean };
   fortify: { fortifyMode: "adjacent" | "connected"; maxFortifiesPerTurn?: number };
-  cards: { forcedTradeHandSize: number; awardCardOnCapture: boolean };
+  cards: { forcedTradeHandSize: number; tradeValues: number[]; tradeValueOverflow: "repeatLast" | "continueByFive" };
   teams: {
-    preventAttackingTeammates: boolean;
     allowPlaceOnTeammate: boolean;
     allowFortifyWithTeammate: boolean;
     allowFortifyThroughTeammates: boolean;
   };
 };
+
+const CARD_INCREMENT_PRESETS = {
+  classic: {
+    label: "Classic (4,6,8,10,12,15 then +5)",
+    tradeValues: [4, 6, 8, 10, 12, 15],
+    tradeValueOverflow: "continueByFive" as const,
+  },
+  flat: {
+    label: "Flat (5 every trade)",
+    tradeValues: [5],
+    tradeValueOverflow: "repeatLast" as const,
+  },
+  fast: {
+    label: "Fast (6,8,10,12,15,20 then +5)",
+    tradeValues: [6, 8, 10, 12, 15, 20],
+    tradeValueOverflow: "continueByFive" as const,
+  },
+} as const;
 
 export default function CreateGamePage() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
@@ -36,9 +52,7 @@ export default function CreateGamePage() {
   const [fortifyMode, setFortifyMode] = useState<"adjacent" | "connected">("connected");
   const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | "unlimited">("unlimited");
   const [forcedTradeHandSize, setForcedTradeHandSize] = useState(5);
-  const [awardCardOnCapture, setAwardCardOnCapture] = useState(true);
-  const [allowAttackerDiceChoice, setAllowAttackerDiceChoice] = useState(true);
-  const [preventAttackingTeammates, setPreventAttackingTeammates] = useState(true);
+  const [cardIncrementPreset, setCardIncrementPreset] = useState<keyof typeof CARD_INCREMENT_PRESETS>("classic");
   const [allowPlaceOnTeammate, setAllowPlaceOnTeammate] = useState(true);
   const [allowFortifyWithTeammate, setAllowFortifyWithTeammate] = useState(true);
   const [allowFortifyThroughTeammates, setAllowFortifyThroughTeammates] = useState(true);
@@ -82,14 +96,16 @@ export default function CreateGamePage() {
     setLoading(true);
     try {
       const rulesetOverrides: RulesetOverridesInput = {
-        combat: { allowAttackerDiceChoice },
         fortify: {
           fortifyMode,
           ...(maxFortifiesPerTurn === "unlimited" ? {} : { maxFortifiesPerTurn }),
         },
-        cards: { forcedTradeHandSize, awardCardOnCapture },
+        cards: {
+          forcedTradeHandSize,
+          tradeValues: [...CARD_INCREMENT_PRESETS[cardIncrementPreset].tradeValues],
+          tradeValueOverflow: CARD_INCREMENT_PRESETS[cardIncrementPreset].tradeValueOverflow,
+        },
         teams: {
-          preventAttackingTeammates,
           allowPlaceOnTeammate,
           allowFortifyWithTeammate,
           allowFortifyThroughTeammates,
@@ -183,34 +199,6 @@ export default function CreateGamePage() {
                 </select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="teamModeEnabled">Team Mode</Label>
-                <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
-                  <input
-                    id="teamModeEnabled"
-                    type="checkbox"
-                    checked={teamModeEnabled}
-                    onChange={(event) => setTeamModeEnabled(event.target.checked)}
-                  />
-                  Enable full team play
-                </label>
-              </div>
-
-              {teamModeEnabled && (
-                <div className="space-y-2">
-                  <Label htmlFor="teamAssignmentStrategy">Team Assignment</Label>
-                  <select
-                    id="teamAssignmentStrategy"
-                    value={teamAssignmentStrategy}
-                    onChange={(event) => setTeamAssignmentStrategy(event.target.value as "manual" | "balancedRandom")}
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
-                  >
-                    <option value="manual">Manual in lobby</option>
-                    <option value="balancedRandom">Balanced random</option>
-                  </select>
-                </div>
-              )}
-
               <div className="space-y-3 rounded-lg border bg-background/70 p-3">
                 <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Game Rules</p>
 
@@ -261,34 +249,43 @@ export default function CreateGamePage() {
                   />
                 </div>
 
-                <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={awardCardOnCapture}
-                    onChange={(event) => setAwardCardOnCapture(event.target.checked)}
-                  />
-                  Award card after capture
-                </label>
+                <div className="space-y-2">
+                  <Label htmlFor="cardIncrementPreset">Card Reward Increment</Label>
+                  <select
+                    id="cardIncrementPreset"
+                    value={cardIncrementPreset}
+                    onChange={(event) => setCardIncrementPreset(event.target.value as keyof typeof CARD_INCREMENT_PRESETS)}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                  >
+                    {(Object.entries(CARD_INCREMENT_PRESETS) as Array<[keyof typeof CARD_INCREMENT_PRESETS, (typeof CARD_INCREMENT_PRESETS)[keyof typeof CARD_INCREMENT_PRESETS]]>).map(([key, preset]) => (
+                      <option key={key} value={key}>{preset.label}</option>
+                    ))}
+                  </select>
+                </div>
 
                 <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
                   <input
+                    id="teamModeEnabled"
                     type="checkbox"
-                    checked={allowAttackerDiceChoice}
-                    onChange={(event) => setAllowAttackerDiceChoice(event.target.checked)}
+                    checked={teamModeEnabled}
+                    onChange={(event) => setTeamModeEnabled(event.target.checked)}
                   />
-                  Allow attacker dice choice
+                  Enable team mode
                 </label>
 
                 {teamModeEnabled && (
-                  <>
-                    <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={preventAttackingTeammates}
-                        onChange={(event) => setPreventAttackingTeammates(event.target.checked)}
-                      />
-                      Prevent attacking teammates
-                    </label>
+                  <div className="space-y-2 rounded-md border border-border/70 bg-background/60 p-3">
+                    <Label htmlFor="teamAssignmentStrategy">Team Assignment</Label>
+                    <select
+                      id="teamAssignmentStrategy"
+                      value={teamAssignmentStrategy}
+                      onChange={(event) => setTeamAssignmentStrategy(event.target.value as "manual" | "balancedRandom")}
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
+                    >
+                      <option value="manual">Manual in lobby</option>
+                      <option value="balancedRandom">Balanced random</option>
+                    </select>
+
                     <label className="flex items-center gap-2 rounded-md border bg-background/75 px-3 py-2 text-sm">
                       <input
                         type="checkbox"
@@ -313,7 +310,7 @@ export default function CreateGamePage() {
                       />
                       Allow fortify through teammate chain
                     </label>
-                  </>
+                  </div>
                 )}
               </div>
             </CardContent>

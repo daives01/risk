@@ -262,15 +262,31 @@ describe("TradeCards - trade values schedule", () => {
   });
 
   test("overflow repeats last value", () => {
-    // tradeValues = [4, 6, 8, 10, 12, 15], so index 6+ should give 15
+    const repeatLastConfig: CardsConfig = {
+      ...cardsConfig,
+      tradeValueOverflow: "repeatLast",
+    };
+    // tradeValues = [4, 6, 8, 10, 12, 15], so index 6+ should give 15 when repeating
+    const state = makeState({ tradesCompleted: 10 });
+    const result = applyAction(
+      state, P1, trade(C1, C2, C3),
+      undefined, undefined, undefined, repeatLastConfig,
+    );
+    const event = result.events[0] as CardsTraded;
+    // tradeValues[last]=15 + territory bonus 2 = 17
+    expect(event.value).toBe(17);
+  });
+
+  test("overflow continues by five in classic mode", () => {
+    // default overflow continues +5 after schedule end:
+    // tradesCompleted=10 -> 15 + (10 - 6 + 1) * 5 = 40
     const state = makeState({ tradesCompleted: 10 });
     const result = applyAction(
       state, P1, trade(C1, C2, C3),
       undefined, undefined, undefined, cardsConfig,
     );
     const event = result.events[0] as CardsTraded;
-    // tradeValues[last]=15 + territory bonus 2 = 17
-    expect(event.value).toBe(17);
+    expect(event.value).toBe(42); // 40 + territory bonus 2
   });
 });
 

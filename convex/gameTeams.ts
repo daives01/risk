@@ -1,14 +1,71 @@
 import { createRng, defaultRuleset } from "risk-engine";
 import type { TeamsConfig } from "risk-engine";
 
-export const TEAM_IDS = ["team-1", "team-2"] as const;
-export type TeamId = (typeof TEAM_IDS)[number];
+const MIN_TEAM_COUNT = 2;
+const MAX_TEAM_NAME_LENGTH = 24;
+
+export type TeamId = string;
+export type TeamNamesById = Record<string, string>;
 
 export type TeamAssignmentStrategy = "manual" | "balancedRandom";
 
 export interface TeamModeConfig {
   enabled: boolean;
   assignmentStrategy: TeamAssignmentStrategy;
+}
+
+export function getTeamIds(teamCount: number): TeamId[] {
+  if (!Number.isInteger(teamCount) || teamCount < MIN_TEAM_COUNT) {
+    throw new Error(`Team count must be an integer >= ${MIN_TEAM_COUNT}`);
+  }
+
+  return Array.from({ length: teamCount }, (_, index) => `team-${index + 1}`);
+}
+
+export function getDefaultTeamNames(teamIds: readonly string[]): TeamNamesById {
+  return Object.fromEntries(
+    teamIds.map((teamId, index) => [teamId, `Team ${index + 1}`]),
+  );
+}
+
+export function resolveTeamNames(
+  teamIds: readonly string[],
+  persisted?: Record<string, string> | null,
+): TeamNamesById {
+  const defaults = getDefaultTeamNames(teamIds);
+  if (!persisted) return defaults;
+
+  for (const teamId of teamIds) {
+    const raw = persisted[teamId];
+    if (!raw) continue;
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) continue;
+    defaults[teamId] = trimmed;
+  }
+
+  return defaults;
+}
+
+export function validateTeamNameUniqueness(
+  teamId: string,
+  name: string,
+  teamNamesById: TeamNamesById,
+): void {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) {
+    throw new Error("Team name cannot be empty");
+  }
+  if (trimmed.length > MAX_TEAM_NAME_LENGTH) {
+    throw new Error(`Team name must be ${MAX_TEAM_NAME_LENGTH} characters or fewer`);
+  }
+
+  const target = trimmed.toLowerCase();
+  for (const [otherTeamId, otherName] of Object.entries(teamNamesById)) {
+    if (otherTeamId === teamId) continue;
+    if (otherName.trim().toLowerCase() === target) {
+      throw new Error("Team names must be unique");
+    }
+  }
 }
 
 export function resolveTeamModeConfig(game: {
@@ -27,7 +84,7 @@ export function resolveEngineTeamsConfig(teamMode: TeamModeConfig): TeamsConfig 
   return {
     ...defaultRuleset.teams,
     teamsEnabled: true,
-    preventAttackingTeammates: true,
+    preventAttackingTeammates: false,
     allowPlaceOnTeammate: true,
     allowFortifyWithTeammate: true,
     allowFortifyThroughTeammates: true,
@@ -38,14 +95,16 @@ export function resolveEngineTeamsConfig(teamMode: TeamModeConfig): TeamsConfig 
 
 export function createBalancedTeamAssignments(
   userIds: readonly string[],
+  teamCount: number,
   seed: string,
-): Record<string, TeamId> {
+): Record<string, string> {
+  const teamIds = getTeamIds(teamCount);
   const rng = createRng({ seed, index: 0 });
   const shuffled = rng.shuffle([...userIds]);
 
-  const assignments: Record<string, TeamId> = {};
+  const assignments: Record<string, string> = {};
   for (let i = 0; i < shuffled.length; i += 1) {
-    assignments[shuffled[i]!] = TEAM_IDS[i % TEAM_IDS.length]!;
+    assignments[shuffled[i]!] = teamIds[i % teamIds.length]!;
   }
 
   return assignments;
@@ -54,14 +113,18 @@ export function createBalancedTeamAssignments(
 export function validateTeamAssignments(
   userIds: readonly string[],
   assignments: Record<string, string | undefined>,
+  teamIds: readonly string[],
 ): string[] {
   const errors: string[] = [];
   if (userIds.length === 0) return errors;
+  if (teamIds.length < MIN_TEAM_COUNT) {
+    errors.push(`At least ${MIN_TEAM_COUNT} teams are required`);
+    return errors;
+  }
 
-  const teamSizes: Record<TeamId, number> = {
-    "team-1": 0,
-    "team-2": 0,
-  };
+  const teamSizes: Record<string, number> = Object.fromEntries(
+    teamIds.map((teamId) => [teamId, 0]),
+  );
 
   for (const userId of userIds) {
     const teamId = assignments[userId];
@@ -69,18 +132,22 @@ export function validateTeamAssignments(
       errors.push("Every player must be assigned to a team");
       break;
     }
-    if (!TEAM_IDS.includes(teamId as TeamId)) {
+    if (!teamIds.includes(teamId)) {
       errors.push(`Invalid team id: ${teamId}`);
       continue;
     }
-    teamSizes[teamId as TeamId] += 1;
+    teamSizes[teamId] += 1;
   }
 
-  if (teamSizes["team-1"] === 0 || teamSizes["team-2"] === 0) {
+  const hasEmptyTeam = teamIds.some((teamId) => (teamSizes[teamId] ?? 0) === 0);
+  if (hasEmptyTeam) {
     errors.push("Each team must have at least one player");
   }
 
-  if (Math.abs(teamSizes["team-1"] - teamSizes["team-2"]) > 1) {
+  const sizes = teamIds.map((teamId) => teamSizes[teamId] ?? 0);
+  const minSize = Math.min(...sizes);
+  const maxSize = Math.max(...sizes);
+  if (maxSize - minSize > 1) {
     errors.push("Teams must be balanced (size difference at most 1)");
   }
 

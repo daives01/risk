@@ -22,14 +22,17 @@ import {
 } from "./mapPlayerLimits";
 import {
   createBalancedTeamAssignments,
+  getTeamIds,
+  resolveTeamNames,
   resolveTeamModeConfig,
+  validateTeamNameUniqueness,
   validateTeamAssignments,
-  type TeamId as LobbyTeamId,
 } from "./gameTeams";
 import {
   resolveEffectiveRuleset,
   resolveRulesetFromOverrides,
   rulesetOverridesValidator,
+  sanitizeRulesetOverrides,
   type RulesetOverrides,
 } from "./rulesets";
 import {
@@ -50,6 +53,17 @@ function generateInviteCode(): string {
 
 function toStoredRuleset(ruleset: RulesetConfig) {
   return JSON.parse(JSON.stringify(ruleset));
+}
+
+function resolveLobbyTeamCount(game: {
+  teamModeEnabled?: boolean;
+  teamCount?: number;
+}, playerCount: number): number {
+  if (!game.teamModeEnabled) return 0;
+  const defaultCount = Math.min(2, Math.max(2, playerCount));
+  const raw = game.teamCount ?? defaultCount;
+  const bounded = Math.max(2, Math.min(raw, Math.max(2, playerCount)));
+  return Number.isInteger(bounded) ? bounded : defaultCount;
 }
 
 export const createGame = mutation({
@@ -96,8 +110,13 @@ export const createGame = mutation({
       throw new Error(`maxPlayers cannot exceed ${PLAYER_COLOR_PALETTE.length} due to color limits`);
     }
 
-    const rulesetOverrides = args.rulesetOverrides as RulesetOverrides | undefined;
+    const rulesetOverrides = sanitizeRulesetOverrides(
+      args.rulesetOverrides as RulesetOverrides | undefined,
+    );
     resolveRulesetFromOverrides(args.teamModeEnabled ?? false, rulesetOverrides);
+    const teamModeEnabled = args.teamModeEnabled ?? false;
+    const teamIds = teamModeEnabled ? getTeamIds(2) : [];
+    const teamNames = teamModeEnabled ? resolveTeamNames(teamIds) : undefined;
 
     const gameId = await ctx.db.insert("games", {
       name: args.name,
@@ -105,7 +124,9 @@ export const createGame = mutation({
       status: "lobby",
       visibility: args.visibility ?? "unlisted",
       maxPlayers,
-      teamModeEnabled: args.teamModeEnabled ?? false,
+      teamModeEnabled,
+      teamCount: teamModeEnabled ? 2 : undefined,
+      teamNames,
       teamAssignmentStrategy: args.teamAssignmentStrategy ?? "manual",
       rulesetOverrides,
       createdBy: String(user._id),
@@ -239,6 +260,9 @@ export const getLobby = query({
       .first();
 
     const playerColors = resolvePlayerColors(players);
+    const teamCount = resolveLobbyTeamCount(game, players.length);
+    const teamIds = teamCount > 0 ? getTeamIds(teamCount) : [];
+    const teamNames = resolveTeamNames(teamIds, game.teamNames as Record<string, string> | undefined);
 
     return {
       game: {
@@ -252,6 +276,8 @@ export const getLobby = query({
         createdAt: game.createdAt,
         startedAt: game.startedAt ?? null,
         teamModeEnabled: game.teamModeEnabled ?? false,
+        teamCount: game.teamModeEnabled ? teamCount : null,
+        teamNames: game.teamModeEnabled ? teamNames : null,
         teamAssignmentStrategy: game.teamAssignmentStrategy ?? "manual",
         rulesetOverrides: game.rulesetOverrides ?? null,
         effectiveRuleset: game.effectiveRuleset ?? null,
@@ -313,7 +339,7 @@ export const setPlayerTeam = mutation({
   args: {
     gameId: v.id("games"),
     userId: v.string(),
-    teamId: v.union(v.literal("team-1"), v.literal("team-2")),
+    teamId: v.string(),
   },
   handler: async (ctx, { gameId, userId, teamId }) => {
     const user = await authComponent.safeGetAuthUser(ctx);
@@ -327,6 +353,16 @@ export const setPlayerTeam = mutation({
     }
     if (!game.teamModeEnabled) {
       throw new Error("Team mode is not enabled for this game");
+    }
+
+    const playerDocs = await ctx.db
+      .query("gamePlayers")
+      .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
+      .collect();
+    const teamCount = resolveLobbyTeamCount(game, playerDocs.length);
+    const teamIds = getTeamIds(teamCount);
+    if (!teamIds.includes(teamId)) {
+      throw new Error("Invalid team id");
     }
 
     const playerDoc = await ctx.db
@@ -363,9 +399,11 @@ export const rebalanceTeams = mutation({
       .query("gamePlayers")
       .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
       .collect();
+    const teamCount = resolveLobbyTeamCount(game, playerDocs.length);
 
     const assignments = createBalancedTeamAssignments(
       playerDocs.map((playerDoc) => playerDoc.userId),
+      teamCount,
       `${gameId}:lobby-teams`,
     );
 
@@ -374,6 +412,89 @@ export const rebalanceTeams = mutation({
         teamId: assignments[playerDoc.userId]!,
       });
     }
+  },
+});
+
+export const setTeamCount = mutation({
+  args: {
+    gameId: v.id("games"),
+    teamCount: v.number(),
+  },
+  handler: async (ctx, { gameId, teamCount }) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+    if (!Number.isInteger(teamCount)) throw new Error("teamCount must be an integer");
+
+    const game = await ctx.db.get(gameId);
+    if (!game) throw new Error("Game not found");
+    if (game.status !== "lobby") throw new Error("Game is not in lobby");
+    if (game.createdBy !== String(user._id)) {
+      throw new Error("Only the host can update team count");
+    }
+    if (!game.teamModeEnabled) {
+      throw new Error("Team mode is not enabled for this game");
+    }
+
+    const playerDocs = await ctx.db
+      .query("gamePlayers")
+      .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
+      .collect();
+    const maxTeams = Math.max(2, playerDocs.length);
+    if (teamCount < 2 || teamCount > maxTeams) {
+      throw new Error(`Team count must be between 2 and ${maxTeams}`);
+    }
+
+    const teamIds = getTeamIds(teamCount);
+    const teamNames = resolveTeamNames(teamIds, game.teamNames as Record<string, string> | undefined);
+
+    await ctx.db.patch(gameId, {
+      teamCount,
+      teamNames,
+    });
+
+    for (const playerDoc of playerDocs) {
+      if (playerDoc.teamId && !teamIds.includes(playerDoc.teamId)) {
+        await ctx.db.patch(playerDoc._id, { teamId: undefined });
+      }
+    }
+  },
+});
+
+export const setTeamName = mutation({
+  args: {
+    gameId: v.id("games"),
+    teamId: v.string(),
+    name: v.string(),
+  },
+  handler: async (ctx, { gameId, teamId, name }) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+
+    const game = await ctx.db.get(gameId);
+    if (!game) throw new Error("Game not found");
+    if (game.status !== "lobby") throw new Error("Game is not in lobby");
+    if (game.createdBy !== String(user._id)) {
+      throw new Error("Only the host can rename teams");
+    }
+    if (!game.teamModeEnabled) {
+      throw new Error("Team mode is not enabled for this game");
+    }
+
+    const playerDocs = await ctx.db
+      .query("gamePlayers")
+      .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
+      .collect();
+    const teamCount = resolveLobbyTeamCount(game, playerDocs.length);
+    const teamIds = getTeamIds(teamCount);
+    if (!teamIds.includes(teamId)) {
+      throw new Error("Invalid team id");
+    }
+
+    const teamNames = resolveTeamNames(teamIds, game.teamNames as Record<string, string> | undefined);
+    validateTeamNameUniqueness(teamId, name, teamNames);
+    teamNames[teamId] = name.trim();
+
+    await ctx.db.patch(gameId, { teamNames });
   },
 });
 
@@ -393,13 +514,16 @@ export const setRulesetOverrides = mutation({
       throw new Error("Only the host can update game rules");
     }
 
+    const sanitized = sanitizeRulesetOverrides(
+      rulesetOverrides as RulesetOverrides | undefined,
+    );
     const effectiveRuleset = resolveRulesetFromOverrides(
       game.teamModeEnabled ?? false,
-      rulesetOverrides as RulesetOverrides | undefined,
+      sanitized,
     );
 
     await ctx.db.patch(gameId, {
-      rulesetOverrides,
+      rulesetOverrides: sanitized,
       effectiveRuleset: toStoredRuleset(effectiveRuleset),
     });
   },
@@ -472,21 +596,25 @@ export const startGame = mutation({
     );
     const playerColors = resolvePlayerColors(playerDocs);
 
-    let teamAssignmentsByUserId: Record<string, LobbyTeamId> = {};
+    let teamAssignmentsByUserId: Record<string, string | undefined> = {};
     if (teamMode.enabled) {
+      const teamCount = resolveLobbyTeamCount(game, playerDocs.length);
+      const teamIds = getTeamIds(teamCount);
       if (teamMode.assignmentStrategy === "balancedRandom") {
         teamAssignmentsByUserId = createBalancedTeamAssignments(
           playerDocs.map((playerDoc) => playerDoc.userId),
+          teamCount,
           `${gameId}:start-teams`,
         );
       } else {
         teamAssignmentsByUserId = Object.fromEntries(
-          playerDocs.map((playerDoc) => [playerDoc.userId, playerDoc.teamId as LobbyTeamId]),
+          playerDocs.map((playerDoc) => [playerDoc.userId, playerDoc.teamId]),
         );
       }
       const assignmentErrors = validateTeamAssignments(
         playerDocs.map((playerDoc) => playerDoc.userId),
         teamAssignmentsByUserId,
+        teamIds,
       );
       if (assignmentErrors.length > 0) {
         throw new Error(assignmentErrors[0]);

@@ -49,7 +49,7 @@ export interface DeckDefinitionConfig {
 
 export interface CardsConfig {
   readonly tradeValues: readonly number[];
-  readonly tradeValueOverflow: "repeatLast";
+  readonly tradeValueOverflow: "repeatLast" | "continueByFive";
   readonly forcedTradeHandSize: number;
   readonly tradeSets: TradeSetsConfig;
   readonly territoryTradeBonus: TerritoryTradeBonusConfig;
@@ -113,7 +113,7 @@ export const defaultRuleset: RulesetConfig = {
 
   cards: {
     tradeValues: [4, 6, 8, 10, 12, 15],
-    tradeValueOverflow: "repeatLast",
+    tradeValueOverflow: "continueByFive",
     forcedTradeHandSize: 5,
     tradeSets: {
       allowThreeOfAKind: true,

@@ -747,10 +747,12 @@ function handleTradeCards(
 
   // Compute trade value
   const tradeIndex = state.tradesCompleted;
-  const { tradeValues } = cardsConfig;
+  const { tradeValues, tradeValueOverflow } = cardsConfig;
   const tradeValue = tradeIndex < tradeValues.length
     ? tradeValues[tradeIndex]!
-    : tradeValues[tradeValues.length - 1]!; // repeat last
+    : tradeValueOverflow === "continueByFive"
+      ? tradeValues[tradeValues.length - 1]! + (tradeIndex - tradeValues.length + 1) * 5
+      : tradeValues[tradeValues.length - 1]!;
 
   // Territory trade bonus
   let bonus = 0;

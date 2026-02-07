@@ -10,16 +10,49 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { canEditLobbyPlayerColor, getLobbyColorOptions } from "@/lib/lobby-player-colors";
 
 type RulesetOverridesInput = {
-  combat: { allowAttackerDiceChoice: boolean };
   fortify: { fortifyMode: "adjacent" | "connected"; maxFortifiesPerTurn?: number };
-  cards: { forcedTradeHandSize: number; awardCardOnCapture: boolean };
+  cards: { forcedTradeHandSize: number; tradeValues: number[]; tradeValueOverflow: "repeatLast" | "continueByFive" };
   teams: {
-    preventAttackingTeammates: boolean;
     allowPlaceOnTeammate: boolean;
     allowFortifyWithTeammate: boolean;
     allowFortifyThroughTeammates: boolean;
   };
 };
+
+const CARD_INCREMENT_PRESETS = {
+  classic: {
+    label: "Classic (4,6,8,10,12,15 then +5)",
+    tradeValues: [4, 6, 8, 10, 12, 15],
+    tradeValueOverflow: "continueByFive" as const,
+  },
+  flat: {
+    label: "Flat (5 every trade)",
+    tradeValues: [5],
+    tradeValueOverflow: "repeatLast" as const,
+  },
+  fast: {
+    label: "Fast (6,8,10,12,15,20 then +5)",
+    tradeValues: [6, 8, 10, 12, 15, 20],
+    tradeValueOverflow: "continueByFive" as const,
+  },
+} as const;
+
+function resolveCardPresetKey(
+  tradeValues?: number[],
+  tradeValueOverflow?: "repeatLast" | "continueByFive",
+): keyof typeof CARD_INCREMENT_PRESETS {
+  if (!tradeValues) return "classic";
+  for (const [key, preset] of Object.entries(CARD_INCREMENT_PRESETS) as Array<
+    [keyof typeof CARD_INCREMENT_PRESETS, (typeof CARD_INCREMENT_PRESETS)[keyof typeof CARD_INCREMENT_PRESETS]]
+  >) {
+    if (preset.tradeValueOverflow !== (tradeValueOverflow ?? "continueByFive")) continue;
+    if (preset.tradeValues.length !== tradeValues.length) continue;
+    if (preset.tradeValues.every((value, index) => value === tradeValues[index])) {
+      return key;
+    }
+  }
+  return "classic";
+}
 
 export default function LobbyPage() {
   const { gameId } = useParams<{ gameId: string }>();
@@ -31,6 +64,8 @@ export default function LobbyPage() {
   const startGame = useMutation(api.lobby.startGame);
   const setPlayerTeam = useMutation(api.lobby.setPlayerTeam);
   const rebalanceTeams = useMutation(api.lobby.rebalanceTeams);
+  const setTeamCountMutation = useMutation(api.lobby.setTeamCount);
+  const setTeamNameMutation = useMutation(api.lobby.setTeamName);
   const setRulesetOverrides = useMutation(api.lobby.setRulesetOverrides);
   const setPlayerColor = useMutation(api.lobby.setPlayerColor);
 
@@ -38,15 +73,16 @@ export default function LobbyPage() {
   const [starting, setStarting] = useState(false);
   const [rebalancing, setRebalancing] = useState(false);
   const [savingRules, setSavingRules] = useState(false);
+  const [savingTeams, setSavingTeams] = useState(false);
   const [fortifyMode, setFortifyMode] = useState<"adjacent" | "connected">("connected");
   const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | "unlimited">("unlimited");
   const [forcedTradeHandSize, setForcedTradeHandSize] = useState(5);
-  const [awardCardOnCapture, setAwardCardOnCapture] = useState(true);
-  const [allowAttackerDiceChoice, setAllowAttackerDiceChoice] = useState(true);
-  const [preventAttackingTeammates, setPreventAttackingTeammates] = useState(true);
+  const [cardIncrementPreset, setCardIncrementPreset] = useState<keyof typeof CARD_INCREMENT_PRESETS>("classic");
   const [allowPlaceOnTeammate, setAllowPlaceOnTeammate] = useState(true);
   const [allowFortifyWithTeammate, setAllowFortifyWithTeammate] = useState(true);
   const [allowFortifyThroughTeammates, setAllowFortifyThroughTeammates] = useState(true);
+  const [teamCountDraft, setTeamCountDraft] = useState(2);
+  const [teamNameDrafts, setTeamNameDrafts] = useState<Record<string, string>>({});
   const [pendingColorByUserId, setPendingColorByUserId] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
@@ -60,12 +96,14 @@ export default function LobbyPage() {
         : overrides.fortify.maxFortifiesPerTurn,
     );
     setForcedTradeHandSize(overrides?.cards?.forcedTradeHandSize ?? 5);
-    setAwardCardOnCapture(overrides?.cards?.awardCardOnCapture ?? true);
-    setAllowAttackerDiceChoice(overrides?.combat?.allowAttackerDiceChoice ?? true);
-    setPreventAttackingTeammates(overrides?.teams?.preventAttackingTeammates ?? true);
+    setCardIncrementPreset(
+      resolveCardPresetKey(overrides?.cards?.tradeValues, overrides?.cards?.tradeValueOverflow),
+    );
     setAllowPlaceOnTeammate(overrides?.teams?.allowPlaceOnTeammate ?? true);
     setAllowFortifyWithTeammate(overrides?.teams?.allowFortifyWithTeammate ?? true);
     setAllowFortifyThroughTeammates(overrides?.teams?.allowFortifyThroughTeammates ?? true);
+    setTeamCountDraft(lobby.game.teamCount ?? 2);
+    setTeamNameDrafts((lobby.game.teamNames as Record<string, string> | null) ?? {});
   }, [lobby]);
 
   if (sessionPending) {
@@ -101,14 +139,23 @@ export default function LobbyPage() {
   const isHost = lobby.game.createdBy === userId;
   const teamModeEnabled = lobby.game.teamModeEnabled;
   const inviteUrl = lobby.inviteCode ? `${window.location.origin}/join/${lobby.inviteCode}` : null;
-  const team1Count = lobby.players.filter((player) => player.teamId === "team-1").length;
-  const team2Count = lobby.players.filter((player) => player.teamId === "team-2").length;
+  const teamCount = lobby.game.teamCount ?? 2;
+  const teamIds = teamModeEnabled
+    ? Array.from({ length: teamCount }, (_, index) => `team-${index + 1}`)
+    : [];
+  const teamNames = (lobby.game.teamNames as Record<string, string> | null) ?? {};
+  const teamLabel = (teamId: string) => teamNames[teamId] ?? teamNameDrafts[teamId] ?? teamId;
+  const teamSizes = Object.fromEntries(
+    teamIds.map((teamId) => [teamId, lobby.players.filter((player) => player.teamId === teamId).length]),
+  );
   const playersMissingTeam = lobby.players.filter((player) => !player.teamId).length;
+  const minTeamSize = teamIds.length > 0 ? Math.min(...teamIds.map((teamId) => teamSizes[teamId] ?? 0)) : 0;
+  const maxTeamSize = teamIds.length > 0 ? Math.max(...teamIds.map((teamId) => teamSizes[teamId] ?? 0)) : 0;
+  const nonDivisibleWarning = teamModeEnabled && lobby.players.length > 0 && (lobby.players.length % teamCount !== 0);
   const teamSetupValid = !teamModeEnabled || (
     playersMissingTeam === 0 &&
-    team1Count > 0 &&
-    team2Count > 0 &&
-    Math.abs(team1Count - team2Count) <= 1
+    teamIds.every((teamId) => (teamSizes[teamId] ?? 0) > 0) &&
+    maxTeamSize - minTeamSize <= 1
   );
 
   async function copyInvite() {
@@ -140,12 +187,49 @@ export default function LobbyPage() {
     }
   }
 
-  async function handleTeamChange(targetUserId: string, teamId: "team-1" | "team-2") {
+  async function handleTeamChange(targetUserId: string, teamId: string) {
     if (!gameId) return;
     try {
       await setPlayerTeam({ gameId: gameId as Id<"games">, userId: targetUserId, teamId });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to set team");
+    }
+  }
+
+  async function handleTeamCountChange(nextTeamCount: number) {
+    if (!gameId) return;
+    setSavingTeams(true);
+    setError(null);
+    setTeamCountDraft(nextTeamCount);
+    try {
+      await setTeamCountMutation({
+        gameId: gameId as Id<"games">,
+        teamCount: nextTeamCount,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to set team count");
+    } finally {
+      setSavingTeams(false);
+    }
+  }
+
+  async function handleTeamNameBlur(teamId: string) {
+    if (!gameId || !isHost) return;
+    const draft = teamNameDrafts[teamId];
+    if (!draft) return;
+
+    setSavingTeams(true);
+    setError(null);
+    try {
+      await setTeamNameMutation({
+        gameId: gameId as Id<"games">,
+        teamId,
+        name: draft,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to set team name");
+    } finally {
+      setSavingTeams(false);
     }
   }
 
@@ -189,17 +273,16 @@ export default function LobbyPage() {
     setSavingRules(true);
     try {
       const rulesetOverrides: RulesetOverridesInput = {
-        combat: { allowAttackerDiceChoice },
         fortify: {
           fortifyMode,
           ...(maxFortifiesPerTurn === "unlimited" ? {} : { maxFortifiesPerTurn }),
         },
         cards: {
           forcedTradeHandSize,
-          awardCardOnCapture,
+          tradeValues: [...CARD_INCREMENT_PRESETS[cardIncrementPreset].tradeValues],
+          tradeValueOverflow: CARD_INCREMENT_PRESETS[cardIncrementPreset].tradeValueOverflow,
         },
         teams: {
-          preventAttackingTeammates,
           allowPlaceOnTeammate,
           allowFortifyWithTeammate,
           allowFortifyThroughTeammates,
@@ -277,18 +360,19 @@ export default function LobbyPage() {
                           <select
                             value={player.teamId ?? ""}
                             onChange={(event) => {
-                              const teamId = event.target.value as "team-1" | "team-2";
+                              const teamId = event.target.value;
                               if (teamId) void handleTeamChange(player.userId, teamId);
                             }}
                             className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                           >
                             <option value="">No team</option>
-                            <option value="team-1">Team 1</option>
-                            <option value="team-2">Team 2</option>
+                            {teamIds.map((teamId) => (
+                              <option key={teamId} value={teamId}>{teamLabel(teamId)}</option>
+                            ))}
                           </select>
                         ) : (
                           <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-                            {player.teamId === "team-1" ? "Team 1" : player.teamId === "team-2" ? "Team 2" : "No team"}
+                            {player.teamId ? teamLabel(player.teamId) : "No team"}
                           </span>
                         )
                       )}
@@ -323,9 +407,51 @@ export default function LobbyPage() {
                     </Button>
                   )}
                 </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label className="text-xs text-muted-foreground">
+                    Team count
+                    <select
+                      value={teamCountDraft}
+                      disabled={!isHost || savingTeams}
+                      onChange={(event) => {
+                        void handleTeamCountChange(Number(event.target.value));
+                      }}
+                      className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                    >
+                      {Array.from({ length: Math.max(1, lobby.players.length - 1) }, (_, index) => index + 2).map((count) => (
+                        <option key={count} value={count}>{count} teams</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {teamIds.map((teamId) => (
+                    <label key={teamId} className="text-xs text-muted-foreground">
+                      {teamId}
+                      <input
+                        type="text"
+                        value={teamNameDrafts[teamId] ?? teamLabel(teamId)}
+                        disabled={!isHost || savingTeams}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setTeamNameDrafts((prev) => ({ ...prev, [teamId]: value }));
+                        }}
+                        onBlur={() => {
+                          void handleTeamNameBlur(teamId);
+                        }}
+                        className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                      />
+                    </label>
+                  ))}
+                </div>
                 <p className="text-sm text-muted-foreground">
-                  Team 1: {team1Count} | Team 2: {team2Count} | Unassigned: {playersMissingTeam}
+                  {teamIds.map((teamId) => `${teamLabel(teamId)}: ${teamSizes[teamId] ?? 0}`).join(" | ")} | Unassigned: {playersMissingTeam}
                 </p>
+                {nonDivisibleWarning && (
+                  <p className="text-sm text-amber-600">
+                    Team count does not evenly divide player count. This is allowed but not ideal for balance.
+                  </p>
+                )}
                 {!teamSetupValid && (
                   <p className="text-sm text-destructive">
                     Assign every player and keep teams balanced (difference at most 1).
@@ -382,21 +508,24 @@ export default function LobbyPage() {
                     className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
                   />
                 </label>
+                <label className="text-xs text-muted-foreground">
+                  Card reward increment
+                  <select
+                    value={cardIncrementPreset}
+                    onChange={(event) => setCardIncrementPreset(event.target.value as keyof typeof CARD_INCREMENT_PRESETS)}
+                    disabled={!isHost}
+                    className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                  >
+                    {(Object.entries(CARD_INCREMENT_PRESETS) as Array<
+                      [keyof typeof CARD_INCREMENT_PRESETS, (typeof CARD_INCREMENT_PRESETS)[keyof typeof CARD_INCREMENT_PRESETS]]
+                    >).map(([key, preset]) => (
+                      <option key={key} value={key}>{preset.label}</option>
+                    ))}
+                  </select>
+                </label>
               </div>
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <input type="checkbox" checked={awardCardOnCapture} disabled={!isHost} onChange={(event) => setAwardCardOnCapture(event.target.checked)} />
-                Award card on capture
-              </label>
-              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                <input type="checkbox" checked={allowAttackerDiceChoice} disabled={!isHost} onChange={(event) => setAllowAttackerDiceChoice(event.target.checked)} />
-                Allow attacker dice choice
-              </label>
               {teamModeEnabled && (
                 <>
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <input type="checkbox" checked={preventAttackingTeammates} disabled={!isHost} onChange={(event) => setPreventAttackingTeammates(event.target.checked)} />
-                    Prevent attacking teammates
-                  </label>
                   <label className="flex items-center gap-2 text-xs text-muted-foreground">
                     <input type="checkbox" checked={allowPlaceOnTeammate} disabled={!isHost} onChange={(event) => setAllowPlaceOnTeammate(event.target.checked)} />
                     Allow place on teammate

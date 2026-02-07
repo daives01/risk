@@ -5,6 +5,7 @@ import type { RulesetConfig, TeamsConfig } from "risk-engine";
 export const rulesetOverridesValidator = v.object({
   combat: v.optional(
     v.object({
+      // Deprecated host option. Accepted for backward compatibility but ignored.
       allowAttackerDiceChoice: v.optional(v.boolean()),
     }),
   ),
@@ -17,11 +18,15 @@ export const rulesetOverridesValidator = v.object({
   cards: v.optional(
     v.object({
       forcedTradeHandSize: v.optional(v.number()),
+      tradeValues: v.optional(v.array(v.number())),
+      tradeValueOverflow: v.optional(v.union(v.literal("repeatLast"), v.literal("continueByFive"))),
+      // Deprecated host option. Accepted for backward compatibility but ignored.
       awardCardOnCapture: v.optional(v.boolean()),
     }),
   ),
   teams: v.optional(
     v.object({
+      // Deprecated host option. Accepted for backward compatibility but ignored.
       preventAttackingTeammates: v.optional(v.boolean()),
       allowPlaceOnTeammate: v.optional(v.boolean()),
       allowFortifyWithTeammate: v.optional(v.boolean()),
@@ -52,7 +57,7 @@ export const effectiveRulesetValidator = v.object({
   }),
   cards: v.object({
     tradeValues: v.array(v.number()),
-    tradeValueOverflow: v.literal("repeatLast"),
+    tradeValueOverflow: v.union(v.literal("repeatLast"), v.literal("continueByFive")),
     forcedTradeHandSize: v.number(),
     tradeSets: v.object({
       allowThreeOfAKind: v.boolean(),
@@ -91,6 +96,8 @@ export type RulesetOverrides = {
   };
   cards?: {
     forcedTradeHandSize?: number;
+    tradeValues?: number[];
+    tradeValueOverflow?: "repeatLast" | "continueByFive";
     awardCardOnCapture?: boolean;
   };
   teams?: {
@@ -117,7 +124,8 @@ function resolveTeams(teamModeEnabled: boolean, overrides?: RulesetOverrides["te
   return {
     ...defaultRuleset.teams,
     teamsEnabled: true,
-    preventAttackingTeammates: overrides?.preventAttackingTeammates ?? true,
+    // Product policy: friendly fire is always enabled in team games.
+    preventAttackingTeammates: false,
     allowPlaceOnTeammate: overrides?.allowPlaceOnTeammate ?? true,
     allowFortifyWithTeammate: overrides?.allowFortifyWithTeammate ?? true,
     allowFortifyThroughTeammates: overrides?.allowFortifyThroughTeammates ?? true,
@@ -154,29 +162,82 @@ export function validateRulesetOverrides(overrides?: RulesetOverrides): void {
       );
     }
   }
+
+  const tradeValues = overrides.cards?.tradeValues;
+  if (tradeValues !== undefined) {
+    if (tradeValues.length === 0) {
+      throw new Error("cards.tradeValues must contain at least one value");
+    }
+    for (const value of tradeValues) {
+      if (!Number.isInteger(value) || value <= 0) {
+        throw new Error("cards.tradeValues must only contain positive integers");
+      }
+    }
+  }
+
+  const tradeValueOverflow = overrides.cards?.tradeValueOverflow;
+  if (tradeValueOverflow !== undefined) {
+    if (tradeValueOverflow !== "repeatLast" && tradeValueOverflow !== "continueByFive") {
+      throw new Error("cards.tradeValueOverflow must be repeatLast or continueByFive");
+    }
+  }
+}
+
+export function sanitizeRulesetOverrides(overrides?: RulesetOverrides): RulesetOverrides | undefined {
+  if (!overrides) return undefined;
+
+  const cards = overrides.cards
+    ? {
+        forcedTradeHandSize: overrides.cards.forcedTradeHandSize,
+        tradeValues: overrides.cards.tradeValues,
+        tradeValueOverflow: overrides.cards.tradeValueOverflow,
+      }
+    : undefined;
+  const teams = overrides.teams
+    ? {
+        allowPlaceOnTeammate: overrides.teams.allowPlaceOnTeammate,
+        allowFortifyWithTeammate: overrides.teams.allowFortifyWithTeammate,
+        allowFortifyThroughTeammates: overrides.teams.allowFortifyThroughTeammates,
+      }
+    : undefined;
+  const fortify = overrides.fortify
+    ? {
+        fortifyMode: overrides.fortify.fortifyMode,
+        maxFortifiesPerTurn: overrides.fortify.maxFortifiesPerTurn,
+      }
+    : undefined;
+
+  return {
+    ...(fortify ? { fortify } : {}),
+    ...(cards ? { cards } : {}),
+    ...(teams ? { teams } : {}),
+  };
 }
 
 export function resolveRulesetFromOverrides(
   teamModeEnabled: boolean,
   overrides?: RulesetOverrides,
 ): RulesetConfig {
-  validateRulesetOverrides(overrides);
+  const sanitized = sanitizeRulesetOverrides(overrides);
+  validateRulesetOverrides(sanitized);
 
   return {
     ...defaultRuleset,
     combat: {
       ...defaultRuleset.combat,
-      ...(overrides?.combat ?? {}),
+      ...(sanitized?.combat ?? {}),
+      allowAttackerDiceChoice: true,
     },
     fortify: {
       ...defaultRuleset.fortify,
-      ...(overrides?.fortify ?? {}),
+      ...(sanitized?.fortify ?? {}),
     },
     cards: {
       ...defaultRuleset.cards,
-      ...(overrides?.cards ?? {}),
+      ...(sanitized?.cards ?? {}),
+      awardCardOnCapture: true,
     },
-    teams: resolveTeams(teamModeEnabled, overrides?.teams),
+    teams: resolveTeams(teamModeEnabled, sanitized?.teams),
   };
 }
 

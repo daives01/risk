@@ -55,6 +55,8 @@ export default defineSchema({
     visibility: v.union(v.literal("public"), v.literal("unlisted")),
     maxPlayers: v.number(),
     teamModeEnabled: v.optional(v.boolean()),
+    teamCount: v.optional(v.number()),
+    teamNames: v.optional(v.record(v.string(), v.string())),
     teamAssignmentStrategy: v.optional(
       v.union(v.literal("manual"), v.literal("balancedRandom")),
     ),

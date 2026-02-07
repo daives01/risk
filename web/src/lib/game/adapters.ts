@@ -7,6 +7,8 @@ type ViewLike = {
   mapId?: string;
   status?: string;
   teamModeEnabled?: boolean;
+  teamCount?: number | null;
+  teamNames?: Record<string, string> | null;
   effectiveRuleset?: unknown;
 };
 

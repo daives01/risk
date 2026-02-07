@@ -27,6 +27,7 @@ interface PlayersCardProps {
   displayState: PublicState;
   playerMap: PlayerRef[];
   teamModeEnabled: boolean;
+  teamNames?: Record<string, string>;
   activeHighlight: HighlightFilter;
   onTogglePlayerHighlight: (playerId: string) => void;
   onToggleTeamHighlight: (teamId: string) => void;
@@ -39,6 +40,7 @@ export function GamePlayersCard({
   displayState,
   playerMap,
   teamModeEnabled,
+  teamNames,
   activeHighlight,
   onTogglePlayerHighlight,
   onToggleTeamHighlight,
@@ -118,7 +120,7 @@ export function GamePlayersCard({
                           onToggleTeamHighlight(teamId);
                         }}
                       >
-                        {teamId}
+                        {teamNames?.[teamId] ?? teamId}
                       </button>
                     ) : (
                       <span className="text-xs text-muted-foreground/80">-</span>
@@ -168,6 +170,7 @@ interface GameChatCardProps {
   activeChannel: ChatChannel;
   teamGameEnabled: boolean;
   teamAvailable: boolean;
+  activeTeamName?: string | null;
   canSend: boolean;
   draftText: string;
   editingMessageId: string | null;
@@ -184,6 +187,7 @@ export function GameChatCard({
   activeChannel,
   teamGameEnabled,
   teamAvailable,
+  activeTeamName,
   canSend,
   draftText,
   editingMessageId,
@@ -236,7 +240,7 @@ export function GameChatCard({
                 variant={activeChannel === "team" ? "default" : "outline"}
                 onClick={() => onSelectChannel("team")}
               >
-                Team
+                {activeTeamName ?? "Team"}
               </Button>
             )}
           </div>

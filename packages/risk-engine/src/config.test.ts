@@ -29,6 +29,7 @@ describe("RulesetConfig", () => {
   test("cards tradeValues starts at 4", () => {
     expect(defaultRuleset.cards.tradeValues[0]).toBe(4);
     expect(defaultRuleset.cards.tradeValues.length).toBeGreaterThan(0);
+    expect(defaultRuleset.cards.tradeValueOverflow).toBe("continueByFive");
   });
 
   test("teams disabled by default", () => {

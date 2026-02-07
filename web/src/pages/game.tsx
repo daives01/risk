@@ -136,7 +136,19 @@ export default function GamePage() {
   const remainingReinforcements = state?.reinforcements?.remaining ?? 0;
   const uncommittedReinforcements = Math.max(0, remainingReinforcements - queuedReinforcementTotal);
   const isPlacementPhase = state?.turn.phase === "Reinforcement";
+  const effectiveTeams = (view?.effectiveRuleset as {
+    teams?: {
+      allowPlaceOnTeammate?: boolean;
+      allowFortifyWithTeammate?: boolean;
+      preventAttackingTeammates?: boolean;
+    };
+  } | null)?.teams;
+  const allowPlaceOnTeammate = effectiveTeams?.allowPlaceOnTeammate ?? true;
+  const allowFortifyWithTeammate = effectiveTeams?.allowFortifyWithTeammate ?? true;
+  const preventAttackingTeammates = effectiveTeams?.preventAttackingTeammates ?? false;
+  const teamNames = (view?.teamNames as Record<string, string> | null) ?? {};
   const myTeamId = myEnginePlayerId && state ? state.players[myEnginePlayerId]?.teamId : undefined;
+  const myTeamName = myTeamId ? teamNames[myTeamId] ?? myTeamId : null;
   const canUseTeamChat = !!view?.teamModeEnabled && !!myTeamId;
   const canSendChat = !isSpectator && !historyOpen && view?.status === "active";
   const isTeammateOwner = useCallback((ownerId: string) => {
@@ -170,7 +182,10 @@ export default function GamePage() {
     if (state.turn.phase === "Reinforcement") {
       if (uncommittedReinforcements <= 0) return ids;
       for (const [territoryId, territory] of Object.entries(state.territories)) {
-        if (territory.ownerId === myEnginePlayerId || isTeammateOwner(territory.ownerId)) {
+        if (
+          territory.ownerId === myEnginePlayerId ||
+          (allowPlaceOnTeammate && isTeammateOwner(territory.ownerId))
+        ) {
           ids.add(territoryId);
         }
       }
@@ -185,7 +200,10 @@ export default function GamePage() {
     if (state.turn.phase === "Fortify") {
       for (const [territoryId, territory] of Object.entries(state.territories)) {
         if (
-          (territory.ownerId === myEnginePlayerId || isTeammateOwner(territory.ownerId)) &&
+          (
+            territory.ownerId === myEnginePlayerId ||
+            (allowFortifyWithTeammate && isTeammateOwner(territory.ownerId))
+          ) &&
           territory.armies >= 2
         ) {
           ids.add(territoryId);
@@ -194,7 +212,15 @@ export default function GamePage() {
     }
 
     return ids;
-  }, [graphMap, isTeammateOwner, myEnginePlayerId, state, uncommittedReinforcements]);
+  }, [
+    allowFortifyWithTeammate,
+    allowPlaceOnTeammate,
+    graphMap,
+    isTeammateOwner,
+    myEnginePlayerId,
+    state,
+    uncommittedReinforcements,
+  ]);
 
   const validToIds = useMemo(() => {
     const ids = new Set<string>();
@@ -205,7 +231,8 @@ export default function GamePage() {
       for (const neighborId of neighbors) {
         const territory = state.territories[neighborId];
         if (!territory) continue;
-        if (territory.ownerId === myEnginePlayerId || isTeammateOwner(territory.ownerId)) continue;
+        if (territory.ownerId === myEnginePlayerId) continue;
+        if (preventAttackingTeammates && isTeammateOwner(territory.ownerId)) continue;
         ids.add(neighborId);
       }
     }
@@ -214,7 +241,10 @@ export default function GamePage() {
       for (const [territoryId, territory] of Object.entries(state.territories)) {
         if (
           territoryId !== selectedFrom &&
-          (territory.ownerId === myEnginePlayerId || isTeammateOwner(territory.ownerId))
+          (
+            territory.ownerId === myEnginePlayerId ||
+            (allowFortifyWithTeammate && isTeammateOwner(territory.ownerId))
+          )
         ) {
           ids.add(territoryId);
         }
@@ -222,7 +252,7 @@ export default function GamePage() {
     }
 
     return ids;
-  }, [graphMap, isTeammateOwner, myEnginePlayerId, selectedFrom, state]);
+  }, [allowFortifyWithTeammate, graphMap, isTeammateOwner, myEnginePlayerId, preventAttackingTeammates, selectedFrom, state]);
 
   const submitAction = useCallback(
     async (action: Action) => {
@@ -933,6 +963,7 @@ export default function GamePage() {
             displayState={resolvedDisplayState}
             playerMap={playerMap}
             teamModeEnabled={!!view.teamModeEnabled}
+            teamNames={teamNames}
             activeHighlight={highlightFilter}
             onTogglePlayerHighlight={handleTogglePlayerHighlight}
             onToggleTeamHighlight={handleToggleTeamHighlight}
@@ -950,6 +981,7 @@ export default function GamePage() {
                 activeChannel={chatChannel}
                 teamGameEnabled={!!view.teamModeEnabled}
                 teamAvailable={canUseTeamChat}
+                activeTeamName={myTeamName}
                 canSend={canSendChat}
                 draftText={chatDraft}
                 editingMessageId={chatEditingMessageId}

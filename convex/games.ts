@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { ENGINE_VERSION } from "risk-engine";
 import type { GameState, PlayerId } from "risk-engine";
 import { authComponent } from "./auth.js";
+import { getTeamIds, resolveTeamNames } from "./gameTeams";
 import { resolvePlayerColors } from "./playerColors";
 
 export const engineVersion = query({
@@ -59,6 +60,9 @@ export const getGameView = query({
       enginePlayerId: p.enginePlayerId ?? null,
       teamId: p.teamId ?? null,
     }));
+    const teamCount = game.teamModeEnabled ? Math.max(2, Math.min(game.teamCount ?? 2, Math.max(2, players.length))) : null;
+    const teamIds = teamCount ? getTeamIds(teamCount) : [];
+    const teamNames = teamCount ? resolveTeamNames(teamIds, game.teamNames as Record<string, string> | undefined) : null;
 
     if (game.status !== "active" && game.status !== "finished") {
       return {
@@ -69,6 +73,8 @@ export const getGameView = query({
         visibility: game.visibility,
         maxPlayers: game.maxPlayers,
         teamModeEnabled: game.teamModeEnabled ?? false,
+        teamCount,
+        teamNames,
         teamAssignmentStrategy: game.teamAssignmentStrategy ?? "manual",
         rulesetOverrides: game.rulesetOverrides ?? null,
         effectiveRuleset: game.effectiveRuleset ?? null,
@@ -90,6 +96,8 @@ export const getGameView = query({
       visibility: game.visibility,
       maxPlayers: game.maxPlayers,
       teamModeEnabled: game.teamModeEnabled ?? false,
+      teamCount,
+      teamNames,
       teamAssignmentStrategy: game.teamAssignmentStrategy ?? "manual",
       rulesetOverrides: game.rulesetOverrides ?? null,
       effectiveRuleset: game.effectiveRuleset ?? null,
@@ -129,6 +137,9 @@ export const getGameViewAsPlayer = query({
       enginePlayerId: p.enginePlayerId ?? null,
       teamId: p.teamId ?? null,
     }));
+    const teamCount = game.teamModeEnabled ? Math.max(2, Math.min(game.teamCount ?? 2, Math.max(2, players.length))) : null;
+    const teamIds = teamCount ? getTeamIds(teamCount) : [];
+    const teamNames = teamCount ? resolveTeamNames(teamIds, game.teamNames as Record<string, string> | undefined) : null;
 
     // Find the caller's enginePlayerId
     const callerId = String(user._id);
@@ -143,6 +154,8 @@ export const getGameViewAsPlayer = query({
         visibility: game.visibility,
         maxPlayers: game.maxPlayers,
         teamModeEnabled: game.teamModeEnabled ?? false,
+        teamCount,
+        teamNames,
         teamAssignmentStrategy: game.teamAssignmentStrategy ?? "manual",
         rulesetOverrides: game.rulesetOverrides ?? null,
         effectiveRuleset: game.effectiveRuleset ?? null,
@@ -186,6 +199,8 @@ export const getGameViewAsPlayer = query({
       visibility: game.visibility,
       maxPlayers: game.maxPlayers,
       teamModeEnabled: game.teamModeEnabled ?? false,
+      teamCount,
+      teamNames,
       teamAssignmentStrategy: game.teamAssignmentStrategy ?? "manual",
       rulesetOverrides: game.rulesetOverrides ?? null,
       effectiveRuleset: game.effectiveRuleset ?? null,
