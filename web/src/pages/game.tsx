@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ShortcutHint } from "@/components/ui/shortcut-hint";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { MapCanvas } from "@/components/game/map-canvas";
+import { HistoryScrubber } from "@/components/game/history-scrubber";
 import { GameChatCard, GameEventsCard, GameHandCard, GamePlayersCard } from "@/components/game/game-panels";
 import { authClient } from "@/lib/auth-client";
 import { adaptMapDoc, adaptView } from "@/lib/game/adapters";
@@ -18,12 +19,6 @@ import {
   toggleTeamHighlight,
   type HighlightFilter,
 } from "@/lib/game/highlighting";
-import {
-  findNextCaptureFrame,
-  findNextEliminationFrame,
-  findNextTurnBoundary,
-  findPreviousTurnBoundary,
-} from "@/lib/game/history-navigation";
 import { buildPlayerPanelStats } from "@/lib/game/player-stats";
 import { PHASE_COPY } from "@/lib/game/types";
 import type { ChatMessage } from "@/lib/game/types";
@@ -35,6 +30,8 @@ import { useGameShortcuts } from "@/lib/game/use-game-shortcuts";
 import { toast } from "sonner";
 
 export default function GamePage() {
+  const HISTORY_PLAYBACK_INTERVAL_MS = 840;
+  const TROOP_DELTA_DURATION_MS = Math.round(HISTORY_PLAYBACK_INTERVAL_MS * 1.25);
   const { gameId } = useParams<{ gameId: string }>();
   const location = useLocation();
   const { data: session, isPending: sessionPending } = authClient.useSession();
@@ -466,9 +463,9 @@ export default function GamePage() {
         }
         return prev + 1;
       });
-    }, 700);
+    }, HISTORY_PLAYBACK_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [historyCount, historyOpen, historyPlaying]);
+  }, [historyCount, historyOpen, historyPlaying, HISTORY_PLAYBACK_INTERVAL_MS]);
 
   useEffect(() => {
     if (!historyOpen) return;
@@ -490,32 +487,6 @@ export default function GamePage() {
       setChatDraft("");
     }
   }, [chatEditingMessageId, chatMessages]);
-
-  const jumpToTurnBoundary = useCallback(
-    (direction: "prev" | "next") => {
-      if (historyFrames.length === 0) return;
-      setHistoryFrameIndex((prev) =>
-        direction === "prev"
-          ? findPreviousTurnBoundary(historyFrames, prev)
-          : findNextTurnBoundary(historyFrames, prev),
-      );
-      setHistoryPlaying(false);
-    },
-    [historyFrames],
-  );
-
-  const jumpToHistoryEvent = useCallback(
-    (kind: "capture" | "elimination") => {
-      if (historyFrames.length === 0) return;
-      setHistoryFrameIndex((prev) =>
-        kind === "capture"
-          ? findNextCaptureFrame(historyFrames, prev)
-          : findNextEliminationFrame(historyFrames, prev),
-      );
-      setHistoryPlaying(false);
-    },
-    [historyFrames],
-  );
 
   const handleTogglePlayerHighlight = useCallback((playerId: string) => {
     setHighlightFilter((prev) => togglePlayerHighlight(prev, playerId));
@@ -549,8 +520,6 @@ export default function GamePage() {
     onToggleHistory: () => setHistoryOpen((prev) => !prev),
     onSetHistoryPlaying: setHistoryPlaying,
     onSetHistoryFrameIndex: setHistoryFrameIndex,
-    onJumpHistoryTurnBoundary: jumpToTurnBoundary,
-    onJumpHistoryEvent: jumpToHistoryEvent,
     onClearSelection: () => {
       setSelectedFrom(null);
       setSelectedTo(null);
@@ -563,8 +532,7 @@ export default function GamePage() {
     onEndTurn: handleEndTurn,
   });
 
-  const activeHistoryFrame = historyOpen ? historyFrames[historyFrameIndex] ?? null : null;
-  const displayState = activeHistoryFrame?.state ?? state;
+  const displayState = historyOpen ? (historyFrames[historyFrameIndex]?.state ?? state) : state;
   const highlightedTerritoryIds = useMemo(
     () => (displayState ? resolveHighlightedTerritoryIds(displayState, highlightFilter) : new Set<string>()),
     [displayState, highlightFilter],
@@ -676,7 +644,7 @@ export default function GamePage() {
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
             <TooltipProvider>
-              {!isSpectator && (
+              {!isSpectator && !historyOpen && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button variant="outline" size="icon-sm" onClick={handleResign} aria-label="Resign game">
@@ -711,16 +679,6 @@ export default function GamePage() {
                   size="xs"
                   type="button"
                   variant="outline"
-                  title="Previous turn boundary (Shift+[)"
-                  disabled={historyFrameIndex <= 0}
-                  onClick={() => jumpToTurnBoundary("prev")}
-                >
-                  Prev Turn
-                </Button>
-                <Button
-                  size="xs"
-                  type="button"
-                  variant="outline"
                   title="Previous frame ([)"
                   disabled={historyFrameIndex <= 0}
                   onClick={() => setHistoryFrameIndex((prev) => Math.max(0, prev - 1))}
@@ -751,36 +709,6 @@ export default function GamePage() {
                   size="xs"
                   type="button"
                   variant="outline"
-                  title="Next turn boundary (Shift+])"
-                  disabled={historyAtEnd}
-                  onClick={() => jumpToTurnBoundary("next")}
-                >
-                  Next Turn
-                </Button>
-                <Button
-                  size="xs"
-                  type="button"
-                  variant="outline"
-                  title="Next capture (C)"
-                  disabled={historyAtEnd}
-                  onClick={() => jumpToHistoryEvent("capture")}
-                >
-                  Capture
-                </Button>
-                <Button
-                  size="xs"
-                  type="button"
-                  variant="outline"
-                  title="Next elimination (E)"
-                  disabled={historyAtEnd}
-                  onClick={() => jumpToHistoryEvent("elimination")}
-                >
-                  Elim
-                </Button>
-                <Button
-                  size="xs"
-                  type="button"
-                  variant="outline"
                   title="Reset history (R)"
                   onClick={() => {
                     setHistoryFrameIndex(0);
@@ -792,24 +720,15 @@ export default function GamePage() {
                 <span className="rounded border bg-background/70 px-2 py-1 text-xs text-muted-foreground">
                   {historyFrameIndex + 1}/{historyCount}
                 </span>
-                <label className="flex min-w-[240px] items-center gap-2 text-xs text-muted-foreground">
-                  <span>Frame</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={historyMaxIndex}
-                    value={historyFrameIndex}
-                    onChange={(event) => {
-                      setHistoryFrameIndex(Number.parseInt(event.target.value, 10) || 0);
-                      setHistoryPlaying(false);
-                    }}
-                    className="h-1.5 w-full accent-foreground"
-                    aria-label="Replay timeline frame"
-                  />
-                </label>
-                <span className="max-w-80 truncate rounded border bg-background/70 px-2 py-1 text-xs text-muted-foreground">
-                  {activeHistoryFrame?.label ?? "Game start"}
-                </span>
+                <HistoryScrubber
+                  min={0}
+                  max={historyMaxIndex}
+                  value={historyFrameIndex}
+                  onChange={(value) => {
+                    setHistoryFrameIndex(value);
+                    setHistoryPlaying(false);
+                  }}
+                />
               </>
             )}
             {!historyOpen && isMyTurn && phase === "Reinforcement" && (
@@ -867,6 +786,7 @@ export default function GamePage() {
                 validToIds={!historyOpen && isMyTurn ? validToIds : new Set()}
                 highlightedTerritoryIds={highlightedTerritoryIds}
                 interactive={!historyOpen && isMyTurn}
+                troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
                 onClickTerritory={handleTerritoryClick}
                 onClearSelection={() => {
                   setSelectedFrom(null);

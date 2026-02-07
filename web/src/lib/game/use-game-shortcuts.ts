@@ -14,8 +14,6 @@ interface UseGameShortcutsOptions {
   onToggleHistory: () => void;
   onSetHistoryPlaying: (next: boolean | ((prev: boolean) => boolean)) => void;
   onSetHistoryFrameIndex: (next: number | ((prev: number) => number)) => void;
-  onJumpHistoryTurnBoundary: (direction: "prev" | "next") => void;
-  onJumpHistoryEvent: (kind: "capture" | "elimination") => void;
   onClearSelection: () => void;
   onUndoPlacement: () => void;
   onConfirmPlacements: () => void;
@@ -35,8 +33,6 @@ export function useGameShortcuts({
   onToggleHistory,
   onSetHistoryPlaying,
   onSetHistoryFrameIndex,
-  onJumpHistoryTurnBoundary,
-  onJumpHistoryEvent,
   onClearSelection,
   onUndoPlacement,
   onConfirmPlacements,
@@ -64,16 +60,6 @@ export function useGameShortcuts({
         }
 
         if (historyOpen) {
-          if (event.key === "[" && event.shiftKey) {
-            event.preventDefault();
-            onJumpHistoryTurnBoundary("prev");
-            return;
-          }
-          if (event.key === "]" && event.shiftKey) {
-            event.preventDefault();
-            onJumpHistoryTurnBoundary("next");
-            return;
-          }
           if (event.key === "[") {
             event.preventDefault();
             onSetHistoryFrameIndex((prev) => Math.max(0, prev - 1));
@@ -93,16 +79,6 @@ export function useGameShortcuts({
             event.preventDefault();
             onSetHistoryFrameIndex(0);
             onSetHistoryPlaying(false);
-            return;
-          }
-          if (key === "c") {
-            event.preventDefault();
-            onJumpHistoryEvent("capture");
-            return;
-          }
-          if (key === "e") {
-            event.preventDefault();
-            onJumpHistoryEvent("elimination");
             return;
           }
         }
@@ -155,8 +131,6 @@ export function useGameShortcuts({
     onEndTurn,
     onSetHistoryFrameIndex,
     onSetHistoryPlaying,
-    onJumpHistoryEvent,
-    onJumpHistoryTurnBoundary,
     onToggleHistory,
     onUndoPlacement,
     phase,

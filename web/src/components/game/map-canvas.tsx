@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { NumberStepper } from "@/components/ui/number-stepper";
@@ -33,6 +33,7 @@ interface MapCanvasProps {
   validToIds: Set<string>;
   highlightedTerritoryIds: Set<string>;
   interactive: boolean;
+  troopDeltaDurationMs?: number;
   onClickTerritory: (territoryId: string) => void;
   onClearSelection?: () => void;
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
@@ -81,6 +82,13 @@ interface MapCanvasProps {
     | null;
 }
 
+interface FloatingTroopDelta {
+  id: string;
+  territoryId: string;
+  amount: number;
+  color: string;
+}
+
 export function MapCanvas({
   map,
   visual,
@@ -93,12 +101,15 @@ export function MapCanvas({
   validToIds,
   highlightedTerritoryIds,
   interactive,
+  troopDeltaDurationMs = 1000,
   onClickTerritory,
   onClearSelection,
   getPlayerColor,
   battleOverlay,
 }: MapCanvasProps) {
   const [zoomLocked, setZoomLocked] = useState(true);
+  const [floatingDeltas, setFloatingDeltas] = useState<FloatingTroopDelta[]>([]);
+  const previousTerritoriesRef = useRef<Record<string, TerritoryState> | null>(null);
   const { containerRef, handlers, transformStyle, scale, zoomIn, zoomOut, reset } = useMapPanZoom({
     minScale: 0.85,
     maxScale: 1.75,
@@ -187,6 +198,46 @@ export function MapCanvas({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [reset, zoomIn, zoomLocked, zoomOut]);
+
+  useEffect(() => {
+    const previousTerritories = previousTerritoriesRef.current;
+    if (!previousTerritories) {
+      previousTerritoriesRef.current = territories;
+      return;
+    }
+
+    const deltas: FloatingTroopDelta[] = [];
+    for (const [territoryId, currentTerritory] of Object.entries(territories)) {
+      const previousTerritory = previousTerritories[territoryId];
+      if (!previousTerritory) continue;
+      const amount = currentTerritory.armies - previousTerritory.armies;
+      if (amount === 0) continue;
+
+      const colorOwnerId = amount > 0 ? currentTerritory.ownerId : previousTerritory.ownerId;
+      deltas.push({
+        id: `${territoryId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        territoryId,
+        amount,
+        color: getPlayerColor(colorOwnerId, turnOrder),
+      });
+    }
+
+    previousTerritoriesRef.current = territories;
+    if (deltas.length === 0) return;
+
+    let timeout: number | null = null;
+    const frame = window.requestAnimationFrame(() => {
+      setFloatingDeltas((prev) => [...prev, ...deltas]);
+      timeout = window.setTimeout(() => {
+        setFloatingDeltas((prev) => prev.filter((delta) => !deltas.some((next) => next.id === delta.id)));
+      }, troopDeltaDurationMs);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (timeout !== null) window.clearTimeout(timeout);
+    };
+  }, [getPlayerColor, territories, troopDeltaDurationMs, turnOrder]);
 
   if (!imageUrl) {
     return (
@@ -340,6 +391,29 @@ export function MapCanvas({
               >
                 {territoryState.armies}
               </button>
+            );
+          })}
+
+          {floatingDeltas.map((delta) => {
+            const anchor = projectedAnchors[delta.territoryId];
+            if (!anchor) return null;
+            return (
+              <span
+                key={delta.id}
+                className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 rounded-full border px-2 py-0.5 text-sm font-extrabold leading-none text-white backdrop-blur-[1.5px] troop-delta-float"
+                style={{
+                  left: `${anchor.x * 100}%`,
+                  top: `${anchor.y * 100}%`,
+                  borderColor: delta.color,
+                  backgroundColor: "rgba(10, 12, 16, 0.78)",
+                  boxShadow: `0 0 0 1px rgba(0,0,0,0.7), 0 2px 10px ${delta.color}66`,
+                  textShadow:
+                    "-1px 0 rgba(0,0,0,0.9), 0 1px rgba(0,0,0,0.9), 1px 0 rgba(0,0,0,0.9), 0 -1px rgba(0,0,0,0.9)",
+                  animationDuration: `${troopDeltaDurationMs}ms`,
+                }}
+              >
+                {delta.amount > 0 ? `+${delta.amount}` : delta.amount}
+              </span>
             );
           })}
 
