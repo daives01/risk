@@ -5,6 +5,8 @@ Current MVP game loop is working. This document defines the next prioritized mil
 - `packages/risk-engine` (headless, reusable game mechanics)
 - `convex` + `web` (product/app behavior, UI, persistence, authoring workflows)
 
+after completing each milestone, ensure `bun run check` passes, then commit your work
+
 Date: 2026-02-07
 
 ## Product + Architecture Guardrails
@@ -30,12 +32,12 @@ Date: 2026-02-07
 - [x] Milestone 1: Map-Configurable Player Counts (P0)
 - [x] Milestone 2: Full Team Games (P0)
 - [x] Milestone 3: Async Game Support (Turn Timers + Weekend Exclusion) (P0)
-- [ ] Milestone 4: Game Start Ruleset Configuration (P1)
-- [ ] Milestone 5: Pre-Game Player Color Selection (P1)
-- [ ] Milestone 6: In-Game Chat (Global + Team) (P1)
-- [ ] Milestone 7: Replay Scrubbing Timeline (P1)
-- [ ] Milestone 8: In-Game Player Info + Highlighting UX (P1)
-- [ ] Milestone 9: Admin Map JSON Import + “Copy Prompt” for LLM Seeding (P2)
+- [x] Milestone 4: Game Start Ruleset Configuration (P1)
+- [x] Milestone 5: Pre-Game Player Color Selection (P1)
+- [x] Milestone 6: In-Game Chat (Global + Team) (P1)
+- [x] Milestone 7: Replay Scrubbing Timeline (P1)
+- [x] Milestone 8: In-Game Player Info + Highlighting UX (P1)
+- [x] Milestone 9: Admin Map JSON Import + “Copy Prompt” for LLM Seeding (P2)
 
 ### Tasks
 - [ ] 1.1 Define map player-cap metadata
