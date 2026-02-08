@@ -12,7 +12,7 @@ interface MapDef {
 }
 
 const MAPS: MapDef[] = [
-  { mapId: "classic", name: "Classic Risk", graphMap: classicMap },
+  { mapId: "classic", name: "Classic Global Domination", graphMap: classicMap },
 ];
 
 const CLASSIC_STARTER_ANCHORS: Record<string, { x: number; y: number }> = {
@@ -98,7 +98,7 @@ export const seedClassicDraft = mutation({
     };
 
     await ctx.db.patch(map._id, {
-      name: map.name?.trim() ? map.name : "Classic Risk",
+      name: map.name?.trim() ? map.name : "Classic Global Domination",
       graphMap: graphMapForDb,
       playerLimits: defaultMapPlayerLimits(
         Object.keys(classicMap.territories).length,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@backend/_generated/api";
 import type { Id } from "@backend/_generated/dataModel";
@@ -58,6 +58,7 @@ function countEdges(adjacency: Record<string, string[]>) {
 export default function AdminMapEditorPage() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const navigate = useNavigate();
+  const location = useLocation();
   const params = useParams<{ mapId: string }>();
   const mapId = params.mapId ?? "";
 
@@ -314,7 +315,8 @@ export default function AdminMapEditorPage() {
   }
 
   if (!session) {
-    return <Navigate to="/login" replace />;
+    const redirectPath = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />;
   }
 
   if (!mapId) {

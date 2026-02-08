@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import { ArrowLeft, Map } from "lucide-react";
 import { api } from "@backend/_generated/api";
@@ -87,6 +87,7 @@ function RulesSwitch({
 export default function CreateGamePage() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const maps = useQuery(api.maps.list);
   const createGame = useMutation(api.lobby.createGame);
@@ -131,7 +132,8 @@ export default function CreateGamePage() {
   }
 
   if (!session) {
-    return <Navigate to="/login" replace />;
+    const redirectPath = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />;
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -196,7 +198,12 @@ export default function CreateGamePage() {
               {error && <p className="rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
               <div className="space-y-2">
                 <Label htmlFor="name">Game Name</Label>
-                <Input id="name" placeholder="Friday Night Risk" value={name} onChange={(event) => setName(event.target.value)} />
+                <Input
+                  id="name"
+                  placeholder="Friday Night Global Domination"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                />
               </div>
 
               <div className="space-y-2">

@@ -336,7 +336,7 @@ export function parseMapImportJson(input: string): MapImportParseResult {
 }
 
 export function buildMapImportPrompt(): string {
-  return `You are generating map seed JSON for a Risk-style game editor. Return ONLY valid JSON.
+  return `You are generating map seed JSON for a Global Domination-style game editor. Return ONLY valid JSON.
 
 Schema:
 {

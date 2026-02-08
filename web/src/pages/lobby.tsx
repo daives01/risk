@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import { Copy, Play, Shuffle, UserRoundPlus, Users, X } from "lucide-react";
 import { PLAYER_COLOR_NAME_BY_HEX } from "risk-engine";
@@ -141,6 +141,7 @@ function PlayerColorPicker({
 export default function LobbyPage() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: session, isPending: sessionPending } = authClient.useSession();
 
   const lobby = useQuery(api.lobby.getLobby, gameId ? { gameId: gameId as Id<"games"> } : "skip");
@@ -196,7 +197,8 @@ export default function LobbyPage() {
   }
 
   if (!session) {
-    return <Navigate to="/login" replace />;
+    const redirectPath = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />;
   }
 
   if (lobby === undefined) {

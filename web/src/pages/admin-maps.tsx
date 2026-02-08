@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@backend/_generated/api";
 import type { Id } from "@backend/_generated/dataModel";
@@ -13,6 +13,7 @@ import { toast } from "sonner";
 export default function AdminMapsPage() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const listAdminMaps = useQuery(api.adminMaps.listAdminMaps);
   const generateUploadUrl = useMutation(api.adminMaps.generateUploadUrl);
@@ -33,7 +34,8 @@ export default function AdminMapsPage() {
   }
 
   if (!session) {
-    return <Navigate to="/login" replace />;
+    const redirectPath = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />;
   }
 
   async function handleCreateDraft(event: React.FormEvent) {

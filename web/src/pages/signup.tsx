@@ -65,7 +65,18 @@ export default function SignUpPage() {
   }
 
   return (
-    <AuthShell title="Create account" description="Set up your profile and start playing.">
+    <AuthShell
+      title="Create account"
+      description="Set up your profile and start playing."
+      masthead={(
+        <div className="text-center">
+          <h1 className="hero-title text-2xl leading-tight text-balance text-primary sm:text-3xl md:text-4xl">
+            <span className="block">Legally Distinct</span>
+            <span className="block">Global Domination</span>
+          </h1>
+        </div>
+      )}
+    >
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
           {error ? <p className="rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p> : null}

@@ -272,7 +272,7 @@ export function MapCanvas({
         >
           <img
             src={imageUrl}
-            alt="Risk map"
+            alt="Global Domination map"
             className="h-full w-full object-contain pointer-events-none select-none"
             draggable={false}
           />

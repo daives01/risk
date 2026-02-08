@@ -21,7 +21,7 @@ interface MapDef {
 }
 
 const maps: MapDef[] = [
-  { id: "classic", name: "Classic Risk", graphMap: classicMap },
+  { id: "classic", name: "Classic Global Domination", graphMap: classicMap },
 ];
 
 console.log("Validating maps...\n");

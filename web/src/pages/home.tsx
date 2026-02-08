@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import { Plus } from "lucide-react";
 import { api } from "@backend/_generated/api";
@@ -22,10 +22,12 @@ type MyGame = {
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: session, isPending } = authClient.useSession();
-  const games = useQuery(api.games.listMyGames) as MyGame[] | undefined;
-  const isAdmin = useQuery(api.adminMaps.isCurrentUserAdmin);
-  const settings = useQuery(api.userSettings.getMySettings);
+  const isAuthenticated = Boolean(session);
+  const games = useQuery(api.games.listMyGames, isAuthenticated ? {} : "skip") as MyGame[] | undefined;
+  const isAdmin = useQuery(api.adminMaps.isCurrentUserAdmin, isAuthenticated ? {} : "skip");
+  const settings = useQuery(api.userSettings.getMySettings, isAuthenticated ? {} : "skip");
   const setTurnEmailSetting = useMutation(api.userSettings.setEmailTurnNotificationsEnabled);
 
   const [tab, setTab] = useState<HomeTab>("overview");
@@ -117,6 +119,7 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
+    if (!session) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         (document.activeElement as HTMLElement | null)?.blur?.();
@@ -149,7 +152,7 @@ export default function HomePage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focusCurrentGames, focusJoin, navigate]);
+  }, [focusCurrentGames, focusJoin, navigate, session]);
 
   function submitJoinCode(event: React.FormEvent) {
     event.preventDefault();
@@ -239,7 +242,8 @@ export default function HomePage() {
   }
 
   if (!session) {
-    return <Navigate to="/login" replace />;
+    const redirectPath = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />;
   }
 
   return (
@@ -249,8 +253,9 @@ export default function HomePage() {
           <CardHeader className="space-y-4 py-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <CardTitle className="hero-title">Home</CardTitle>
-                <p className="text-sm text-muted-foreground">Signed in as {session.user.name}</p>
+                <CardTitle className="hero-title">
+                  <span className="text-primary">Legally Distinct Global Domination</span>
+                </CardTitle>
               </div>
               <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                 <Button className="justify-between sm:min-w-40" onClick={() => navigate("/games/new")}>
@@ -258,9 +263,6 @@ export default function HomePage() {
                     <Plus className="size-4" /> New Game
                   </span>
                   <ShortcutHint shortcut="n" />
-                </Button>
-                <Button variant="outline" onClick={() => authClient.signOut()}>
-                  Sign out
                 </Button>
               </div>
             </div>
@@ -570,6 +572,13 @@ export default function HomePage() {
                       />
                     </label>
                     {emailSettingError && <p className="text-sm text-red-400">{emailSettingError}</p>}
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border bg-background/75 p-3">
+                    <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Session</p>
+                    <Button variant="outline" onClick={() => authClient.signOut()}>
+                      Sign out
+                    </Button>
                   </div>
 
                   {isAdmin && (

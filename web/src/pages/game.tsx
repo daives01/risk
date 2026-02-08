@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Navigate, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { Flag, History, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import type { Id } from "@backend/_generated/dataModel";
 import { defaultRuleset } from "risk-engine";
@@ -650,11 +650,6 @@ export default function GamePage() {
     return <div className="page-shell flex items-center justify-center">Loading game...</div>;
   }
 
-  if (!session) {
-    const redirectPath = `${location.pathname}${location.search}${location.hash}`;
-    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />;
-  }
-
   if (view === undefined || graphMap === undefined || mapVisual === undefined) {
     return <div className="page-shell flex items-center justify-center">Loading game...</div>;
   }
@@ -689,6 +684,8 @@ export default function GamePage() {
   const playbackTerritories = historyOpen ? resolvedDisplayState.territories : displayedTerritories;
   const showActionEdges =
     !historyOpen && isMyTurn && !!selectedFrom && (phase === "Attack" || phase === "Fortify");
+  const showSignInCta = !sessionPending && !session;
+  const loginHref = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`;
 
   return (
     <div className="page-shell soft-grid overflow-x-hidden">
@@ -701,9 +698,16 @@ export default function GamePage() {
           )}
 
           {!historyOpen && !isMyTurn && displayPhase !== "GameOver" && (
-            <span className="shrink-0 text-sm text-muted-foreground">
-              It's {getPlayerName(resolvedDisplayState.turn.currentPlayerId, playerMap)}'s turn
-            </span>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                It's {getPlayerName(resolvedDisplayState.turn.currentPlayerId, playerMap)}'s turn
+              </span>
+              {showSignInCta && (
+                <Button asChild size="xs" variant="outline">
+                  <Link to={loginHref}>Sign in</Link>
+                </Button>
+              )}
+            </div>
           )}
 
           {!historyOpen && isMyTurn && phase === "Reinforcement" && (

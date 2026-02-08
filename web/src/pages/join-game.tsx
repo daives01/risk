@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation } from "convex/react";
 import { api } from "@backend/_generated/api";
 import { authClient } from "@/lib/auth-client";
@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 export default function JoinGamePage() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: session, isPending: sessionPending } = authClient.useSession();
 
   const joinGame = useMutation(api.lobby.joinGameByInvite);
@@ -36,7 +37,8 @@ export default function JoinGamePage() {
   }
 
   if (!session) {
-    return <Navigate to="/login" replace />;
+    const redirectPath = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />;
   }
 
   return (

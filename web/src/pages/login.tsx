@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Shield } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardFooter } from "@/components/ui/card";
@@ -44,10 +43,12 @@ export default function LoginPage() {
     <AuthShell
       title="Sign in"
       description="Continue your active games or start a new one."
-      badge={(
-        <div className="mb-2 inline-flex w-fit items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">
-          <Shield className="size-3.5" />
-          Risk Arena
+      masthead={(
+        <div className="text-center">
+          <h1 className="hero-title text-2xl leading-tight text-balance text-primary sm:text-3xl md:text-4xl">
+            <span className="block">Legally Distinct</span>
+            <span className="block">Global Domination</span>
+          </h1>
         </div>
       )}
     >
