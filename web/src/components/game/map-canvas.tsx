@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Lock, LockOpen, Minus, Plus, RotateCcw } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Lock, LockOpen, Minus, Plus, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { NumberStepper } from "@/components/ui/number-stepper";
@@ -49,11 +49,12 @@ interface MapCanvasProps {
         toLabel: string | null;
         attackDice: number;
         maxDice: number;
+        autoRunning: boolean;
         disabled: boolean;
         onSetAttackDice: (dice: number) => void;
         onResolveAttack: () => void;
+        onAutoAttack: () => void;
         onCancelSelection: () => void;
-        onEndAttackPhase: () => void;
       }
     | {
         mode: "occupy";
@@ -67,6 +68,7 @@ interface MapCanvasProps {
         maxMove: number;
         onSetOccupyMove: (count: number) => void;
         onSubmitOccupy: () => void;
+        onSubmitOccupyAll: () => void;
       }
     | {
         mode: "fortify";
@@ -80,6 +82,7 @@ interface MapCanvasProps {
         maxCount: number;
         onSetFortifyCount: (count: number) => void;
         onSubmitFortify: () => void;
+        onSubmitFortifyAll: () => void;
         onCancelSelection: () => void;
       }
     | null;
@@ -113,6 +116,19 @@ export function MapCanvas({
 }: MapCanvasProps) {
   const [zoomLocked, setZoomLocked] = useState(true);
   const [floatingDeltas, setFloatingDeltas] = useState<FloatingTroopDelta[]>([]);
+  const [overlayDragState, setOverlayDragState] = useState<{ key: string; x: number; y: number }>({
+    key: "",
+    x: 0,
+    y: 0,
+  });
+  const overlayDragRef = useRef<{
+    key: string;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
   const previousTerritoriesRef = useRef<Record<string, TerritoryState> | null>(null);
   const { containerRef, handlers, transformStyle, scale, zoomIn, zoomOut, reset, shouldSuppressClick } = useMapPanZoom({
     minScale: 0.85,
@@ -153,13 +169,16 @@ export function MapCanvas({
 
   const attackOverlayAnchor = useMemo(() => {
     if (!battleOverlay) return null;
+    const clampOverlayX = (value: number) => Math.max(0.14, Math.min(0.86, value));
+    const clampOverlayY = (value: number) => Math.max(0.2, Math.min(0.86, value));
+    const center = { x: 0.5, y: 0.5 };
     const from = projectedAnchors[battleOverlay.fromTerritoryId];
     const to = projectedAnchors[battleOverlay.toTerritoryId];
     if (!from) return null;
     if (!to) {
       return {
-        x: Math.max(0.14, Math.min(0.86, from.x)),
-        y: Math.max(0.2, Math.min(0.86, from.y + 0.08 * imageFit.height)),
+        x: clampOverlayX(from.x + (center.x - from.x) * 0.2),
+        y: clampOverlayY(from.y + (center.y - from.y) * 0.24),
       };
     }
     const dx = to.x - from.x;
@@ -169,12 +188,52 @@ export function MapCanvas({
     const normalY = dx / length;
     const midpointX = (from.x + to.x) / 2;
     const midpointY = (from.y + to.y) / 2;
-    const overlayOffset = 0.18;
+    const overlayOffset = 0.16;
+    const inwardBiasX = (center.x - midpointX) * 0.2;
+    const inwardBiasY = (center.y - midpointY) * 0.2;
     return {
-      x: Math.max(0.14, Math.min(0.86, midpointX + normalX * overlayOffset * imageFit.width)),
-      y: Math.max(0.2, Math.min(0.86, midpointY + normalY * overlayOffset * imageFit.height)),
+      x: clampOverlayX(midpointX + normalX * overlayOffset * imageFit.width + inwardBiasX),
+      y: clampOverlayY(midpointY + normalY * overlayOffset * imageFit.height + inwardBiasY),
     };
   }, [battleOverlay, imageFit.height, imageFit.width, projectedAnchors]);
+  const overlayDragKey = battleOverlay
+    ? `${battleOverlay.mode}:${battleOverlay.fromTerritoryId}:${battleOverlay.toTerritoryId}`
+    : "none";
+  const overlayDragOffset =
+    overlayDragState.key === overlayDragKey ? { x: overlayDragState.x, y: overlayDragState.y } : { x: 0, y: 0 };
+
+  const onStartOverlayDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!battleOverlay) return;
+    overlayDragRef.current = {
+      key: overlayDragKey,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: overlayDragOffset.x,
+      originY: overlayDragOffset.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.stopPropagation();
+  };
+
+  const onOverlayDragMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const dragState = overlayDragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    setOverlayDragState({
+      key: dragState.key,
+      x: dragState.originX + event.clientX - dragState.startX,
+      y: dragState.originY + event.clientY - dragState.startY,
+    });
+    event.stopPropagation();
+  };
+
+  const onEndOverlayDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const dragState = overlayDragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    overlayDragRef.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    event.stopPropagation();
+  };
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -393,16 +452,39 @@ export function MapCanvas({
 
           {battleOverlay && attackOverlayAnchor && (
             <div
-              className="absolute z-20 w-[min(320px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm"
+              className="absolute z-20 w-[min(320px,92vw)] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm"
               style={{
                 left: `${attackOverlayAnchor.x * 100}%`,
                 top: `${attackOverlayAnchor.y * 100}%`,
+                transform: `translate(calc(-50% + ${overlayDragOffset.x}px), calc(-50% + ${overlayDragOffset.y}px))`,
               }}
               onPointerDown={(event) => event.stopPropagation()}
             >
-              <p className="text-xs font-medium text-muted-foreground">
-                {battleOverlay.mode === "occupy" ? "Move" : battleOverlay.mode === "fortify" ? "Fortify" : "Attack"}
-              </p>
+              <div className="flex items-center justify-between gap-2 rounded-md px-1 py-0.5">
+                <p
+                  className="cursor-grab text-xs font-medium text-muted-foreground active:cursor-grabbing"
+                  onPointerDown={onStartOverlayDrag}
+                  onPointerMove={onOverlayDragMove}
+                  onPointerUp={onEndOverlayDrag}
+                  onPointerCancel={onEndOverlayDrag}
+                >
+                  {battleOverlay.mode === "occupy" ? "Move" : battleOverlay.mode === "fortify" ? "Fortify" : "Attack"}
+                </p>
+                {(battleOverlay.mode === "attack" || battleOverlay.mode === "fortify") && (
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    aria-label="Close"
+                    onClick={battleOverlay.onCancelSelection}
+                    disabled={battleOverlay.disabled}
+                    className="size-6"
+                    onPointerDown={(event) => event.stopPropagation()}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                )}
+              </div>
               <p className="mt-0.5 text-sm">
                 {battleOverlay.fromLabel ?? "Source"}
                 {battleOverlay.toLabel ? ` -> ${battleOverlay.toLabel}` : " -> select target"}
@@ -425,21 +507,23 @@ export function MapCanvas({
                     type="button"
                     size="xs"
                     onClick={battleOverlay.onResolveAttack}
-                    disabled={battleOverlay.disabled || !battleOverlay.toLabel}
+                    disabled={battleOverlay.disabled || !battleOverlay.toLabel || battleOverlay.maxDice < 1}
                   >
-                    Resolve
-                  </Button>
-                  <Button type="button" size="xs" variant="outline" onClick={battleOverlay.onCancelSelection}>
-                    Cancel
+                    Attack
                   </Button>
                   <Button
                     type="button"
                     size="xs"
-                    variant="outline"
-                    onClick={battleOverlay.onEndAttackPhase}
-                    disabled={battleOverlay.disabled}
+                    className="min-w-16"
+                    variant={battleOverlay.autoRunning ? "default" : "outline"}
+                    onClick={battleOverlay.onAutoAttack}
+                    disabled={
+                      battleOverlay.disabled ||
+                      !battleOverlay.toLabel ||
+                      (!battleOverlay.autoRunning && battleOverlay.maxDice < 3)
+                    }
                   >
-                    End Attack
+                    Auto
                   </Button>
                 </div>
               ) : battleOverlay.mode === "occupy" ? (
@@ -459,6 +543,15 @@ export function MapCanvas({
                     disabled={battleOverlay.disabled}
                   >
                     Move
+                  </Button>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="outline"
+                    onClick={battleOverlay.onSubmitOccupyAll}
+                    disabled={battleOverlay.disabled || battleOverlay.maxMove <= battleOverlay.minMove}
+                  >
+                    All
                   </Button>
                 </div>
               ) : (
@@ -483,10 +576,10 @@ export function MapCanvas({
                     type="button"
                     size="xs"
                     variant="outline"
-                    onClick={battleOverlay.onCancelSelection}
-                    disabled={battleOverlay.disabled}
+                    onClick={battleOverlay.onSubmitFortifyAll}
+                    disabled={battleOverlay.disabled || battleOverlay.maxCount <= battleOverlay.minCount}
                   >
-                    Cancel
+                    All
                   </Button>
                 </div>
               )}

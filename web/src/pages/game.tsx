@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { Flag, History, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import type { Id } from "@backend/_generated/dataModel";
@@ -130,6 +130,8 @@ export default function GamePage() {
   const [historyFrameIndex, setHistoryFrameIndex] = useState(0);
   const [highlightFilter, setHighlightFilter] = useState<HighlightFilter>("none");
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [autoAttacking, setAutoAttacking] = useState(false);
+  const autoAttackSubmittedVersionRef = useRef<number | null>(null);
 
   const phase = state?.turn.phase ?? "GameOver";
   const isSpectator = !myEnginePlayerId;
@@ -275,7 +277,13 @@ export default function GamePage() {
   }, [allowFortifyWithTeammate, graphMap, isTeammateOwner, myEnginePlayerId, preventAttackingTeammates, selectedFrom, state]);
 
   const submitAction = useCallback(
-    async (action: Action) => {
+    async (
+      action: Action,
+      options?: {
+        preserveSelection?: boolean;
+        preserveAttackDice?: boolean;
+      },
+    ) => {
       if (!typedGameId || !state) return;
       setSubmitting(true);
       try {
@@ -284,15 +292,21 @@ export default function GamePage() {
           expectedVersion: state.stateVersion,
           action,
         });
-        setSelectedFrom(null);
-        setSelectedTo(null);
+        if (!options?.preserveSelection) {
+          setSelectedFrom(null);
+          setSelectedTo(null);
+        }
         setPlaceCount(1);
         setReinforcementDrafts([]);
-        setAttackDice(3);
+        if (!options?.preserveAttackDice) {
+          setAttackDice(3);
+        }
         setOccupyMove(1);
         setFortifyCount(1);
         setSelectedCardIds(new Set());
       } catch (error) {
+        autoAttackSubmittedVersionRef.current = null;
+        setAutoAttacking(false);
         toast.error(error instanceof Error ? error.message : "Action failed");
       } finally {
         setSubmitting(false);
@@ -300,6 +314,11 @@ export default function GamePage() {
     },
     [state, submitActionMutation, typedGameId],
   );
+
+  const stopAutoAttack = useCallback(() => {
+    autoAttackSubmittedVersionRef.current = null;
+    setAutoAttacking(false);
+  }, []);
 
   const handleTerritoryClick = useCallback(
     (territoryId: string) => {
@@ -315,18 +334,21 @@ export default function GamePage() {
 
       if (state.turn.phase === "Attack") {
         if (!selectedFrom && validFromIds.has(territoryId)) {
+          stopAutoAttack();
           setSelectedFrom(territoryId);
           setSelectedTo(null);
           return;
         }
 
         if (territoryId === selectedFrom) {
+          stopAutoAttack();
           setSelectedFrom(null);
           setSelectedTo(null);
           return;
         }
 
         if (selectedFrom && validToIds.has(territoryId)) {
+          stopAutoAttack();
           setSelectedTo(territoryId);
           const armies = state.territories[selectedFrom]?.armies ?? 2;
           setAttackDice(Math.min(3, armies - 1));
@@ -334,6 +356,7 @@ export default function GamePage() {
         }
 
         if (validFromIds.has(territoryId)) {
+          stopAutoAttack();
           setSelectedFrom(territoryId);
           setSelectedTo(null);
         }
@@ -365,7 +388,7 @@ export default function GamePage() {
         }
       }
     },
-    [controlsDisabled, placeCount, selectedFrom, state, uncommittedReinforcements, validFromIds, validToIds],
+    [controlsDisabled, placeCount, selectedFrom, state, stopAutoAttack, uncommittedReinforcements, validFromIds, validToIds],
   );
 
   const handleUndoPlacement = useCallback(() => {
@@ -410,6 +433,70 @@ export default function GamePage() {
     setOccupyMove((prev) => Math.max(pending.minMove, Math.min(pending.maxMove, prev)));
   }, [state?.pending]);
 
+  useEffect(() => {
+    if (!state || phase !== "Attack") {
+      stopAutoAttack();
+      return;
+    }
+    if (selectedFrom && !validFromIds.has(selectedFrom)) {
+      stopAutoAttack();
+      setSelectedFrom(null);
+      setSelectedTo(null);
+      return;
+    }
+    if (selectedTo && !validToIds.has(selectedTo)) {
+      stopAutoAttack();
+      setSelectedTo(null);
+    }
+  }, [phase, selectedFrom, selectedTo, state, stopAutoAttack, validFromIds, validToIds]);
+
+  useEffect(() => {
+    if (!selectedFrom || phase !== "Attack" || !state) return;
+    const maxDice = Math.max(1, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1));
+    setAttackDice((prev) => Math.max(1, Math.min(prev, maxDice)));
+  }, [phase, selectedFrom, state]);
+
+  useEffect(() => {
+    if (!autoAttacking) return;
+    if (!state || !isMyTurn || historyOpen || phase !== "Attack" || state.pending) {
+      stopAutoAttack();
+      return;
+    }
+    if (!selectedFrom || !selectedTo || submitting) return;
+    const fromArmies = state.territories[selectedFrom]?.armies ?? 0;
+    if (fromArmies < 4) {
+      stopAutoAttack();
+      return;
+    }
+    if (!validToIds.has(selectedTo)) {
+      stopAutoAttack();
+      return;
+    }
+    if (autoAttackSubmittedVersionRef.current === state.stateVersion) return;
+    autoAttackSubmittedVersionRef.current = state.stateVersion;
+    void submitAction(
+      {
+        type: "Attack",
+        from: selectedFrom as TerritoryId,
+        to: selectedTo as TerritoryId,
+        attackerDice: 3,
+      },
+      { preserveSelection: true, preserveAttackDice: true },
+    );
+  }, [
+    autoAttacking,
+    historyOpen,
+    isMyTurn,
+    phase,
+    selectedFrom,
+    selectedTo,
+    state,
+    stopAutoAttack,
+    submitAction,
+    submitting,
+    validToIds,
+  ]);
+
   const toggleCard = useCallback((cardId: string) => {
     setSelectedCardIds((prev) => {
       const next = new Set(prev);
@@ -432,17 +519,30 @@ export default function GamePage() {
 
   const handleResolveAttack = useCallback(() => {
     if (!selectedFrom || !selectedTo) return;
-    void submitAction({
-      type: "Attack",
-      from: selectedFrom as TerritoryId,
-      to: selectedTo as TerritoryId,
-      attackerDice: attackDice,
-    });
+    void submitAction(
+      {
+        type: "Attack",
+        from: selectedFrom as TerritoryId,
+        to: selectedTo as TerritoryId,
+        attackerDice: attackDice,
+      },
+      { preserveSelection: true, preserveAttackDice: true },
+    );
   }, [attackDice, selectedFrom, selectedTo, submitAction]);
 
+  const handleAutoAttackToggle = useCallback(() => {
+    if (autoAttacking) {
+      stopAutoAttack();
+      return;
+    }
+    autoAttackSubmittedVersionRef.current = null;
+    setAutoAttacking(true);
+  }, [autoAttacking, stopAutoAttack]);
+
   const handleEndAttackPhase = useCallback(() => {
+    stopAutoAttack();
     void submitAction({ type: "EndAttackPhase" });
-  }, [submitAction]);
+  }, [stopAutoAttack, submitAction]);
 
   const handleEndTurn = useCallback(() => {
     void submitAction({ type: "EndTurn" });
@@ -568,9 +668,10 @@ export default function GamePage() {
 
   useEffect(() => {
     if (!historyOpen) return;
+    stopAutoAttack();
     setSelectedFrom(null);
     setSelectedTo(null);
-  }, [historyOpen]);
+  }, [historyOpen, stopAutoAttack]);
 
   useEffect(() => {
     if (chatChannel === "team" && !canUseTeamChat) {
@@ -615,7 +716,7 @@ export default function GamePage() {
     isMyTurn,
     phase,
     maxPlaceCount: uncommittedReinforcements,
-    maxAttackDice: selectedFrom ? Math.max(1, Math.min(3, (state?.territories[selectedFrom]?.armies ?? 2) - 1)) : 0,
+    maxAttackDice: selectedFrom ? Math.max(0, Math.min(3, (state?.territories[selectedFrom]?.armies ?? 2) - 1)) : 0,
     reinforcementDraftCount: reinforcementDrafts.length,
     controlsDisabled,
     hasPendingOccupy: !!state?.pending,
@@ -631,6 +732,7 @@ export default function GamePage() {
       }
     },
     onClearSelection: () => {
+      stopAutoAttack();
       setSelectedFrom(null);
       setSelectedTo(null);
     },
@@ -915,6 +1017,7 @@ export default function GamePage() {
             troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
             onClickTerritory={handleTerritoryClick}
             onClearSelection={() => {
+              stopAutoAttack();
               setSelectedFrom(null);
               setSelectedTo(null);
             }}
@@ -934,6 +1037,9 @@ export default function GamePage() {
                     onSetOccupyMove: setOccupyMove,
                     onSubmitOccupy: () => {
                       void submitAction({ type: "Occupy", moveArmies: occupyMove });
+                    },
+                    onSubmitOccupyAll: () => {
+                      void submitAction({ type: "Occupy", moveArmies: state.pending?.maxMove ?? occupyMove });
                     },
                   }
                 : !historyOpen && isMyTurn && phase === "Fortify" && selectedFrom && selectedTo
@@ -956,7 +1062,16 @@ export default function GamePage() {
                         count: fortifyCount,
                       });
                     },
+                    onSubmitFortifyAll: () => {
+                      void submitAction({
+                        type: "Fortify",
+                        from: selectedFrom as TerritoryId,
+                        to: selectedTo as TerritoryId,
+                        count: Math.max(1, (state.territories[selectedFrom]?.armies ?? 2) - 1),
+                      });
+                    },
                     onCancelSelection: () => {
+                      stopAutoAttack();
                       setSelectedFrom(null);
                       setSelectedTo(null);
                     },
@@ -969,15 +1084,17 @@ export default function GamePage() {
                     fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
                     toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
                     attackDice,
-                    maxDice: Math.max(1, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1)),
+                    maxDice: Math.max(0, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1)),
+                    autoRunning: autoAttacking,
                     disabled: controlsDisabled,
                     onSetAttackDice: setAttackDice,
                     onResolveAttack: handleResolveAttack,
+                    onAutoAttack: handleAutoAttackToggle,
                     onCancelSelection: () => {
+                      stopAutoAttack();
                       setSelectedFrom(null);
                       setSelectedTo(null);
                     },
-                    onEndAttackPhase: handleEndAttackPhase,
                   }
                 : null
             }
