@@ -103,9 +103,9 @@ export function GamePlayersCard({
               tabIndex={0}
               onClick={() => onTogglePlayerHighlight(player.playerId)}
               onKeyDown={(event) => handleRowKeyDown(event, player.playerId)}
-              className={`cursor-pointer rounded-lg border px-3 py-2 transition hover:border-primary/50 ${
-                isCurrent ? "border-primary/70 bg-primary/10" : "bg-background/80"
-              } ${isDefeated ? "opacity-55" : ""} ${isPlayerHighlighted ? "ring-2 ring-primary/80" : ""}`}
+              className={`cursor-pointer rounded-lg border bg-background/80 px-3 py-2 transition hover:border-primary/50 ${
+                isDefeated ? "opacity-55" : ""
+              } ${isPlayerHighlighted ? "ring-2 ring-primary/80" : ""}`}
             >
               <div className={`grid items-center gap-2 text-sm ${columnsClass}`}>
                 <div className="flex min-w-0 items-center gap-2">
@@ -145,7 +145,11 @@ export function GamePlayersCard({
                     {isCurrent ? (turnTimerLabel ?? "-") : "-"}
                   </span>
                 )}
-                <span className="text-center text-xs font-medium capitalize text-muted-foreground">
+                <span
+                  className={`text-center text-xs font-medium capitalize ${
+                    isCurrent ? "font-semibold text-primary" : "text-muted-foreground"
+                  }`}
+                >
                   {isCurrent ? "Turn" : player.status}
                 </span>
               </div>
