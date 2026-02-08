@@ -30,6 +30,8 @@ export default function HomePage() {
   const settings = useQuery(api.userSettings.getMySettings, isAuthenticated ? {} : "skip");
   const setTurnEmailSetting = useMutation(api.userSettings.setEmailTurnNotificationsEnabled);
 
+  const isGamesLoading = games === undefined;
+
   const [tab, setTab] = useState<HomeTab>("overview");
   const [joinCode, setJoinCode] = useState("");
   const [filter, setFilter] = useState("");
@@ -269,11 +271,10 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setTab("overview")}
-                className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${
-                  tab === "overview"
-                    ? "border-primary bg-primary/12 text-primary"
-                    : "border-border/75 bg-background/70 hover:border-primary/45"
-                }`}
+                className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${tab === "overview"
+                  ? "border-primary bg-primary/12 text-primary"
+                  : "border-border/75 bg-background/70 hover:border-primary/45"
+                  }`}
               >
                 <span>Overview</span>
                 <ShortcutHint shortcut="1" />
@@ -281,11 +282,10 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setTab("history")}
-                className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${
-                  tab === "history"
-                    ? "border-primary bg-primary/12 text-primary"
-                    : "border-border/75 bg-background/70 hover:border-primary/45"
-                }`}
+                className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${tab === "history"
+                  ? "border-primary bg-primary/12 text-primary"
+                  : "border-border/75 bg-background/70 hover:border-primary/45"
+                  }`}
               >
                 <span>History</span>
                 <ShortcutHint shortcut="2" />
@@ -293,11 +293,10 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setTab("account")}
-                className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${
-                  tab === "account"
-                    ? "border-primary bg-primary/12 text-primary"
-                    : "border-border/75 bg-background/70 hover:border-primary/45"
-                }`}
+                className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${tab === "account"
+                  ? "border-primary bg-primary/12 text-primary"
+                  : "border-border/75 bg-background/70 hover:border-primary/45"
+                  }`}
               >
                 <span>Account</span>
                 <ShortcutHint shortcut="3" />
@@ -313,17 +312,27 @@ export default function HomePage() {
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Active + Lobby</p>
                       <div className="flex items-center gap-2">
-                        <span className="inline-flex min-w-8 justify-center rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground">
-                          {currentGames.length}
-                        </span>
                         <ShortcutHint shortcut="g" />
                       </div>
                     </div>
                     <div className="overflow-hidden rounded-md border border-border/75 bg-background/70">
-                      {currentGames.length === 0 && (
+                      {isGamesLoading && (
+                        <div className="space-y-2 px-3 py-2">
+                          {Array.from({ length: 3 }).map((_, index) => (
+                            <div
+                              key={`current-game-skeleton-${index}`}
+                              className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-md border border-transparent bg-muted/20 px-2 py-2 animate-pulse"
+                            >
+                              <div className="h-3 w-2/3 rounded bg-muted/60" />
+                              <div className="h-3 w-14 rounded bg-muted/60" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {!isGamesLoading && currentGames.length === 0 && (
                         <p className="px-3 py-3 text-sm text-muted-foreground">No active or lobby games right now.</p>
                       )}
-                      {currentGames.map((game, idx) => (
+                      {!isGamesLoading && currentGames.map((game, idx) => (
                         <button
                           key={game._id}
                           ref={(element) => {
@@ -335,11 +344,10 @@ export default function HomePage() {
                         >
                           <span className="truncate">{game.name}</span>
                           <span
-                            className={`inline-flex min-w-16 items-center justify-center rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] ${
-                              game.status === "active"
-                                ? "border-emerald-400/45 bg-emerald-500/10 text-emerald-300"
-                                : "border-blue-400/45 bg-blue-500/10 text-blue-300"
-                            }`}
+                            className={`inline-flex min-w-16 items-center justify-center rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] ${game.status === "active"
+                              ? "border-emerald-400/45 bg-emerald-500/10 text-emerald-300"
+                              : "border-blue-400/45 bg-blue-500/10 text-blue-300"
+                              }`}
                           >
                             {game.status}
                           </span>
@@ -372,19 +380,35 @@ export default function HomePage() {
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
                   <div className="rounded-lg border bg-background/75 p-3">
                     <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Total</p>
-                    <p className="mt-1 text-3xl">{counts.total}</p>
+                    {isGamesLoading ? (
+                      <div className="mt-3 h-8 w-16 rounded bg-muted/50 animate-pulse" />
+                    ) : (
+                      <p className="mt-1 text-3xl">{counts.total}</p>
+                    )}
                   </div>
                   <div className="rounded-lg border bg-background/75 p-3">
                     <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Active</p>
-                    <p className="mt-1 text-3xl">{counts.active}</p>
+                    {isGamesLoading ? (
+                      <div className="mt-3 h-8 w-12 rounded bg-muted/50 animate-pulse" />
+                    ) : (
+                      <p className="mt-1 text-3xl">{counts.active}</p>
+                    )}
                   </div>
                   <div className="rounded-lg border bg-background/75 p-3">
                     <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Lobby</p>
-                    <p className="mt-1 text-3xl">{counts.lobby}</p>
+                    {isGamesLoading ? (
+                      <div className="mt-3 h-8 w-12 rounded bg-muted/50 animate-pulse" />
+                    ) : (
+                      <p className="mt-1 text-3xl">{counts.lobby}</p>
+                    )}
                   </div>
                   <div className="rounded-lg border bg-background/75 p-3">
                     <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Finished</p>
-                    <p className="mt-1 text-3xl">{counts.finished}</p>
+                    {isGamesLoading ? (
+                      <div className="mt-3 h-8 w-14 rounded bg-muted/50 animate-pulse" />
+                    ) : (
+                      <p className="mt-1 text-3xl">{counts.finished}</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -407,12 +431,7 @@ export default function HomePage() {
                 </div>
 
                 <section className="space-y-2 rounded-lg border bg-background/75 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Active + Lobby</p>
-                    <span className="inline-flex min-w-8 justify-center rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground">
-                      {filteredCurrentGames.length}
-                    </span>
-                  </div>
+                  <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Active + Lobby</p>
                   <div className="overflow-hidden rounded-md border border-border/75 bg-background/70">
                     {filteredCurrentGames.length === 0 && (
                       <p className="px-3 py-3 text-sm text-muted-foreground">No active or lobby games found.</p>
@@ -426,11 +445,10 @@ export default function HomePage() {
                       >
                         <span className="truncate">{game.name}</span>
                         <span
-                          className={`inline-flex min-w-16 items-center justify-center rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] ${
-                            game.status === "active"
-                              ? "border-emerald-400/45 bg-emerald-500/10 text-emerald-300"
-                              : "border-blue-400/45 bg-blue-500/10 text-blue-300"
-                          }`}
+                          className={`inline-flex min-w-16 items-center justify-center rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] ${game.status === "active"
+                            ? "border-emerald-400/45 bg-emerald-500/10 text-emerald-300"
+                            : "border-blue-400/45 bg-blue-500/10 text-blue-300"
+                            }`}
                         >
                           {game.status}
                         </span>
@@ -442,9 +460,6 @@ export default function HomePage() {
                 <section className="space-y-2 rounded-lg border bg-background/75 p-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Previous Games</p>
-                    <span className="inline-flex min-w-8 justify-center rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground">
-                      {filteredPreviousGames.length}
-                    </span>
                   </div>
                   <div className="overflow-hidden rounded-md border border-border/75 bg-background/70">
                     {filteredPreviousGames.length === 0 && (
@@ -462,13 +477,12 @@ export default function HomePage() {
                           {game.status}
                         </span>
                         <span
-                          className={`inline-flex min-w-12 items-center justify-center rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] ${
-                            game.result === "won"
-                              ? "border-emerald-400/45 bg-emerald-500/10 text-emerald-300"
-                              : game.result === "lost"
-                                ? "border-red-400/45 bg-red-500/10 text-red-300"
-                                : "border-border/70 bg-muted/40 text-muted-foreground"
-                          }`}
+                          className={`inline-flex min-w-12 items-center justify-center rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] ${game.result === "won"
+                            ? "border-emerald-400/45 bg-emerald-500/10 text-emerald-300"
+                            : game.result === "lost"
+                              ? "border-red-400/45 bg-red-500/10 text-red-300"
+                              : "border-border/70 bg-muted/40 text-muted-foreground"
+                            }`}
                         >
                           {game.result ?? "final"}
                         </span>

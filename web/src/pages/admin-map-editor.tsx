@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@backend/_generated/api";
 import type { Id } from "@backend/_generated/dataModel";
+import { Lock, LockOpen, X } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -200,8 +201,18 @@ export default function AdminMapEditorPage() {
 
   const territoryIds = useMemo(() => Object.keys(territories).sort(), [territories]);
 
-  const { containerRef, handlers, transformStyle, scale, zoomIn, zoomOut, reset, toNormalized } =
-    useMapPanZoom({ minScale: 1, maxScale: 6, zoomStep: 0.25 });
+  const [panZoomLocked, setPanZoomLocked] = useState(true);
+  const {
+    containerRef,
+    handlers,
+    transformStyle,
+    scale,
+    zoomIn,
+    zoomOut,
+    reset,
+    toNormalized,
+    shouldSuppressClick,
+  } = useMapPanZoom({ minScale: 1, maxScale: 6, zoomStep: 0.25 });
 
   const setAnchorAt = useCallback(
     (territoryId: string, clientX: number, clientY: number) => {
@@ -557,12 +568,31 @@ export default function AdminMapEditorPage() {
 
   return (
     <div className="min-h-screen bg-background p-4 text-foreground">
-      <div className="mx-auto grid w-full max-w-7xl gap-4 lg:grid-cols-[1fr_380px]">
+      <div className="mx-auto grid w-full max-w-7xl gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => navigate("/admin/maps")}>Back</Button>
-              <Input value={name} onChange={(e) => setName(e.target.value)} className="w-80" />
+          <div className="glass-panel flex flex-col gap-3 px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => navigate("/admin/maps")}>Back</Button>
+                <h1 className="text-lg font-semibold">Map Editor</h1>
+                <span className="text-xs uppercase text-muted-foreground">{getDraft.authoring.status}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={handleSaveDraft} disabled={saving || publishing}>
+                  {saving ? "Saving..." : "Save Draft"}
+                </Button>
+                <Button onClick={handlePublish} disabled={publishing || saving}>
+                  {publishing ? "Publishing..." : "Publish"}
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Map name"
+                className="w-full"
+              />
               <div className="flex items-center gap-2 text-sm">
                 <span className="text-muted-foreground">Players</span>
                 <Input
@@ -585,43 +615,41 @@ export default function AdminMapEditorPage() {
                   className="w-20"
                 />
               </div>
-              <span className="text-xs uppercase text-muted-foreground">{getDraft.authoring.status}</span>
-            </div>
-            <div className="flex gap-2">
               <Input
                 type="file"
                 accept="image/*"
-                className="w-56"
+                className="w-full max-w-[240px]"
                 onChange={(e) => void handleReplaceImage(e.target.files?.[0] ?? null)}
                 disabled={replacingImage}
               />
-              <Button onClick={handleSaveDraft} disabled={saving || publishing}>
-                {saving ? "Saving..." : "Save Draft"}
-              </Button>
-              <Button onClick={handlePublish} disabled={publishing || saving}>
-                {publishing ? "Publishing..." : "Publish"}
-              </Button>
             </div>
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-              <p>Pinch/wheel zoom, drag pan, drag marker to reposition.</p>
-              <div className="flex items-center gap-1">
-                <Button size="xs" variant="outline" onClick={zoomOut}>-</Button>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <p>{panZoomLocked ? "Pan/zoom locked. Unlock to move the canvas." : "Pinch/wheel zoom, drag pan, drag marker to reposition."}</p>
+              <div className="flex flex-wrap items-center gap-1">
+                <Button
+                  size="xs"
+                  variant={panZoomLocked ? "default" : "outline"}
+                  onClick={() => setPanZoomLocked((prev) => !prev)}
+                >
+                  {panZoomLocked ? <Lock className="size-3.5" /> : <LockOpen className="size-3.5" />}
+                </Button>
+                <Button size="xs" variant="outline" onClick={zoomOut} disabled={panZoomLocked}>-</Button>
                 <span className="w-12 text-center">{Math.round(scale * 100)}%</span>
-                <Button size="xs" variant="outline" onClick={zoomIn}>+</Button>
-                <Button size="xs" variant="outline" onClick={reset}>Reset</Button>
+                <Button size="xs" variant="outline" onClick={zoomIn} disabled={panZoomLocked}>+</Button>
+                <Button size="xs" variant="outline" onClick={reset} disabled={panZoomLocked}>Reset</Button>
               </div>
             </div>
 
             <div
               ref={containerRef}
-              className="relative overflow-hidden rounded-lg border bg-muted touch-none"
+              className={`relative overflow-hidden rounded-lg border bg-muted ${panZoomLocked ? "touch-auto" : "touch-none"}`}
               style={{ aspectRatio: `${imageWidth} / ${imageHeight}` }}
-              {...handlers}
+              {...(panZoomLocked ? {} : handlers)}
               onClick={(event) => {
-                if (!selectedTerritoryId) return;
+                if (!selectedTerritoryId || (!panZoomLocked && shouldSuppressClick())) return;
                 setAnchorAt(selectedTerritoryId, event.clientX, event.clientY);
               }}
             >
@@ -731,29 +759,38 @@ export default function AdminMapEditorPage() {
             </div>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Validation</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              {validation.errors.length === 0 && validation.warnings.length === 0 ? (
-                <p className="text-green-600">No validation issues.</p>
-              ) : (
-                <>
-                  {validation.errors.map((error) => (
-                    <p key={error} className="text-red-600">• {error}</p>
-                  ))}
-                  {playerLimitsError && <p className="text-red-600">• {playerLimitsError}</p>}
-                  {validation.warnings.map((warning) => (
-                    <p key={warning} className="text-amber-600">• {warning}</p>
-                  ))}
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Validation</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {validation.errors.length === 0 && validation.warnings.length === 0 ? (
+                  <p className="text-green-600">No validation issues.</p>
+                ) : (
+                  <>
+                    {validation.errors.map((error) => (
+                      <p key={error} className="text-red-600">• {error}</p>
+                    ))}
+                    {playerLimitsError && <p className="text-red-600">• {playerLimitsError}</p>}
+                    {validation.warnings.map((warning) => (
+                      <p key={warning} className="text-amber-600">• {warning}</p>
+                    ))}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Adjacency</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-xs text-muted-foreground">
+                <p>Click <strong>Link</strong> on a territory, then click another marker to toggle a connection.</p>
+                <p>{graphEdges.length} total edges across {territoryIds.length} territories.</p>
+              </CardContent>
+            </Card>
+          </div>
 
-        <div className="flex flex-col gap-3">
           <Card>
             <CardHeader>
               <CardTitle>Import JSON</CardTitle>
@@ -828,6 +865,9 @@ export default function AdminMapEditorPage() {
             </CardContent>
           </Card>
 
+        </div>
+
+        <div className="flex flex-col gap-3">
           <Card>
             <CardHeader>
               <CardTitle>Territories</CardTitle>
@@ -964,14 +1004,16 @@ export default function AdminMapEditorPage() {
                   .map(([continentId, continent]) => (
                   <div
                     key={continentId}
-                    className={`flex items-center gap-2 rounded-md border p-2 ${
+                    className={`relative flex items-center gap-2 rounded-md border p-2 pr-8 ${
                       activeContinentId === continentId ? "border-emerald-400/80 bg-emerald-500/10" : ""
                     }`}
                   >
                     <button
                       type="button"
                       className="min-w-0 flex-1 truncate text-left text-sm"
-                      onClick={() => setActiveContinentId(continentId)}
+                      onClick={() =>
+                        setActiveContinentId((current) => (current === continentId ? null : continentId))
+                      }
                     >
                       {continentId}
                       <span className="ml-2 text-[11px] text-muted-foreground">
@@ -979,9 +1021,10 @@ export default function AdminMapEditorPage() {
                       </span>
                     </button>
                     <Input
-                      className="w-20"
+                      className="w-16"
                       type="number"
                       min={1}
+                      max={99}
                       value={continent.bonus}
                       onChange={(e) => {
                         const next = Number(e.target.value);
@@ -996,14 +1039,8 @@ export default function AdminMapEditorPage() {
                     />
                     <Button
                       size="xs"
-                      variant={activeContinentId === continentId ? "default" : "outline"}
-                      onClick={() => setActiveContinentId(continentId)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      size="xs"
                       variant="ghost"
+                      className="absolute right-1 top-1"
                       onClick={() => {
                         setContinents((prev) => {
                           const next = { ...prev };
@@ -1014,22 +1051,13 @@ export default function AdminMapEditorPage() {
                           setActiveContinentId(null);
                         }
                       }}
+                      aria-label={`Remove ${continentId}`}
                     >
-                      Remove
+                      <X className="size-3.5" />
                     </Button>
                   </div>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Adjacency</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-xs text-muted-foreground">
-              <p>Click <strong>Link</strong> on a territory, then click another marker to toggle a connection.</p>
-              <p>{graphEdges.length} total edges across {territoryIds.length} territories.</p>
             </CardContent>
           </Card>
         </div>

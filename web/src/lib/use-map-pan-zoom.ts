@@ -94,6 +94,7 @@ export function useMapPanZoom({
   const onWheel = useCallback(
     (event: React.WheelEvent<HTMLDivElement>) => {
       event.preventDefault();
+      event.stopPropagation();
       const direction: 1 | -1 = event.deltaY < 0 ? 1 : -1;
       zoomAtPoint(scale + direction * zoomStep, event.clientX, event.clientY);
     },

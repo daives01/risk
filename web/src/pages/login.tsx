@@ -71,13 +71,8 @@ export default function LoginPage() {
             <Input id="identifier" value={identifier} onChange={(event) => setIdentifier(event.target.value)} required />
           </div>
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
-              <Link to="/forgot-password" className="text-sm text-primary underline underline-offset-4">
-                Forgot password?
-              </Link>
-            </div>
-            <Input
+           <Label htmlFor="password">Password</Label>
+           <Input
               id="password"
               type="password"
               value={password}
@@ -90,6 +85,9 @@ export default function LoginPage() {
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Signing in..." : "Sign in"}
           </Button>
+          <Link to="/forgot-password" className="text-sm text-primary underline underline-offset-4">
+            Forgot password?
+          </Link>
           <p className="text-sm text-muted-foreground">
             No account yet?{" "}
             <Link to="/signup" className="text-primary underline underline-offset-4">
