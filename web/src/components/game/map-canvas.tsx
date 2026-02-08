@@ -344,17 +344,20 @@ export function MapCanvas({
               if (!fromAnchor || !toAnchor) return null;
 
               const touchesFrom = selectedFrom === from || selectedFrom === to;
-              const touchesTo = selectedTo === from || selectedTo === to;
               const touchesHighlight =
                 highlightedTerritoryIds.has(from) || highlightedTerritoryIds.has(to);
               const isCandidate =
                 !!selectedFrom &&
                 ((from === selectedFrom && validToIds.has(to)) || (to === selectedFrom && validToIds.has(from)));
-              const showActionEdge = isCandidate || touchesTo;
+              const isSelectedPair =
+                !!selectedFrom &&
+                !!selectedTo &&
+                ((from === selectedFrom && to === selectedTo) || (to === selectedFrom && from === selectedTo));
+              const showActionEdge = isCandidate || isSelectedPair;
               if (graphEdgeMode === "none") return null;
               if (graphEdgeMode === "action" && !showActionEdge) return null;
 
-              const edgeStroke = touchesTo
+              const edgeStroke = isSelectedPair
                 ? "rgba(248,113,113,0.95)"
                 : touchesFrom || isCandidate
                   ? "rgba(96,165,250,0.95)"
@@ -372,7 +375,7 @@ export function MapCanvas({
                   x2={`${toAnchor.x * 100}%`}
                   y2={`${toAnchor.y * 100}%`}
                   stroke={edgeStroke}
-                  strokeWidth={touchesFrom || touchesTo || isCandidate ? 3 : 1.5}
+                  strokeWidth={touchesFrom || isCandidate || isSelectedPair ? 3 : 1.5}
                 />
               );
             })}
