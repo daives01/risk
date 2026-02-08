@@ -32,7 +32,7 @@ function appEmailHtml(args: AppEmailArgs): string {
     <div style="background: #0b0d10; padding: 24px 12px; color: #e4e8ee;">
       <div style="margin: 0 auto; width: 100%; max-width: 560px; border: 1px solid #323844; background: #0f1216; font-family: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;">
         <div style="padding: 14px 16px; border-bottom: 1px solid #323844;">
-          <div style="font-size: 20px; letter-spacing: 0.16em; color: #f2bf62; text-transform: uppercase;">Risk</div>
+          <div style="font-size: 20px; letter-spacing: 0.16em; color: #f2bf62; text-transform: uppercase;">LDGD</div>
           <div style="margin-top: 2px; font-size: 11px; letter-spacing: 0.08em; color: #8b95a7; text-transform: uppercase;">Legally Distinct Global Domination</div>
         </div>
 
