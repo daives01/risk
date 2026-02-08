@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { Plus } from "lucide-react";
 import { api } from "@backend/_generated/api";
 import { authClient } from "@/lib/auth-client";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ShortcutHint } from "@/components/ui/shortcut-hint";
+import { Switch } from "@/components/ui/switch";
 import { hasModifierKey, isTypingTarget } from "@/lib/keyboard-shortcuts";
 
 type HomeTab = "overview" | "history" | "account";
@@ -24,6 +25,8 @@ export default function HomePage() {
   const { data: session, isPending } = authClient.useSession();
   const games = useQuery(api.games.listMyGames) as MyGame[] | undefined;
   const isAdmin = useQuery(api.adminMaps.isCurrentUserAdmin);
+  const settings = useQuery(api.userSettings.getMySettings);
+  const setTurnEmailSetting = useMutation(api.userSettings.setEmailTurnNotificationsEnabled);
 
   const [tab, setTab] = useState<HomeTab>("overview");
   const [joinCode, setJoinCode] = useState("");
@@ -41,6 +44,8 @@ export default function HomePage() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [emailSettingSaving, setEmailSettingSaving] = useState(false);
+  const [emailSettingError, setEmailSettingError] = useState<string | null>(null);
 
   const joinRef = useRef<HTMLInputElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
@@ -214,6 +219,18 @@ export default function HomePage() {
       setPasswordSuccess("Password updated.");
     } finally {
       setPasswordSaving(false);
+    }
+  }
+
+  async function toggleTurnEmails(enabled: boolean) {
+    setEmailSettingError(null);
+    setEmailSettingSaving(true);
+    try {
+      await setTurnEmailSetting({ enabled });
+    } catch (error) {
+      setEmailSettingError(error instanceof Error ? error.message : "Unable to update notifications.");
+    } finally {
+      setEmailSettingSaving(false);
     }
   }
 
@@ -539,6 +556,21 @@ export default function HomePage() {
                       {passwordSaving ? "Updating..." : "Change password"}
                     </Button>
                   </form>
+
+                  <div className="space-y-3 rounded-lg border bg-background/75 p-3">
+                    <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Notifications</p>
+                    <label className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-muted-foreground">Email me when it's my turn</span>
+                      <Switch
+                        checked={settings?.emailTurnNotificationsEnabled ?? true}
+                        onCheckedChange={(checked) => {
+                          void toggleTurnEmails(checked);
+                        }}
+                        disabled={emailSettingSaving || settings === undefined}
+                      />
+                    </label>
+                    {emailSettingError && <p className="text-sm text-red-400">{emailSettingError}</p>}
+                  </div>
 
                   {isAdmin && (
                     <div className="space-y-3 rounded-lg border bg-background/75 p-3">

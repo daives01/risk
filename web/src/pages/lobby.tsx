@@ -223,6 +223,9 @@ export default function LobbyPage() {
   const userId = session.user.id;
   const isHost = lobby.game.createdBy === userId;
   const teamModeEnabled = lobby.game.teamModeEnabled;
+  const timingMode = (lobby.game as { timingMode?: "realtime" | "async_1d" | "async_3d" }).timingMode ?? "realtime";
+  const excludeWeekends = (lobby.game as { excludeWeekends?: boolean }).excludeWeekends ?? false;
+  const turnDeadlineAt = (lobby.game as { turnDeadlineAt?: number | null }).turnDeadlineAt ?? null;
   const inviteUrl = lobby.inviteCode ? `${window.location.origin}/join/${lobby.inviteCode}` : null;
   const teamCount = lobby.game.teamCount ?? 2;
   const teamIds = teamModeEnabled
@@ -417,6 +420,27 @@ export default function LobbyPage() {
                 <p className="text-xs text-muted-foreground">Code: <span className="font-mono font-semibold">{lobby.inviteCode}</span></p>
               </div>
             )}
+
+            <div className="space-y-1 rounded-lg border bg-background/75 p-3">
+              <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Turn Timing</p>
+              <p className="text-sm text-foreground">
+                {timingMode === "realtime"
+                  ? "Realtime (no turn timer)"
+                  : timingMode === "async_1d"
+                    ? "Async (1 day per turn)"
+                    : "Async (3 days per turn)"}
+              </p>
+              {timingMode !== "realtime" && (
+                <p className="text-xs text-muted-foreground">
+                  Weekends {excludeWeekends ? "excluded" : "included"} in timer calculations.
+                </p>
+              )}
+              {turnDeadlineAt && (
+                <p className="text-xs text-muted-foreground">
+                  Current deadline: {new Date(turnDeadlineAt).toLocaleString()} ({new Date(turnDeadlineAt).toUTCString()})
+                </p>
+              )}
+            </div>
 
             <div className="space-y-2">
               <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Players</p>

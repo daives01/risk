@@ -76,6 +76,15 @@ function findAutoTradeSet(
   return null;
 }
 
+function formatTurnTimer(ms: number): string {
+  const totalHours = Math.max(0, Math.round(ms / (60 * 60 * 1000)));
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  if (days > 0 && hours > 0) return `${days}d ${hours}hr`;
+  if (days > 0) return `${days}d`;
+  return `${hours}hr`;
+}
+
 export default function GamePage() {
   const HISTORY_PLAYBACK_INTERVAL_MS = 840;
   const TROOP_DELTA_DURATION_MS = Math.round(HISTORY_PLAYBACK_INTERVAL_MS * 1.25);
@@ -119,6 +128,7 @@ export default function GamePage() {
   const [historyPlaying, setHistoryPlaying] = useState(false);
   const [historyFrameIndex, setHistoryFrameIndex] = useState(0);
   const [highlightFilter, setHighlightFilter] = useState<HighlightFilter>("none");
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const phase = state?.turn.phase ?? "GameOver";
   const isSpectator = !myEnginePlayerId;
@@ -151,6 +161,15 @@ export default function GamePage() {
   const myTeamName = myTeamId ? teamNames[myTeamId] ?? myTeamId : null;
   const canUseTeamChat = !!view?.teamModeEnabled && !!myTeamId;
   const canSendChat = !isSpectator && !historyOpen && view?.status === "active";
+  const timingMode = (view as { timingMode?: "realtime" | "async_1d" | "async_3d" } | null)?.timingMode ?? "realtime";
+  const turnDeadlineAt = (view as { turnDeadlineAt?: number | null } | null)?.turnDeadlineAt ?? null;
+  const remainingTurnMs = turnDeadlineAt ? Math.max(0, turnDeadlineAt - nowMs) : null;
+  const showTurnTimer = timingMode !== "realtime" && !!turnDeadlineAt;
+  const turnTimerLabel = showTurnTimer
+    ? remainingTurnMs === 0
+      ? "0hr"
+      : formatTurnTimer(remainingTurnMs ?? 0)
+    : null;
   const isTeammateOwner = useCallback((ownerId: string) => {
     if (!state || !myEnginePlayerId || !myTeamId) return false;
     if (ownerId === myEnginePlayerId || ownerId === "neutral") return false;
@@ -528,6 +547,11 @@ export default function GamePage() {
     const maxIndex = Math.max(0, historyCount - 1);
     setHistoryFrameIndex((prev) => Math.min(prev, maxIndex));
   }, [historyCount, historyOpen]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!historyOpen || !historyPlaying) return;
@@ -964,6 +988,8 @@ export default function GamePage() {
             playerMap={playerMap}
             teamModeEnabled={!!view.teamModeEnabled}
             teamNames={teamNames}
+            showTurnTimer={showTurnTimer}
+            turnTimerLabel={turnTimerLabel}
             activeHighlight={highlightFilter}
             onTogglePlayerHighlight={handleTogglePlayerHighlight}
             onToggleTeamHighlight={handleToggleTeamHighlight}

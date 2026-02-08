@@ -53,6 +53,12 @@ export default defineSchema({
       v.literal("finished"),
     ),
     visibility: v.union(v.literal("public"), v.literal("unlisted")),
+    timingMode: v.union(
+      v.literal("realtime"),
+      v.literal("async_1d"),
+      v.literal("async_3d"),
+    ),
+    excludeWeekends: v.optional(v.boolean()),
     maxPlayers: v.number(),
     teamModeEnabled: v.optional(v.boolean()),
     teamCount: v.optional(v.number()),
@@ -70,6 +76,8 @@ export default defineSchema({
     winningTeamId: v.optional(v.string()),
     state: v.optional(v.any()),
     stateVersion: v.optional(v.number()),
+    turnStartedAt: v.optional(v.number()),
+    turnDeadlineAt: v.optional(v.number()),
   }),
   gamePlayers: defineTable({
     gameId: v.id("games"),
@@ -133,5 +141,11 @@ export default defineSchema({
   admins: defineTable({
     userId: v.string(),
     createdAt: v.number(),
+  }).index("by_userId", ["userId"]),
+  userSettings: defineTable({
+    userId: v.string(),
+    emailTurnNotificationsEnabled: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
   }).index("by_userId", ["userId"]),
 });

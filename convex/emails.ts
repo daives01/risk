@@ -27,3 +27,27 @@ export function resetPasswordEmailHtml(url: string): string {
     </div>
   `;
 }
+
+export function yourTurnEmailHtml(args: {
+  gameName: string;
+  gameUrl: string;
+  turnDeadlineLabel: string | null;
+}): string {
+  return `
+    <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto;">
+      <h2>Your turn in ${args.gameName}</h2>
+      <p>It's your turn to play.</p>
+      ${
+        args.turnDeadlineLabel
+          ? `<p><strong>Turn deadline:</strong> ${args.turnDeadlineLabel}</p>`
+          : ""
+      }
+      <a href="${args.gameUrl}" style="display: inline-block; padding: 12px 24px; background: #18181b; color: #fff; text-decoration: none; border-radius: 6px;">
+        Open game
+      </a>
+      <p style="margin-top: 16px; font-size: 14px; color: #71717a;">
+        You can disable turn emails from your account settings.
+      </p>
+    </div>
+  `;
+}

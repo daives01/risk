@@ -33,6 +33,8 @@ interface PlayersCardProps {
   onToggleTeamHighlight: (teamId: string) => void;
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
   getPlayerName: (enginePlayerId: string, players: PlayerRef[]) => string;
+  showTurnTimer: boolean;
+  turnTimerLabel?: string | null;
 }
 
 export function GamePlayersCard({
@@ -46,10 +48,16 @@ export function GamePlayersCard({
   onToggleTeamHighlight,
   getPlayerColor,
   getPlayerName,
+  showTurnTimer,
+  turnTimerLabel,
 }: PlayersCardProps) {
-  const columnsClass = teamModeEnabled
-    ? "grid-cols-[minmax(9rem,2fr)_minmax(4.5rem,1fr)_repeat(4,minmax(3.5rem,0.75fr))_minmax(4.5rem,0.9fr)]"
-    : "grid-cols-[minmax(9rem,2fr)_repeat(4,minmax(3.5rem,0.75fr))_minmax(4.5rem,0.9fr)]";
+  const columnsClass = showTurnTimer
+    ? teamModeEnabled
+      ? "grid-cols-[minmax(9rem,2fr)_minmax(4.5rem,1fr)_repeat(4,minmax(3.5rem,0.75fr))_minmax(5rem,0.95fr)_minmax(4.5rem,0.9fr)]"
+      : "grid-cols-[minmax(9rem,2fr)_repeat(4,minmax(3.5rem,0.75fr))_minmax(5rem,0.95fr)_minmax(4.5rem,0.9fr)]"
+    : teamModeEnabled
+      ? "grid-cols-[minmax(9rem,2fr)_minmax(4.5rem,1fr)_repeat(4,minmax(3.5rem,0.75fr))_minmax(4.5rem,0.9fr)]"
+      : "grid-cols-[minmax(9rem,2fr)_repeat(4,minmax(3.5rem,0.75fr))_minmax(4.5rem,0.9fr)]";
 
   const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>, playerId: string) => {
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -75,6 +83,7 @@ export function GamePlayersCard({
           <span className="text-center">Armies</span>
           <span className="text-center">Reserve</span>
           <span className="text-center">Cards</span>
+          {showTurnTimer && <span className="text-center">Timer</span>}
           <span className="text-center">Status</span>
         </div>
         {playerStats.map((player) => {
@@ -131,6 +140,11 @@ export function GamePlayersCard({
                 <span className="text-center text-xs tabular-nums">{player.armies}</span>
                 <span className="text-center text-xs tabular-nums">{player.reserveTroops}</span>
                 <span className="text-center text-xs tabular-nums">{player.cards}</span>
+                {showTurnTimer && (
+                  <span className="text-center text-xs tabular-nums text-muted-foreground">
+                    {isCurrent ? (turnTimerLabel ?? "-") : "-"}
+                  </span>
+                )}
                 <span className="text-center text-xs font-medium capitalize text-muted-foreground">
                   {isCurrent ? "Turn" : player.status}
                 </span>

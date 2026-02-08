@@ -2,12 +2,14 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { GenericDatabaseReader } from "convex/server";
 import type { DataModel } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 import { authComponent } from "./auth.js";
 import { applyAction, ActionError, calculateReinforcements, createDeck, createRng } from "risk-engine";
 import type { Action, CardId, GameState, PlayerId, GraphMap, TerritoryId, GameEvent, RulesetConfig } from "risk-engine";
 import type { Id } from "./_generated/dataModel";
 import { summarizeTimelineFrame } from "./historyTimeline";
 import { resolveEffectiveRuleset, type RulesetOverrides } from "./rulesets";
+import { computeTurnDeadlineAt, didTurnAdvance, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
 
 const ACTION_RATE_LIMIT_MS = 500;
 
@@ -38,6 +40,50 @@ function getGameRuleset(game: {
   effectiveRuleset?: RulesetConfig;
 }): RulesetConfig {
   return resolveEffectiveRuleset(game);
+}
+
+function resolveTurnTimingPatch(args: {
+  timingMode: GameTimingMode;
+  excludeWeekends: boolean;
+  previousState: GameState;
+  nextState: GameState;
+  now: number;
+}) {
+  const isGameOver = args.nextState.turn.phase === "GameOver";
+  if (!isAsyncTimingMode(args.timingMode) || isGameOver) {
+    return {
+      turnStartedAt: undefined as number | undefined,
+      turnDeadlineAt: undefined as number | undefined,
+      shouldNotify: false,
+    };
+  }
+  if (!didTurnAdvance(args.previousState, args.nextState)) {
+    return {
+      turnStartedAt: undefined as number | undefined,
+      turnDeadlineAt: undefined as number | undefined,
+      shouldNotify: false,
+    };
+  }
+
+  const turnStartedAt = args.now;
+  return {
+    turnStartedAt,
+    turnDeadlineAt:
+      computeTurnDeadlineAt(turnStartedAt, args.timingMode, args.excludeWeekends) ??
+      undefined,
+    shouldNotify: true,
+  };
+}
+
+function assertTurnNotExpired(game: {
+  timingMode?: GameTimingMode;
+  turnDeadlineAt?: number;
+}) {
+  const timingMode = (game.timingMode ?? "realtime") as GameTimingMode;
+  if (!isAsyncTimingMode(timingMode)) return;
+  if (!game.turnDeadlineAt) return;
+  if (Date.now() <= game.turnDeadlineAt) return;
+  throw new Error("This turn has timed out and will be advanced automatically.");
 }
 
 function extractGameWinner(events: unknown[]): {
@@ -96,6 +142,10 @@ export const submitAction = mutation({
     const game = await ctx.db.get(args.gameId);
     if (!game) throw new Error("Game not found");
     if (game.status !== "active") throw new Error("Game is not active");
+    assertTurnNotExpired({
+      timingMode: game.timingMode as GameTimingMode | undefined,
+      turnDeadlineAt: game.turnDeadlineAt ?? undefined,
+    });
 
     const state = game.state as GameState;
     if (!state) throw new Error("Game has no state");
@@ -180,19 +230,37 @@ export const submitAction = mutation({
     // Check if game is over
     const isGameOver = result.state.turn.phase === "GameOver";
     const winner = isGameOver ? extractGameWinner(result.events as unknown[]) : {};
+    const now = Date.now();
+    const timingPatch = resolveTurnTimingPatch({
+      timingMode: (game.timingMode ?? "realtime") as GameTimingMode,
+      excludeWeekends: game.excludeWeekends ?? false,
+      previousState: state,
+      nextState: result.state,
+      now,
+    });
 
     // Persist new state
     await ctx.db.patch(args.gameId, {
       state: result.state,
       stateVersion: result.state.stateVersion,
+      turnStartedAt: timingPatch.turnStartedAt,
+      turnDeadlineAt: timingPatch.turnDeadlineAt,
       ...(isGameOver
         ? {
             status: "finished" as const,
-            finishedAt: Date.now(),
+            finishedAt: now,
             ...winner,
           }
         : {}),
     });
+
+    if (timingPatch.shouldNotify && timingPatch.turnStartedAt) {
+      await ctx.scheduler.runAfter(0, internal.asyncTurns.sendYourTurnEmail, {
+        gameId: args.gameId,
+        expectedPlayerId: result.state.turn.currentPlayerId,
+        turnStartedAt: timingPatch.turnStartedAt,
+      });
+    }
 
     return {
       events: result.events,
@@ -217,6 +285,10 @@ export const submitReinforcementPlacements = mutation({
     const game = await ctx.db.get(args.gameId);
     if (!game) throw new Error("Game not found");
     if (game.status !== "active") throw new Error("Game is not active");
+    assertTurnNotExpired({
+      timingMode: game.timingMode as GameTimingMode | undefined,
+      turnDeadlineAt: game.turnDeadlineAt ?? undefined,
+    });
     if (args.placements.length === 0) throw new Error("No placements to submit");
 
     const state = game.state as GameState;
@@ -311,18 +383,36 @@ export const submitReinforcementPlacements = mutation({
 
     const isGameOver = nextState.turn.phase === "GameOver";
     const winner = isGameOver ? extractGameWinner(events) : {};
+    const now = Date.now();
+    const timingPatch = resolveTurnTimingPatch({
+      timingMode: (game.timingMode ?? "realtime") as GameTimingMode,
+      excludeWeekends: game.excludeWeekends ?? false,
+      previousState: state,
+      nextState,
+      now,
+    });
 
     await ctx.db.patch(args.gameId, {
       state: nextState,
       stateVersion: nextState.stateVersion,
+      turnStartedAt: timingPatch.turnStartedAt,
+      turnDeadlineAt: timingPatch.turnDeadlineAt,
       ...(isGameOver
         ? {
             status: "finished" as const,
-            finishedAt: Date.now(),
+            finishedAt: now,
             ...winner,
           }
         : {}),
     });
+
+    if (timingPatch.shouldNotify && timingPatch.turnStartedAt) {
+      await ctx.scheduler.runAfter(0, internal.asyncTurns.sendYourTurnEmail, {
+        gameId: args.gameId,
+        expectedPlayerId: nextState.turn.currentPlayerId,
+        turnStartedAt: timingPatch.turnStartedAt,
+      });
+    }
 
     return {
       events,
@@ -481,6 +571,14 @@ export const resign = mutation({
         : []),
     ];
     const winner = isGameOver ? extractGameWinner(events) : {};
+    const now = Date.now();
+    const timingPatch = resolveTurnTimingPatch({
+      timingMode: (game.timingMode ?? "realtime") as GameTimingMode,
+      excludeWeekends: game.excludeWeekends ?? false,
+      previousState: state,
+      nextState: newState,
+      now,
+    });
 
     await ctx.db.insert("gameActions", {
       gameId,
@@ -496,14 +594,24 @@ export const resign = mutation({
     await ctx.db.patch(gameId, {
       state: newState,
       stateVersion: newState.stateVersion,
+      turnStartedAt: timingPatch.turnStartedAt,
+      turnDeadlineAt: timingPatch.turnDeadlineAt,
       ...(isGameOver
         ? {
             status: "finished" as const,
-            finishedAt: Date.now(),
+            finishedAt: now,
             ...winner,
           }
         : {}),
     });
+
+    if (timingPatch.shouldNotify && timingPatch.turnStartedAt) {
+      await ctx.scheduler.runAfter(0, internal.asyncTurns.sendYourTurnEmail, {
+        gameId,
+        expectedPlayerId: newState.turn.currentPlayerId,
+        turnStartedAt: timingPatch.turnStartedAt,
+      });
+    }
 
     return { events, newVersion: newState.stateVersion };
   },

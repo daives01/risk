@@ -21,6 +21,14 @@ type RulesetOverridesInput = {
   };
 };
 
+type GameTimingMode = "realtime" | "async_1d" | "async_3d";
+
+const TIMING_MODE_OPTIONS: Array<{ value: GameTimingMode; label: string }> = [
+  { value: "realtime", label: "Realtime" },
+  { value: "async_1d", label: "Async (1 day / turn)" },
+  { value: "async_3d", label: "Async (3 days / turn)" },
+];
+
 const CARD_INCREMENT_PRESETS = {
   classic: {
     label: "Classic (4,6,8,10,12,15 then +5)",
@@ -88,6 +96,8 @@ export default function CreateGamePage() {
   const [maxPlayers, setMaxPlayers] = useState(6);
   const [teamModeEnabled, setTeamModeEnabled] = useState(false);
   const [teamAssignmentStrategy, setTeamAssignmentStrategy] = useState<"manual" | "balancedRandom">("manual");
+  const [timingMode, setTimingMode] = useState<GameTimingMode>("realtime");
+  const [excludeWeekends, setExcludeWeekends] = useState(false);
   const [fortifyMode, setFortifyMode] = useState<"adjacent" | "connected">("connected");
   const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | "unlimited">(3);
   const [forcedTradeHandSize, setForcedTradeHandSize] = useState(5);
@@ -156,6 +166,8 @@ export default function CreateGamePage() {
         maxPlayers,
         teamModeEnabled,
         teamAssignmentStrategy,
+        timingMode,
+        excludeWeekends,
         rulesetOverrides,
       });
       navigate(`/g/${gameId}`);
@@ -236,6 +248,37 @@ export default function CreateGamePage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-3 rounded-lg border bg-background/70 p-3">
+                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Turn Timing</p>
+                <div className="space-y-2">
+                  <Label htmlFor="timingMode">Game Mode</Label>
+                  <Select
+                    value={timingMode}
+                    onValueChange={(value) => setTimingMode(value as GameTimingMode)}
+                  >
+                    <SelectTrigger id="timingMode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIMING_MODE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <RulesSwitch
+                  label="Exclude weekends from turn timer"
+                  checked={excludeWeekends}
+                  onCheckedChange={setExcludeWeekends}
+                  disabled={timingMode === "realtime"}
+                />
+                {timingMode === "realtime" && (
+                  <p className="text-xs text-muted-foreground">Realtime games do not use turn deadlines.</p>
+                )}
               </div>
 
               <div className="space-y-3 rounded-lg border bg-background/70 p-3">

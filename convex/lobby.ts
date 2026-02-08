@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { authComponent } from "./auth.js";
 import {
   createRng,
@@ -41,6 +42,7 @@ import {
   isPlayerColor,
   resolvePlayerColors,
 } from "./playerColors";
+import { computeTurnDeadlineAt, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
 
 function generateInviteCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -78,6 +80,10 @@ export const createGame = mutation({
     teamAssignmentStrategy: v.optional(
       v.union(v.literal("manual"), v.literal("balancedRandom")),
     ),
+    timingMode: v.optional(
+      v.union(v.literal("realtime"), v.literal("async_1d"), v.literal("async_3d")),
+    ),
+    excludeWeekends: v.optional(v.boolean()),
     rulesetOverrides: v.optional(rulesetOverridesValidator),
   },
   handler: async (ctx, args) => {
@@ -114,6 +120,9 @@ export const createGame = mutation({
       args.rulesetOverrides as RulesetOverrides | undefined,
     );
     resolveRulesetFromOverrides(args.teamModeEnabled ?? false, rulesetOverrides);
+    const timingMode = (args.timingMode ?? "realtime") as GameTimingMode;
+    const excludeWeekends =
+      isAsyncTimingMode(timingMode) ? (args.excludeWeekends ?? false) : false;
     const teamModeEnabled = args.teamModeEnabled ?? false;
     const teamIds = teamModeEnabled ? getTeamIds(2) : [];
     const teamNames = teamModeEnabled ? resolveTeamNames(teamIds) : undefined;
@@ -123,6 +132,8 @@ export const createGame = mutation({
       mapId: args.mapId,
       status: "lobby",
       visibility: args.visibility ?? "unlisted",
+      timingMode,
+      excludeWeekends,
       maxPlayers,
       teamModeEnabled,
       teamCount: teamModeEnabled ? 2 : undefined,
@@ -271,6 +282,10 @@ export const getLobby = query({
         mapId: game.mapId,
         status: game.status,
         visibility: game.visibility,
+        timingMode: game.timingMode ?? "realtime",
+        excludeWeekends: game.excludeWeekends ?? false,
+        turnStartedAt: game.turnStartedAt ?? null,
+        turnDeadlineAt: game.turnDeadlineAt ?? null,
         maxPlayers: game.maxPlayers,
         createdBy: game.createdBy,
         createdAt: game.createdAt,
@@ -747,13 +762,29 @@ export const startGame = mutation({
     }
 
     // Persist engine state and transition to active
+    const turnStartedAt = Date.now();
+    const turnDeadlineAt = computeTurnDeadlineAt(
+      turnStartedAt,
+      (game.timingMode ?? "realtime") as GameTimingMode,
+      game.excludeWeekends ?? false,
+    );
     await ctx.db.patch(gameId, {
       status: "active",
       startedAt: Date.now(),
       state: engineState,
       stateVersion: 1,
       effectiveRuleset: toStoredRuleset(effectiveRuleset),
+      turnStartedAt,
+      turnDeadlineAt: turnDeadlineAt ?? undefined,
     });
+
+    if (isAsyncTimingMode((game.timingMode ?? "realtime") as GameTimingMode)) {
+      await ctx.scheduler.runAfter(0, internal.asyncTurns.sendYourTurnEmail, {
+        gameId,
+        expectedPlayerId: engineState.turn.currentPlayerId,
+        turnStartedAt,
+      });
+    }
 
     return { gameId };
   },
