@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { NumberStepper } from "@/components/ui/number-stepper";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useMapPanZoom } from "@/lib/use-map-pan-zoom";
-import { isTypingTarget } from "@/lib/keyboard-shortcuts";
+import { hasModifierKey, isTypingTarget } from "@/lib/keyboard-shortcuts";
 
 interface GraphMapLike {
   territories: Record<string, { name?: string }>;
@@ -179,6 +179,7 @@ export function MapCanvas({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
+      if (hasModifierKey(event)) return;
 
       if (event.key.toLowerCase() === "l") {
         event.preventDefault();

@@ -123,6 +123,7 @@ export default function GamePage() {
   const [reinforcementDrafts, setReinforcementDrafts] = useState<ReinforcementDraft[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
   const [cardsOpen, setCardsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyPlaying, setHistoryPlaying] = useState(false);
@@ -371,10 +372,6 @@ export default function GamePage() {
     setReinforcementDrafts((prev) => prev.slice(0, -1));
   }, []);
 
-  const handleUndoAllPlacements = useCallback(() => {
-    setReinforcementDrafts([]);
-  }, []);
-
   const handleConfirmPlacements = useCallback(async () => {
     if (!typedGameId || !state || reinforcementDrafts.length === 0) return;
     setSubmitting(true);
@@ -617,12 +614,22 @@ export default function GamePage() {
     historyMaxIndex,
     isMyTurn,
     phase,
+    maxPlaceCount: uncommittedReinforcements,
+    maxAttackDice: selectedFrom ? Math.max(1, Math.min(3, (state?.territories[selectedFrom]?.armies ?? 2) - 1)) : 0,
     reinforcementDraftCount: reinforcementDrafts.length,
     controlsDisabled,
     hasPendingOccupy: !!state?.pending,
     onToggleHistory: () => setHistoryOpen((prev) => !prev),
+    onToggleShortcutCheatSheet: () => setShortcutsOpen((prev) => !prev),
     onSetHistoryPlaying: setHistoryPlaying,
     onSetHistoryFrameIndex: setHistoryFrameIndex,
+    onSetPlaceCount: setPlaceCount,
+    onSetAttackDice: setAttackDice,
+    onOpenCards: () => {
+      if (!isSpectator && !historyOpen) {
+        setCardsOpen(true);
+      }
+    },
     onClearSelection: () => {
       setSelectedFrom(null);
       setSelectedTo(null);
@@ -733,7 +740,6 @@ export default function GamePage() {
               >
                 +
               </Button>
-              <span className="text-xs text-muted-foreground">{uncommittedReinforcements}</span>
               <Button
                 type="button"
                 size="xs"
@@ -743,16 +749,7 @@ export default function GamePage() {
               >
                 Undo
               </Button>
-              <Button
-                type="button"
-                size="xs"
-                variant="outline"
-                disabled={controlsDisabled || reinforcementDrafts.length === 0}
-                onClick={handleUndoAllPlacements}
-              >
-                Undo All
-              </Button>
-              <span className="text-xs text-muted-foreground">{queuedReinforcementTotal}</span>
+              <span className="text-xs text-muted-foreground">{uncommittedReinforcements} left</span>
             </div>
           )}
 
@@ -821,44 +818,54 @@ export default function GamePage() {
                 />
               </>
             )}
-            {!historyOpen && isMyTurn && phase === "Reinforcement" && (
-              <Button
-                type="button"
-                size="sm"
-                title="Confirm placements (Cmd/Ctrl+Enter)"
-                disabled={controlsDisabled || reinforcementDrafts.length === 0}
-                onClick={() => void handleConfirmPlacements()}
-              >
-                Confirm
-                <ShortcutHint shortcut="mod+enter" />
-              </Button>
-            )}
-            {!historyOpen && isMyTurn && phase === "Attack" && !state.pending && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                title="End attack phase (Cmd/Ctrl+Enter)"
-                disabled={controlsDisabled}
-                onClick={handleEndAttackPhase}
-              >
-                End Attack
-                <ShortcutHint shortcut="mod+enter" />
-              </Button>
-            )}
-            {!historyOpen && isMyTurn && phase === "Fortify" && (
-              <Button
-                size="sm"
-                variant="outline"
-                title="End turn (Cmd/Ctrl+Enter)"
-                disabled={controlsDisabled}
-                onClick={handleEndTurn}
-              >
-                End Turn
-                <ShortcutHint shortcut="mod+enter" />
-              </Button>
-            )}
             <TooltipProvider>
+              {!isSpectator && !historyOpen && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="sm" type="button" onClick={() => setCardsOpen(true)}>
+                      Cards ({myCardCount})
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Open cards (C)</TooltipContent>
+                </Tooltip>
+              )}
+              {!historyOpen && isMyTurn && phase === "Reinforcement" && (
+                <Button
+                  type="button"
+                  size="sm"
+                  title="Confirm placements (Cmd/Ctrl+Enter)"
+                  disabled={controlsDisabled || reinforcementDrafts.length === 0}
+                  onClick={() => void handleConfirmPlacements()}
+                >
+                  Confirm
+                  <ShortcutHint shortcut="mod+enter" />
+                </Button>
+              )}
+              {!historyOpen && isMyTurn && phase === "Attack" && !state.pending && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  title="End attack phase (Cmd/Ctrl+Enter)"
+                  disabled={controlsDisabled}
+                  onClick={handleEndAttackPhase}
+                >
+                  End Attack
+                  <ShortcutHint shortcut="mod+enter" />
+                </Button>
+              )}
+              {!historyOpen && isMyTurn && phase === "Fortify" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  title="End turn (Cmd/Ctrl+Enter)"
+                  disabled={controlsDisabled}
+                  onClick={handleEndTurn}
+                >
+                  End Turn
+                  <ShortcutHint shortcut="mod+enter" />
+                </Button>
+              )}
               {!isSpectator && !historyOpen && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -867,16 +874,6 @@ export default function GamePage() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Resign game</TooltipContent>
-                </Tooltip>
-              )}
-              {!isSpectator && !historyOpen && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="xs" type="button" onClick={() => setCardsOpen(true)}>
-                      Cards ({myCardCount})
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Open cards</TooltipContent>
                 </Tooltip>
               )}
               <Tooltip>
@@ -1034,6 +1031,52 @@ export default function GamePage() {
           </div>
         </div>
       </div>
+
+      <div className="fixed bottom-4 right-4 z-40">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={shortcutsOpen ? "default" : "outline"}
+                size="icon-sm"
+                type="button"
+                aria-label="Toggle keyboard shortcuts"
+                onClick={() => setShortcutsOpen((prev) => !prev)}
+              >
+                ?
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Keyboard shortcuts (?)</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
+      {shortcutsOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/65 p-4 backdrop-blur-[1px]">
+          <Card className="glass-panel w-full max-w-md border border-border/70 py-0 shadow-xl">
+            <CardContent className="space-y-4 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-base font-semibold">Keyboard Shortcuts</p>
+                  <p className="text-sm text-muted-foreground">Quick controls for your turn.</p>
+                </div>
+                <Button size="xs" variant="outline" type="button" onClick={() => setShortcutsOpen(false)}>
+                  Close
+                </Button>
+              </div>
+              <div className="space-y-1.5 text-sm">
+                <p><span className="font-semibold">1-9</span>: Set troops to place in Reinforcement</p>
+                <p><span className="font-semibold">1-3</span>: Set attack dice in Attack</p>
+                <p><span className="font-semibold">U</span>: Undo last placement</p>
+                <p><span className="font-semibold">C</span>: Open cards</p>
+                <p><span className="font-semibold">?</span>: Toggle this help</p>
+                <p><span className="font-semibold">H</span>: Toggle history</p>
+                <p><span className="font-semibold">Cmd/Ctrl + Enter</span>: Confirm or end phase</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {cardsOpen && myHand && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/65 p-4 backdrop-blur-[1px]">

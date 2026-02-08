@@ -8,12 +8,18 @@ interface UseGameShortcutsOptions {
   historyMaxIndex: number;
   isMyTurn: boolean;
   phase: Phase;
+  maxPlaceCount: number;
+  maxAttackDice: number;
   reinforcementDraftCount: number;
   controlsDisabled: boolean;
   hasPendingOccupy: boolean;
   onToggleHistory: () => void;
+  onToggleShortcutCheatSheet: () => void;
   onSetHistoryPlaying: (next: boolean | ((prev: boolean) => boolean)) => void;
   onSetHistoryFrameIndex: (next: number | ((prev: number) => number)) => void;
+  onSetPlaceCount: (count: number) => void;
+  onSetAttackDice: (dice: number) => void;
+  onOpenCards: () => void;
   onClearSelection: () => void;
   onUndoPlacement: () => void;
   onConfirmPlacements: () => void;
@@ -27,12 +33,18 @@ export function useGameShortcuts({
   historyMaxIndex,
   isMyTurn,
   phase,
+  maxPlaceCount,
+  maxAttackDice,
   reinforcementDraftCount,
   controlsDisabled,
   hasPendingOccupy,
   onToggleHistory,
+  onToggleShortcutCheatSheet,
   onSetHistoryPlaying,
   onSetHistoryFrameIndex,
+  onSetPlaceCount,
+  onSetAttackDice,
+  onOpenCards,
   onClearSelection,
   onUndoPlacement,
   onConfirmPlacements,
@@ -52,6 +64,12 @@ export function useGameShortcuts({
       }
 
       if (!withCommand) {
+        if (key === "?") {
+          event.preventDefault();
+          onToggleShortcutCheatSheet();
+          return;
+        }
+
         if (key === "h") {
           event.preventDefault();
           onToggleHistory();
@@ -83,15 +101,33 @@ export function useGameShortcuts({
           }
         }
 
+        if (!historyOpen && key === "c") {
+          event.preventDefault();
+          onOpenCards();
+          return;
+        }
+
+        const numericKey = Number.parseInt(event.key, 10);
+        if (!Number.isNaN(numericKey) && numericKey >= 1) {
+          if (!historyOpen && isMyTurn && phase === "Reinforcement" && !controlsDisabled && maxPlaceCount > 0) {
+            event.preventDefault();
+            onSetPlaceCount(Math.min(numericKey, Math.max(1, maxPlaceCount)));
+            return;
+          }
+          if (!historyOpen && isMyTurn && phase === "Attack" && !hasPendingOccupy && maxAttackDice > 0) {
+            if (numericKey <= 3 && numericKey <= maxAttackDice) {
+              event.preventDefault();
+              onSetAttackDice(numericKey);
+              return;
+            }
+          }
+        }
+
         if (!historyOpen && isMyTurn && phase === "Reinforcement") {
           if (key === "u" && reinforcementDraftCount > 0) {
             event.preventDefault();
             onUndoPlacement();
             return;
-          }
-          if (key === "c" && reinforcementDraftCount > 0 && !controlsDisabled) {
-            event.preventDefault();
-            onConfirmPlacements();
           }
         }
 
@@ -125,12 +161,18 @@ export function useGameShortcuts({
     historyMaxIndex,
     historyOpen,
     isMyTurn,
+    maxAttackDice,
+    maxPlaceCount,
     onClearSelection,
     onConfirmPlacements,
     onEndAttackPhase,
     onEndTurn,
+    onOpenCards,
+    onSetAttackDice,
     onSetHistoryFrameIndex,
     onSetHistoryPlaying,
+    onSetPlaceCount,
+    onToggleShortcutCheatSheet,
     onToggleHistory,
     onUndoPlacement,
     phase,
