@@ -5,6 +5,7 @@ import type { GameState, PlayerId } from "risk-engine";
 import { authComponent } from "./auth.js";
 import { getTeamIds, resolveTeamNames } from "./gameTeams";
 import { resolvePlayerColors } from "./playerColors";
+import { readGameStateNullable } from "./typeAdapters";
 
 export const engineVersion = query({
   handler: async () => {
@@ -90,7 +91,7 @@ export const getGameView = query({
       };
     }
 
-    const state = game.state as GameState | undefined;
+    const state = readGameStateNullable(game.state);
 
     return {
       _id: game._id,
@@ -181,7 +182,7 @@ export const getGameViewAsPlayer = query({
       };
     }
 
-    const state = game.state as GameState | undefined;
+    const state = readGameStateNullable(game.state);
     const enginePlayerId = callerPlayer?.enginePlayerId as
       | PlayerId
       | undefined;
@@ -233,14 +234,31 @@ export const getGameViewAsPlayer = query({
 
 /** List public games (active or lobby). */
 export const listPublicGames = query({
-  handler: async (ctx) => {
-    const games = await ctx.db.query("games").collect();
-    return games
-      .filter(
-        (g) =>
-          g.visibility === "public" &&
-          (g.status === "lobby" || g.status === "active"),
-      )
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { limit }) => {
+    const take = Math.min(Math.max(limit ?? 100, 1), 200);
+    const [lobbyGames, activeGames] = await Promise.all([
+      ctx.db
+        .query("games")
+        .withIndex("by_visibility_status_createdAt", (q) =>
+          q.eq("visibility", "public").eq("status", "lobby"),
+        )
+        .order("desc")
+        .take(take),
+      ctx.db
+        .query("games")
+        .withIndex("by_visibility_status_createdAt", (q) =>
+          q.eq("visibility", "public").eq("status", "active"),
+        )
+        .order("desc")
+        .take(take),
+    ]);
+
+    return [...lobbyGames, ...activeGames]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, take)
       .map((g) => ({
         _id: g._id,
         name: g.name,

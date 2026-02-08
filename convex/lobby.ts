@@ -15,7 +15,6 @@ import type {
   RulesetConfig,
   TeamId,
   TerritoryId,
-  GraphMap,
 } from "risk-engine";
 import {
   resolveMapPlayerLimits,
@@ -43,15 +42,8 @@ import {
   resolvePlayerColors,
 } from "./playerColors";
 import { computeTurnDeadlineAt, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
-
-function generateInviteCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "";
-  for (let i = 0; i < 6; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
-}
+import { readGraphMap } from "./typeAdapters";
+import { generateUniqueInviteCode } from "./inviteCodes";
 
 function toStoredRuleset(ruleset: RulesetConfig) {
   return JSON.parse(JSON.stringify(ruleset));
@@ -155,7 +147,13 @@ export const createGame = mutation({
     });
 
     // Generate invite code
-    const code = generateInviteCode();
+    const code = await generateUniqueInviteCode(async (candidateCode) => {
+      const existing = await ctx.db
+        .query("gameInvites")
+        .withIndex("by_code", (q) => q.eq("code", candidateCode))
+        .unique();
+      return existing !== null;
+    });
     await ctx.db.insert("gameInvites", {
       gameId,
       code,
@@ -576,7 +574,7 @@ export const startGame = mutation({
       throw new Error("Map not found or not published");
     }
 
-    const graphMap = mapDoc.graphMap as unknown as GraphMap;
+    const graphMap = readGraphMap(mapDoc.graphMap);
     const territoryCount = Object.keys(graphMap.territories).length;
     const playerLimits = resolveMapPlayerLimits(mapDoc.playerLimits, territoryCount);
     const playerLimitsErrors = validateMapPlayerLimits(playerLimits, territoryCount);

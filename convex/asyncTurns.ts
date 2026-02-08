@@ -5,6 +5,7 @@ import { internal, components } from "./_generated/api";
 import { resolveEffectiveRuleset, type RulesetOverrides } from "./rulesets";
 import { computeTurnDeadlineAt, didTurnAdvance, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
 import { yourTurnEmailHtml } from "./emails";
+import { readGameStateNullable, readGraphMap } from "./typeAdapters";
 
 function getGameRuleset(game: {
   teamModeEnabled?: boolean;
@@ -148,7 +149,27 @@ export const processExpiredTurns = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
-    const games = await ctx.db.query("games").collect();
+    const [async1dGames, async3dGames] = await Promise.all([
+      ctx.db
+        .query("games")
+        .withIndex("by_status_timingMode_turnDeadlineAt", (q) =>
+          q
+            .eq("status", "active")
+            .eq("timingMode", "async_1d")
+            .lte("turnDeadlineAt", now),
+        )
+        .collect(),
+      ctx.db
+        .query("games")
+        .withIndex("by_status_timingMode_turnDeadlineAt", (q) =>
+          q
+            .eq("status", "active")
+            .eq("timingMode", "async_3d")
+            .lte("turnDeadlineAt", now),
+        )
+        .collect(),
+    ]);
+    const games = [...async1dGames, ...async3dGames];
 
     let processed = 0;
 
@@ -162,7 +183,7 @@ export const processExpiredTurns = internalMutation({
         continue;
       }
 
-      const state = game.state as GameState | undefined;
+      const state = readGameStateNullable(game.state);
       if (!state || state.turn.phase === "GameOver") continue;
 
       const timedOutPlayerId = state.turn.currentPlayerId as PlayerId;
@@ -180,7 +201,7 @@ export const processExpiredTurns = internalMutation({
       const resolution = applyTimeoutTurnResolution({
         state,
         playerId: timedOutPlayerId,
-        graphMap: mapDoc.graphMap as unknown as GraphMap,
+        graphMap: readGraphMap(mapDoc.graphMap),
         ruleset,
       });
       if (!resolution) continue;
@@ -268,7 +289,7 @@ export const sendYourTurnEmail = internalAction({
       return { sent: false, reason: "stale_turn" };
     }
 
-    const state = game.state as GameState | null;
+    const state = readGameStateNullable(game.state);
     if (!state || state.turn.currentPlayerId !== args.expectedPlayerId) {
       return { sent: false, reason: "player_mismatch" };
     }

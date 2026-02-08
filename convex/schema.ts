@@ -78,7 +78,17 @@ export default defineSchema({
     stateVersion: v.optional(v.number()),
     turnStartedAt: v.optional(v.number()),
     turnDeadlineAt: v.optional(v.number()),
-  }),
+  })
+    .index("by_visibility_status_createdAt", [
+      "visibility",
+      "status",
+      "createdAt",
+    ])
+    .index("by_status_timingMode_turnDeadlineAt", [
+      "status",
+      "timingMode",
+      "turnDeadlineAt",
+    ]),
   gamePlayers: defineTable({
     gameId: v.id("games"),
     userId: v.string(),

@@ -287,10 +287,14 @@ export default function GamePage() {
       if (!typedGameId || !state) return;
       setSubmitting(true);
       try {
+        const mutationAction =
+          action.type === "TradeCards"
+            ? { ...action, cardIds: [...action.cardIds] }
+            : action;
         await submitActionMutation({
           gameId: typedGameId,
           expectedVersion: state.stateVersion,
-          action,
+          action: mutationAction,
         });
         if (!options?.preserveSelection) {
           setSelectedFrom(null);

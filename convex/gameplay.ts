@@ -10,8 +10,42 @@ import type { Id } from "./_generated/dataModel";
 import { summarizeTimelineFrame } from "./historyTimeline";
 import { resolveEffectiveRuleset, type RulesetOverrides } from "./rulesets";
 import { computeTurnDeadlineAt, didTurnAdvance, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
+import { readGameState, readGraphMap } from "./typeAdapters";
 
 const ACTION_RATE_LIMIT_MS = 500;
+const actionValidator = v.union(
+  v.object({
+    type: v.literal("TradeCards"),
+    cardIds: v.array(v.string()),
+  }),
+  v.object({
+    type: v.literal("PlaceReinforcements"),
+    territoryId: v.string(),
+    count: v.number(),
+  }),
+  v.object({
+    type: v.literal("Attack"),
+    from: v.string(),
+    to: v.string(),
+    attackerDice: v.optional(v.number()),
+  }),
+  v.object({
+    type: v.literal("Occupy"),
+    moveArmies: v.number(),
+  }),
+  v.object({
+    type: v.literal("Fortify"),
+    from: v.string(),
+    to: v.string(),
+    count: v.number(),
+  }),
+  v.object({
+    type: v.literal("EndAttackPhase"),
+  }),
+  v.object({
+    type: v.literal("EndTurn"),
+  }),
+);
 
 type TimelinePublicState = {
   players: Record<string, { status: string; teamId?: string }>;
@@ -133,7 +167,7 @@ export const submitAction = mutation({
   args: {
     gameId: v.id("games"),
     expectedVersion: v.number(),
-    action: v.any(),
+    action: actionValidator,
   },
   handler: async (ctx, args) => {
     const user = await authComponent.safeGetAuthUser(ctx);
@@ -147,7 +181,7 @@ export const submitAction = mutation({
       turnDeadlineAt: game.turnDeadlineAt ?? undefined,
     });
 
-    const state = game.state as GameState;
+    const state = readGameState(game.state);
     if (!state) throw new Error("Game has no state");
     const ruleset = getGameRuleset({
       teamModeEnabled: game.teamModeEnabled,
@@ -184,7 +218,7 @@ export const submitAction = mutation({
       .withIndex("by_mapId", (q) => q.eq("mapId", game.mapId))
       .unique();
     if (!mapDoc) throw new Error("Map not found");
-    const graphMap = mapDoc.graphMap as unknown as GraphMap;
+    const graphMap = readGraphMap(mapDoc.graphMap);
 
     // Apply the action through the engine
     const action = args.action as Action;
@@ -291,7 +325,7 @@ export const submitReinforcementPlacements = mutation({
     });
     if (args.placements.length === 0) throw new Error("No placements to submit");
 
-    const state = game.state as GameState;
+    const state = readGameState(game.state);
     if (!state) throw new Error("Game has no state");
     const ruleset = getGameRuleset({
       teamModeEnabled: game.teamModeEnabled,
@@ -323,7 +357,7 @@ export const submitReinforcementPlacements = mutation({
       .withIndex("by_mapId", (q) => q.eq("mapId", game.mapId))
       .unique();
     if (!mapDoc) throw new Error("Map not found");
-    const graphMap = mapDoc.graphMap as unknown as GraphMap;
+    const graphMap = readGraphMap(mapDoc.graphMap);
 
     let nextState = state;
     const events: unknown[] = [];
@@ -433,7 +467,7 @@ export const resign = mutation({
     if (!game) throw new Error("Game not found");
     if (game.status !== "active") throw new Error("Game is not active");
 
-    const state = game.state as GameState;
+    const state = readGameState(game.state);
     if (!state) throw new Error("Game has no state");
     const ruleset = getGameRuleset({
       teamModeEnabled: game.teamModeEnabled,
@@ -516,7 +550,7 @@ export const resign = mutation({
         .query("maps")
         .withIndex("by_mapId", (q) => q.eq("mapId", game.mapId))
         .unique();
-      const graphMap = mapDoc!.graphMap as unknown as GraphMap;
+      const graphMap = readGraphMap(mapDoc!.graphMap);
 
       const { calculateReinforcements } = await import("risk-engine");
       const reinforcementResult = calculateReinforcements(
@@ -926,13 +960,13 @@ export const getHistoryTimeline = query({
     const game = await ctx.db.get(gameId);
     if (!game || !game.state) return [];
 
-    const state = game.state as GameState;
+    const state = readGameState(game.state);
     const mapDoc = await ctx.db
       .query("maps")
       .withIndex("by_mapId", (q) => q.eq("mapId", game.mapId))
       .unique();
     if (!mapDoc) return [];
-    const graphMap = mapDoc.graphMap as unknown as GraphMap;
+    const graphMap = readGraphMap(mapDoc.graphMap);
     const ruleset = getGameRuleset({
       teamModeEnabled: game.teamModeEnabled,
       rulesetOverrides: game.rulesetOverrides as RulesetOverrides | undefined,

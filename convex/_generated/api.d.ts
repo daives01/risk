@@ -20,6 +20,7 @@ import type * as gameplay from "../gameplay.js";
 import type * as games from "../games.js";
 import type * as historyTimeline from "../historyTimeline.js";
 import type * as http from "../http.js";
+import type * as inviteCodes from "../inviteCodes.js";
 import type * as lobby from "../lobby.js";
 import type * as mapPlayerLimits from "../mapPlayerLimits.js";
 import type * as maps from "../maps.js";
@@ -27,6 +28,7 @@ import type * as playerColors from "../playerColors.js";
 import type * as rulesets from "../rulesets.js";
 import type * as seed from "../seed.js";
 import type * as sendEmail from "../sendEmail.js";
+import type * as typeAdapters from "../typeAdapters.js";
 import type * as userSettings from "../userSettings.js";
 
 import type {
@@ -48,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   games: typeof games;
   historyTimeline: typeof historyTimeline;
   http: typeof http;
+  inviteCodes: typeof inviteCodes;
   lobby: typeof lobby;
   mapPlayerLimits: typeof mapPlayerLimits;
   maps: typeof maps;
@@ -55,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   rulesets: typeof rulesets;
   seed: typeof seed;
   sendEmail: typeof sendEmail;
+  typeAdapters: typeof typeAdapters;
   userSettings: typeof userSettings;
 }>;
 

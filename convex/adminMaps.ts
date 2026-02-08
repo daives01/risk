@@ -9,6 +9,7 @@ import {
   resolveMapPlayerLimits,
   validateMapPlayerLimits,
 } from "./mapPlayerLimits";
+import { readGraphMap } from "./typeAdapters";
 
 const graphMapValidator = v.object({
   territories: v.record(
@@ -286,7 +287,7 @@ export const publish = mutation({
     }
 
     const authoredValidation = validateAuthoredMap({
-      graphMap: map.graphMap as unknown as GraphMap,
+      graphMap: readGraphMap(map.graphMap),
       visual: {
         imageStorageId: String(map.visual.imageStorageId),
         imageWidth: map.visual.imageWidth,
@@ -296,7 +297,7 @@ export const publish = mutation({
     });
 
     const continentErrors = validateContinentAssignments(
-      map.graphMap as unknown as GraphMap,
+      readGraphMap(map.graphMap),
     );
     const playerLimits = resolveMapPlayerLimits(
       map.playerLimits,
