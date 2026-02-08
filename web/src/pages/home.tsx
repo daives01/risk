@@ -34,7 +34,6 @@ export default function HomePage() {
   const [joinCode, setJoinCode] = useState("");
   const [filter, setFilter] = useState("");
 
-  const [profileName, setProfileName] = useState("");
   const [profileUsername, setProfileUsername] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -58,8 +57,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!session) return;
-    setProfileName(session.user.name ?? "");
-    setProfileUsername(sessionUsername);
+    setProfileUsername(sessionUsername || session.user.name || "");
   }, [session, sessionUsername]);
 
   const filteredGames = useMemo(() => {
@@ -163,11 +161,10 @@ export default function HomePage() {
 
   async function submitProfile(event: React.FormEvent) {
     event.preventDefault();
-    const nextName = profileName.trim();
     const nextUsername = profileUsername.trim();
 
-    if (!nextName || nextUsername.length < 3) {
-      setProfileError("Name is required and username must be at least 3 characters.");
+    if (nextUsername.length < 3) {
+      setProfileError("Username must be at least 3 characters.");
       setProfileSuccess(null);
       return;
     }
@@ -177,8 +174,9 @@ export default function HomePage() {
     setProfileSuccess(null);
     try {
       const result = await authClient.updateUser({
-        name: nextName,
         username: nextUsername,
+        displayUsername: nextUsername,
+        name: nextUsername,
       });
       if (result.error) {
         setProfileError(result.error.message ?? "Unable to update account details.");
@@ -485,16 +483,6 @@ export default function HomePage() {
               <div className="grid gap-3 lg:grid-cols-2">
                 <form onSubmit={submitProfile} className="space-y-3 rounded-lg border bg-background/75 p-3">
                   <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Profile</p>
-                  <div className="space-y-2">
-                    <label htmlFor="account-name" className="text-xs text-muted-foreground">Display Name</label>
-                    <Input
-                      id="account-name"
-                      value={profileName}
-                      onChange={(event) => setProfileName(event.target.value)}
-                      maxLength={60}
-                      required
-                    />
-                  </div>
                   <div className="space-y-2">
                     <label htmlFor="account-username" className="text-xs text-muted-foreground">Username</label>
                     <Input

@@ -9,7 +9,6 @@ import { AuthShell } from "@/components/auth/auth-shell";
 
 export default function SignUpPage() {
   const [username, setUsername] = useState("");
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -22,10 +21,11 @@ export default function SignUpPage() {
     setLoading(true);
 
     try {
+      const normalizedUsername = username.trim();
       const result = await authClient.signUp.email({
-        name,
-        username,
-        displayUsername: name || username,
+        name: normalizedUsername,
+        username: normalizedUsername,
+        displayUsername: normalizedUsername,
         email,
         password,
         callbackURL: "/verify-email",
@@ -83,10 +83,6 @@ export default function SignUpPage() {
           <div className="space-y-2">
             <Label htmlFor="username">Username</Label>
             <Input id="username" value={username} onChange={(event) => setUsername(event.target.value)} minLength={3} required />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="name">Display Name</Label>
-            <Input id="name" value={name} onChange={(event) => setName(event.target.value)} required />
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>

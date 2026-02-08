@@ -10,7 +10,7 @@ import { AuthShell } from "@/components/auth/auth-shell";
 export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -26,7 +26,18 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const result = await authClient.signIn.email({ email, password });
+      const trimmedIdentifier = identifier.trim();
+      const result = trimmedIdentifier.includes("@")
+        ? await authClient.signIn.email({
+            email: trimmedIdentifier,
+            password,
+            callbackURL: redirectTarget,
+          })
+        : await authClient.signIn.username({
+            username: trimmedIdentifier,
+            password,
+            callbackURL: redirectTarget,
+          });
       if (result.error) {
         setError(result.error.message ?? "Sign in failed");
       } else {
@@ -56,8 +67,8 @@ export default function LoginPage() {
         <CardContent className="space-y-4">
           {error ? <p className="rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p> : null}
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+            <Label htmlFor="identifier">Email or username</Label>
+            <Input id="identifier" value={identifier} onChange={(event) => setIdentifier(event.target.value)} required />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
