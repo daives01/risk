@@ -108,6 +108,9 @@ export default function CreateGamePage() {
   const [allowFortifyThroughTeammates, setAllowFortifyThroughTeammates] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const sessionUsername =
+    (session?.user as { username?: string | null } | undefined)?.username ?? session?.user.name ?? "";
+  const gameNamePlaceholder = sessionUsername ? `${sessionUsername}'s Risk Game` : "Risk Game";
   const selectedMap = useMemo(
     () => maps?.find((map) => map.mapId === selectedMapId) ?? null,
     [maps, selectedMapId],
@@ -120,12 +123,22 @@ export default function CreateGamePage() {
   }, [selectedMap]);
 
   useEffect(() => {
+    if (name || !gameNamePlaceholder) return;
+    setName(gameNamePlaceholder);
+  }, [gameNamePlaceholder, name]);
+
+  useEffect(() => {
     if (allowedPlayerCounts.length === 0) return;
     const highestAllowed = allowedPlayerCounts[allowedPlayerCounts.length - 1]!;
     if (!allowedPlayerCounts.includes(maxPlayers)) {
       setMaxPlayers(highestAllowed);
     }
   }, [allowedPlayerCounts, maxPlayers]);
+
+  useEffect(() => {
+    if (!maps || maps.length !== 1 || selectedMapId) return;
+    setSelectedMapId(maps[0]!.mapId);
+  }, [maps, selectedMapId]);
 
   if (sessionPending) {
     return <div className="page-shell flex items-center justify-center">Loading...</div>;
@@ -138,6 +151,11 @@ export default function CreateGamePage() {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError("Please enter a game name");
+      return;
+    }
     if (!selectedMapId) {
       setError("Please select a map");
       return;
@@ -163,7 +181,7 @@ export default function CreateGamePage() {
         },
       };
       const { gameId } = await createGame({
-        name: name || "New Game",
+        name: trimmedName,
         mapId: selectedMapId,
         maxPlayers,
         teamModeEnabled,
@@ -200,9 +218,10 @@ export default function CreateGamePage() {
                 <Label htmlFor="name">Game Name</Label>
                 <Input
                   id="name"
-                  placeholder="Friday Night Global Domination"
+                  placeholder={gameNamePlaceholder}
                   value={name}
                   onChange={(event) => setName(event.target.value)}
+                  required
                 />
               </div>
 
@@ -411,7 +430,7 @@ export default function CreateGamePage() {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-3 py-6">
-              <Button type="submit" className="w-full" disabled={loading || !selectedMapId}>
+              <Button type="submit" className="w-full" disabled={loading || !selectedMapId || !name.trim()}>
                 {loading ? "Creating..." : "Create Game"}
               </Button>
               <Button type="button" variant="ghost" className="w-full" onClick={() => navigate("/")}>
