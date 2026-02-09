@@ -650,6 +650,7 @@ describe("Occupy", () => {
     expect(result.events).toHaveLength(1);
     const event = result.events[0] as OccupyResolved;
     expect(event.type).toBe("OccupyResolved");
+    expect(event.playerId).toBe(P1);
     expect(event.from).toBe(T1);
     expect(event.to).toBe(T3);
     expect(event.moved).toBe(2);
@@ -788,6 +789,7 @@ describe("Occupy", () => {
         // OccupyResolved event
         const occupyEvent = occupyResult.events[0] as OccupyResolved;
         expect(occupyEvent.type).toBe("OccupyResolved");
+        expect(occupyEvent.playerId).toBe(P1);
         expect(occupyEvent.moved).toBe(pending.minMove);
         return;
       }
@@ -1238,6 +1240,7 @@ describe("Fortify", () => {
     expect(result.events).toHaveLength(1);
     const event = result.events[0] as FortifyResolved;
     expect(event.type).toBe("FortifyResolved");
+    expect(event.playerId).toBe(P1);
     expect(event.from).toBe(T1);
     expect(event.to).toBe(T2);
     expect(event.moved).toBe(2);

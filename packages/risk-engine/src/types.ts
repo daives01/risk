@@ -143,6 +143,7 @@ export interface PlayerEliminated {
 
 export interface OccupyResolved {
   readonly type: "OccupyResolved";
+  readonly playerId: PlayerId;
   readonly from: TerritoryId;
   readonly to: TerritoryId;
   readonly moved: number;
@@ -150,6 +151,7 @@ export interface OccupyResolved {
 
 export interface FortifyResolved {
   readonly type: "FortifyResolved";
+  readonly playerId: PlayerId;
   readonly from: TerritoryId;
   readonly to: TerritoryId;
   readonly moved: number;

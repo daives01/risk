@@ -17,6 +17,8 @@ export function getPlayerName(enginePlayerId: string, players: PlayerRef[]) {
 export function formatEvent(event: Record<string, unknown>, playerMap: PlayerRef[]) {
   const playerName = (id: unknown) =>
     typeof id === "string" ? getPlayerName(id, playerMap) : "Unknown";
+  const actionOwnerId = (id: unknown) =>
+    typeof id === "string" ? getPlayerName(id, playerMap) : "Unknown";
 
   switch (event.type) {
     case "ReinforcementsPlaced":
@@ -26,9 +28,9 @@ export function formatEvent(event: Record<string, unknown>, playerMap: PlayerRef
     case "TerritoryCaptured":
       return `${playerName(event.newOwnerId)} captured ${event.to}`;
     case "OccupyResolved":
-      return `${playerName(event.playerId)} moved ${event.moved} armies to ${event.to}`;
+      return `${actionOwnerId(event.playerId)} moved ${event.moved} armies to ${event.to}`;
     case "FortifyResolved":
-      return `${playerName(event.playerId)} fortified ${event.from} to ${event.to} (${event.moved})`;
+      return `${actionOwnerId(event.playerId)} fortified ${event.from} to ${event.to} (${event.moved})`;
     case "CardsTraded":
       return `${playerName(event.playerId)} traded cards for ${event.value} armies`;
     case "CardDrawn":

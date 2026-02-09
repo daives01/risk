@@ -5,6 +5,7 @@ import {
   findNextCaptureFrame,
   findNextEliminationFrame,
   findNextTurnBoundary,
+  findLastTurnEndForPlayer,
   findPreviousTurnBoundary,
 } from "./history-navigation";
 
@@ -57,5 +58,11 @@ describe("history navigation", () => {
     expect(findNextCaptureFrame(frames, 2)).toBe(2);
     expect(findNextEliminationFrame(frames, 2)).toBe(4);
     expect(findNextEliminationFrame(frames, 4)).toBe(4);
+  });
+
+  test("finds the frame after the last turn for a player", () => {
+    expect(findLastTurnEndForPlayer(frames, "p1")).toBe(3);
+    expect(findLastTurnEndForPlayer(frames, "p2")).toBe(5);
+    expect(findLastTurnEndForPlayer(frames, "unknown")).toBe(0);
   });
 });

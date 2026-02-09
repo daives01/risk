@@ -49,3 +49,25 @@ export function findNextEliminationFrame(frames: HistoryFrame[], currentIndex: n
   }
   return safeIndex;
 }
+
+export function findLastTurnEndForPlayer(frames: HistoryFrame[], playerId: string | null | undefined) {
+  if (!playerId || frames.length === 0) return 0;
+
+  const maxIndex = Math.max(0, frames.length - 1);
+  const hasPlayerFrame = frames.some((frame) => frame.turnPlayerId === playerId);
+  if (!hasPlayerFrame) return 0;
+
+  const hasOtherPlayer = frames.some((frame) => frame.turnPlayerId !== playerId);
+  if (!hasOtherPlayer) return maxIndex;
+
+  for (let i = maxIndex; i >= 1; i -= 1) {
+    const current = frames[i];
+    const previous = frames[i - 1];
+    if (!current || !previous) continue;
+    if (previous.turnPlayerId === playerId && current.turnPlayerId !== playerId) {
+      return i;
+    }
+  }
+
+  return 0;
+}

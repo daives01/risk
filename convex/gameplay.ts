@@ -62,6 +62,7 @@ type TimelinePublicState = {
   reinforcements?: { remaining: number; sources?: Record<string, number> };
   capturedThisTurn: boolean;
   tradesCompleted: number;
+  fortifiesUsedThisTurn?: number;
   deckCount: number;
   discardCount: number;
   handSizes: Record<string, number>;
@@ -764,6 +765,7 @@ function toTimelinePublicState(state: GameState): TimelinePublicState {
       : undefined,
     capturedThisTurn: state.capturedThisTurn,
     tradesCompleted: state.tradesCompleted,
+    fortifiesUsedThisTurn: state.fortifiesUsedThisTurn,
     deckCount: state.deck.draw.length,
     discardCount: state.deck.discard.length,
     handSizes,

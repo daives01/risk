@@ -30,6 +30,7 @@ function publicProjection(state: GameState) {
     reinforcements: state.reinforcements,
     capturedThisTurn: state.capturedThisTurn,
     tradesCompleted: state.tradesCompleted,
+    fortifiesUsedThisTurn: state.fortifiesUsedThisTurn,
     deckCount: state.deck.draw.length,
     discardCount: state.deck.discard.length,
     handSizes,

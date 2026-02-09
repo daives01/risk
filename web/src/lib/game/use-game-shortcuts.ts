@@ -8,17 +8,28 @@ interface UseGameShortcutsOptions {
   historyMaxIndex: number;
   isMyTurn: boolean;
   phase: Phase;
+  placeCount: number;
+  attackDice: number;
+  occupyMove: number;
+  fortifyCount: number;
   maxPlaceCount: number;
   maxAttackDice: number;
   reinforcementDraftCount: number;
   controlsDisabled: boolean;
   hasPendingOccupy: boolean;
+  canSetOccupy: boolean;
+  occupyMinMove: number;
+  occupyMaxMove: number;
+  canSetFortify: boolean;
+  maxFortifyCount: number;
   onToggleHistory: () => void;
   onToggleShortcutCheatSheet: () => void;
   onSetHistoryPlaying: (next: boolean | ((prev: boolean) => boolean)) => void;
   onSetHistoryFrameIndex: (next: number | ((prev: number) => number)) => void;
   onSetPlaceCount: (count: number) => void;
   onSetAttackDice: (dice: number) => void;
+  onSetOccupyMove: (count: number) => void;
+  onSetFortifyCount: (count: number) => void;
   onOpenCards: () => void;
   onClearSelection: () => void;
   onUndoPlacement: () => void;
@@ -33,17 +44,28 @@ export function useGameShortcuts({
   historyMaxIndex,
   isMyTurn,
   phase,
+  placeCount,
+  attackDice,
+  occupyMove,
+  fortifyCount,
   maxPlaceCount,
   maxAttackDice,
   reinforcementDraftCount,
   controlsDisabled,
   hasPendingOccupy,
+  canSetOccupy,
+  occupyMinMove,
+  occupyMaxMove,
+  canSetFortify,
+  maxFortifyCount,
   onToggleHistory,
   onToggleShortcutCheatSheet,
   onSetHistoryPlaying,
   onSetHistoryFrameIndex,
   onSetPlaceCount,
   onSetAttackDice,
+  onSetOccupyMove,
+  onSetFortifyCount,
   onOpenCards,
   onClearSelection,
   onUndoPlacement,
@@ -107,8 +129,53 @@ export function useGameShortcuts({
           return;
         }
 
+        if (
+          !historyOpen &&
+          isMyTurn &&
+          !controlsDisabled &&
+          (event.key === "ArrowUp" || event.key === "ArrowDown")
+        ) {
+          const delta = event.key === "ArrowUp" ? 1 : -1;
+          if (canSetOccupy) {
+            event.preventDefault();
+            const next = occupyMove + delta;
+            const clamped = Math.min(Math.max(next, occupyMinMove), Math.max(occupyMinMove, occupyMaxMove));
+            onSetOccupyMove(clamped);
+            return;
+          }
+          if (canSetFortify && maxFortifyCount > 0) {
+            event.preventDefault();
+            const next = fortifyCount + delta;
+            onSetFortifyCount(Math.min(Math.max(1, next), maxFortifyCount));
+            return;
+          }
+          if (phase === "Reinforcement" && maxPlaceCount > 0) {
+            event.preventDefault();
+            const next = placeCount + delta;
+            onSetPlaceCount(Math.min(Math.max(1, next), maxPlaceCount));
+            return;
+          }
+          if (phase === "Attack" && !hasPendingOccupy && maxAttackDice > 0) {
+            event.preventDefault();
+            const next = attackDice + delta;
+            onSetAttackDice(Math.min(Math.max(1, next), maxAttackDice));
+            return;
+          }
+        }
+
         const numericKey = Number.parseInt(event.key, 10);
         if (!Number.isNaN(numericKey) && numericKey >= 1) {
+          if (!historyOpen && isMyTurn && canSetOccupy && !controlsDisabled) {
+            event.preventDefault();
+            const clamped = Math.min(Math.max(numericKey, occupyMinMove), Math.max(occupyMinMove, occupyMaxMove));
+            onSetOccupyMove(clamped);
+            return;
+          }
+          if (!historyOpen && isMyTurn && canSetFortify && !controlsDisabled && maxFortifyCount > 0) {
+            event.preventDefault();
+            onSetFortifyCount(Math.min(Math.max(1, maxFortifyCount), numericKey));
+            return;
+          }
           if (!historyOpen && isMyTurn && phase === "Reinforcement" && !controlsDisabled && maxPlaceCount > 0) {
             event.preventDefault();
             onSetPlaceCount(Math.min(numericKey, Math.max(1, maxPlaceCount)));
@@ -155,27 +222,38 @@ export function useGameShortcuts({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
+    attackDice,
+    canSetFortify,
+    canSetOccupy,
     controlsDisabled,
+    fortifyCount,
     hasPendingOccupy,
     historyAtEnd,
     historyMaxIndex,
     historyOpen,
     isMyTurn,
+    maxFortifyCount,
     maxAttackDice,
     maxPlaceCount,
+    occupyMaxMove,
+    occupyMinMove,
+    occupyMove,
     onClearSelection,
     onConfirmPlacements,
     onEndAttackPhase,
     onEndTurn,
     onOpenCards,
     onSetAttackDice,
+    onSetFortifyCount,
     onSetHistoryFrameIndex,
     onSetHistoryPlaying,
+    onSetOccupyMove,
     onSetPlaceCount,
     onToggleShortcutCheatSheet,
     onToggleHistory,
     onUndoPlacement,
     phase,
+    placeCount,
     reinforcementDraftCount,
   ]);
 }

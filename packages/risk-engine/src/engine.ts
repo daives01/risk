@@ -464,6 +464,7 @@ function handleOccupy(
 
   const event: OccupyResolved = {
     type: "OccupyResolved",
+    playerId,
     from,
     to,
     moved: action.moveArmies,
@@ -643,6 +644,7 @@ function handleFortify(
 
   const event: FortifyResolved = {
     type: "FortifyResolved",
+    playerId,
     from: action.from,
     to: action.to,
     moved: action.count,

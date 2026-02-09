@@ -15,6 +15,7 @@ export type PublicState = {
   reinforcements?: { remaining: number; sources?: Record<string, number> };
   capturedThisTurn: boolean;
   tradesCompleted: number;
+  fortifiesUsedThisTurn?: number;
   deckCount: number;
   discardCount: number;
   handSizes: Record<string, number>;

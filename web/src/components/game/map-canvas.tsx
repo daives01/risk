@@ -139,6 +139,16 @@ export function MapCanvas({
   const imageAspect = visual.imageWidth / visual.imageHeight;
   const highlightActive = highlightedTerritoryIds.size > 0;
 
+  const withAlpha = (color: string, alpha: number) => {
+    if (color.startsWith("#") && color.length === 7) {
+      const r = parseInt(color.slice(1, 3), 16);
+      const g = parseInt(color.slice(3, 5), 16);
+      const b = parseInt(color.slice(5, 7), 16);
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
+    return color;
+  };
+
   const graphEdges = Object.entries(map.adjacency ?? {}).flatMap(([from, neighbors]) =>
     neighbors
       .filter((to) => from < to)
@@ -357,13 +367,17 @@ export function MapCanvas({
               if (graphEdgeMode === "none") return null;
               if (graphEdgeMode === "action" && !showActionEdge) return null;
 
+              const fromOwner = territories[from]?.ownerId ?? "neutral";
+              const fromOwnerColor = getPlayerColor(fromOwner, turnOrder);
+              const actionEdgeColor = withAlpha(fromOwnerColor, 0.7);
+
               const edgeStroke = isSelectedPair
-                ? "rgba(248,113,113,0.95)"
+                ? withAlpha(fromOwnerColor, 0.95)
                 : touchesFrom || isCandidate
-                  ? "rgba(96,165,250,0.95)"
+                  ? actionEdgeColor
                   : highlightActive
                     ? touchesHighlight
-                      ? "rgba(255,255,255,0.38)"
+                      ? "rgba(255,255,255,0.24)"
                       : "rgba(255,255,255,0.09)"
                     : "rgba(255,255,255,0.24)";
 
@@ -391,9 +405,14 @@ export function MapCanvas({
             const isValidFrom = validFromIds.has(territoryId);
             const isValidTo = validToIds.has(territoryId);
             const selectable = interactive && (isValidFrom || isValidTo);
-            const isActionEmphasized = isFrom || isTo || isValidFrom || isValidTo;
             const isHighlighted = !highlightActive || highlightedTerritoryIds.has(territoryId);
-            const shouldDeEmphasize = highlightActive && !isHighlighted && !isActionEmphasized;
+            const shouldDeEmphasize = highlightActive && !isHighlighted && !isFrom && !isTo;
+            const ownerColor = getPlayerColor(territoryState.ownerId, turnOrder);
+            const actionOutline = withAlpha(ownerColor, 0.9);
+            const actionEdge = withAlpha(ownerColor, 0.75);
+            const isActionable = isFrom || isTo || isValidFrom || isValidTo;
+            const outlineWidth = isFrom || isTo ? 2.5 : isActionable ? 1.5 : 0;
+            const outlineColor = isFrom || isTo ? actionOutline : isActionable ? actionEdge : "transparent";
 
             return (
               <button
@@ -407,22 +426,17 @@ export function MapCanvas({
                 disabled={!selectable}
                 title={territory.name ?? territoryId}
                 className={cn(
-                  "absolute min-w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 px-2 py-1 text-xs font-bold text-white shadow-sm transition",
+                  "absolute min-w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 px-2 py-1 text-xs font-bold text-white shadow-sm transition-opacity",
                   selectable ? "cursor-pointer" : "cursor-default opacity-80",
                   shouldDeEmphasize && "opacity-30 saturate-50",
-                  highlightActive && isHighlighted && !isActionEmphasized && "ring-1 ring-white/70",
-                  isFrom && "ring-2 ring-blue-500",
-                  isTo && "ring-2 ring-red-500",
                 )}
                 style={{
                   left: `${anchor.x * 100}%`,
                   top: `${anchor.y * 100}%`,
+                  outline: outlineWidth > 0 ? `${outlineWidth}px solid ${outlineColor}` : "none",
+                  outlineOffset: outlineWidth > 0 ? 2 : 0,
                   backgroundColor: getPlayerColor(territoryState.ownerId, turnOrder),
-                  borderColor: isValidFrom
-                    ? "#3b82f6"
-                    : isValidTo
-                      ? "#ef4444"
-                      : "rgba(255,255,255,0.6)",
+                  borderColor: isActionable ? actionEdge : "transparent",
                 }}
               >
                 {territoryState.armies}
@@ -580,7 +594,7 @@ export function MapCanvas({
                     size="xs"
                     variant="outline"
                     onClick={battleOverlay.onSubmitFortifyAll}
-                    disabled={battleOverlay.disabled || battleOverlay.maxCount <= battleOverlay.minCount}
+                    disabled={battleOverlay.disabled || battleOverlay.maxCount < battleOverlay.minCount}
                   >
                     All
                   </Button>

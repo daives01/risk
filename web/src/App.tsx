@@ -1,6 +1,5 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
-import { GlobalKeyboardNav } from "@/components/ui/global-keyboard-nav";
 import { Providers } from "@/lib/providers";
 import HomePage from "@/pages/home";
 import LoginPage from "@/pages/login";
@@ -19,7 +18,6 @@ function App() {
   return (
     <Providers>
       <BrowserRouter>
-        <GlobalKeyboardNav />
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />

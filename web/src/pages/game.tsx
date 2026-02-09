@@ -22,6 +22,7 @@ import {
 } from "@/lib/game/highlighting";
 import { buildPlayerPanelStats } from "@/lib/game/player-stats";
 import { PHASE_COPY } from "@/lib/game/types";
+import { findLastTurnEndForPlayer } from "@/lib/game/history-navigation";
 import type { ChatMessage } from "@/lib/game/types";
 import type { ChatChannel } from "@/lib/game/types";
 import type { ReinforcementDraft } from "@/lib/game/types";
@@ -132,15 +133,25 @@ export default function GamePage() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [autoAttacking, setAutoAttacking] = useState(false);
   const autoAttackSubmittedVersionRef = useRef<number | null>(null);
+  const autoEndFortifyVersionRef = useRef<number | null>(null);
 
   const phase = state?.turn.phase ?? "GameOver";
   const isSpectator = !myEnginePlayerId;
   const isMyTurn = !!myEnginePlayerId && !!state && state.turn.currentPlayerId === myEnginePlayerId;
   const controlsDisabled = !isMyTurn || isSpectator || submitting || historyOpen;
+  const canSetOccupyShortcut =
+    !!state?.pending &&
+    (phase === "Occupy" || (phase === "Attack" && !!state?.pending)) &&
+    isMyTurn &&
+    !historyOpen;
   const historyFrames = useMemo(() => historyTimeline ?? [], [historyTimeline]);
   const historyCount = historyFrames.length;
   const historyMaxIndex = Math.max(0, historyCount - 1);
   const historyAtEnd = historyFrameIndex >= historyMaxIndex;
+  const lastTurnEndIndex = useMemo(
+    () => findLastTurnEndForPlayer(historyFrames, myEnginePlayerId),
+    [historyFrames, myEnginePlayerId],
+  );
 
   const queuedReinforcementTotal = useMemo(
     () => reinforcementDrafts.reduce((sum, draft) => sum + draft.count, 0),
@@ -156,6 +167,26 @@ export default function GamePage() {
       preventAttackingTeammates?: boolean;
     };
   } | null)?.teams;
+  const effectiveRuleset = view?.effectiveRuleset as {
+    cards?: { forcedTradeHandSize?: number; tradeSets?: TradeSetsConfig };
+    fortify?: { maxFortifiesPerTurn?: number };
+  } | null;
+  const effectiveCards = effectiveRuleset?.cards;
+  const effectiveFortify = effectiveRuleset?.fortify;
+  const forcedTradeHandSize = effectiveCards?.forcedTradeHandSize ?? defaultRuleset.cards.forcedTradeHandSize;
+  const tradeSets = effectiveCards?.tradeSets ?? defaultRuleset.cards.tradeSets;
+  const maxFortifiesPerTurn = effectiveFortify?.maxFortifiesPerTurn ?? defaultRuleset.fortify.maxFortifiesPerTurn;
+  const fortifiesUsedThisTurn = state?.fortifiesUsedThisTurn ?? 0;
+  const fortifiesRemaining = Math.max(0, maxFortifiesPerTurn - fortifiesUsedThisTurn);
+  const maxFortifyMove = Math.max(1, (state?.territories[selectedFrom ?? ""]?.armies ?? 2) - 1);
+  const canSetFortifyShortcut =
+    phase === "Fortify" &&
+    isMyTurn &&
+    !historyOpen &&
+    !controlsDisabled &&
+    !!selectedFrom &&
+    !!selectedTo &&
+    maxFortifyMove > 0;
   const allowPlaceOnTeammate = effectiveTeams?.allowPlaceOnTeammate ?? true;
   const allowFortifyWithTeammate = effectiveTeams?.allowFortifyWithTeammate ?? true;
   const preventAttackingTeammates = effectiveTeams?.preventAttackingTeammates ?? false;
@@ -438,6 +469,21 @@ export default function GamePage() {
   }, [state?.pending]);
 
   useEffect(() => {
+    const pending = state?.pending;
+    if (
+      !pending ||
+      !isMyTurn ||
+      historyOpen ||
+      controlsDisabled ||
+      phase === "GameOver" ||
+      pending.minMove !== pending.maxMove
+    ) {
+      return;
+    }
+    void submitAction({ type: "Occupy", moveArmies: pending.minMove });
+  }, [controlsDisabled, historyOpen, isMyTurn, phase, state?.pending, submitAction]);
+
+  useEffect(() => {
     if (!state || phase !== "Attack") {
       stopAutoAttack();
       return;
@@ -499,6 +545,32 @@ export default function GamePage() {
     submitAction,
     submitting,
     validToIds,
+  ]);
+
+  useEffect(() => {
+    if (!state || !isMyTurn || historyOpen) return;
+    if (phase !== "Fortify") {
+      autoEndFortifyVersionRef.current = null;
+      return;
+    }
+    if (submitting) return;
+    if (maxFortifiesPerTurn >= Number.MAX_SAFE_INTEGER) return;
+    if (fortifiesRemaining > 0) {
+      autoEndFortifyVersionRef.current = null;
+      return;
+    }
+    if (autoEndFortifyVersionRef.current === state.stateVersion) return;
+    autoEndFortifyVersionRef.current = state.stateVersion;
+    void submitAction({ type: "EndTurn" });
+  }, [
+    fortifiesRemaining,
+    historyOpen,
+    isMyTurn,
+    maxFortifiesPerTurn,
+    phase,
+    state,
+    submitAction,
+    submitting,
   ]);
 
   const toggleCard = useCallback((cardId: string) => {
@@ -650,6 +722,14 @@ export default function GamePage() {
   }, [historyCount, historyOpen]);
 
   useEffect(() => {
+    if (!historyOpen) return;
+    setHistoryFrameIndex((prev) => {
+      if (prev !== 0) return prev;
+      return Math.min(lastTurnEndIndex, historyMaxIndex);
+    });
+  }, [historyMaxIndex, historyOpen, lastTurnEndIndex]);
+
+  useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
@@ -719,17 +799,28 @@ export default function GamePage() {
     historyMaxIndex,
     isMyTurn,
     phase,
+    placeCount,
+    attackDice,
+    occupyMove,
+    fortifyCount,
     maxPlaceCount: uncommittedReinforcements,
     maxAttackDice: selectedFrom ? Math.max(0, Math.min(3, (state?.territories[selectedFrom]?.armies ?? 2) - 1)) : 0,
     reinforcementDraftCount: reinforcementDrafts.length,
     controlsDisabled,
     hasPendingOccupy: !!state?.pending,
+    canSetOccupy: canSetOccupyShortcut,
+    occupyMinMove: state?.pending?.minMove ?? 1,
+    occupyMaxMove: state?.pending?.maxMove ?? 1,
+    canSetFortify: canSetFortifyShortcut,
+    maxFortifyCount: maxFortifyMove,
     onToggleHistory: () => setHistoryOpen((prev) => !prev),
     onToggleShortcutCheatSheet: () => setShortcutsOpen((prev) => !prev),
     onSetHistoryPlaying: setHistoryPlaying,
     onSetHistoryFrameIndex: setHistoryFrameIndex,
     onSetPlaceCount: setPlaceCount,
     onSetAttackDice: setAttackDice,
+    onSetOccupyMove: setOccupyMove,
+    onSetFortifyCount: setFortifyCount,
     onOpenCards: () => {
       if (!isSpectator && !historyOpen) {
         setCardsOpen(true);
@@ -779,11 +870,12 @@ export default function GamePage() {
   const displayPhase = resolvedDisplayState.turn.phase;
   const phaseCopy = PHASE_COPY[displayPhase] ?? PHASE_COPY.GameOver;
   const showPhaseTitle = historyOpen || isMyTurn || !["Reinforcement", "Attack", "Fortify"].includes(displayPhase);
-  const effectiveCards = (
-    view?.effectiveRuleset as { cards?: { forcedTradeHandSize?: number; tradeSets?: TradeSetsConfig } } | null
-  )?.cards;
-  const forcedTradeHandSize = effectiveCards?.forcedTradeHandSize ?? defaultRuleset.cards.forcedTradeHandSize;
-  const tradeSets = effectiveCards?.tradeSets ?? defaultRuleset.cards.tradeSets;
+  const fortifiesUsedForDisplay = resolvedDisplayState.fortifiesUsedThisTurn ?? 0;
+  const fortifiesRemainingForDisplay = Math.max(0, maxFortifiesPerTurn - fortifiesUsedForDisplay);
+  const fortifyRemainingLabel =
+    maxFortifiesPerTurn >= Number.MAX_SAFE_INTEGER
+      ? "Unlimited fortifies"
+      : `${fortifiesRemainingForDisplay} fortifies left`;
   const myCardCount = myHand?.length ?? 0;
   const mustTradeNow =
     !historyOpen &&
@@ -856,6 +948,12 @@ export default function GamePage() {
                 Undo
               </Button>
               <span className="text-xs text-muted-foreground">{uncommittedReinforcements} left</span>
+            </div>
+          )}
+
+          {!historyOpen && isMyTurn && phase === "Fortify" && (
+            <div className="flex shrink-0 items-center gap-2 text-sm">
+              <span className="text-xs text-muted-foreground">{fortifyRemainingLabel}</span>
             </div>
           )}
 
@@ -1029,25 +1127,25 @@ export default function GamePage() {
             battleOverlay={
               !historyOpen && isMyTurn && (phase === "Occupy" || (phase === "Attack" && !!state.pending)) && state.pending
                 ? {
-                    mode: "occupy",
-                    fromTerritoryId: state.pending.from,
-                    toTerritoryId: state.pending.to,
-                    fromLabel: graphMap.territories[state.pending.from]?.name ?? state.pending.from,
-                    toLabel: graphMap.territories[state.pending.to]?.name ?? state.pending.to,
-                    occupyMove,
-                    minMove: state.pending.minMove,
-                    maxMove: state.pending.maxMove,
-                    disabled: controlsDisabled,
-                    onSetOccupyMove: setOccupyMove,
-                    onSubmitOccupy: () => {
-                      void submitAction({ type: "Occupy", moveArmies: occupyMove });
-                    },
-                    onSubmitOccupyAll: () => {
-                      void submitAction({ type: "Occupy", moveArmies: state.pending?.maxMove ?? occupyMove });
-                    },
-                  }
+                  mode: "occupy",
+                  fromTerritoryId: state.pending.from,
+                  toTerritoryId: state.pending.to,
+                  fromLabel: graphMap.territories[state.pending.from]?.name ?? state.pending.from,
+                  toLabel: graphMap.territories[state.pending.to]?.name ?? state.pending.to,
+                  occupyMove,
+                  minMove: state.pending.minMove,
+                  maxMove: state.pending.maxMove,
+                  disabled: controlsDisabled,
+                  onSetOccupyMove: setOccupyMove,
+                  onSubmitOccupy: () => {
+                    void submitAction({ type: "Occupy", moveArmies: occupyMove });
+                  },
+                  onSubmitOccupyAll: () => {
+                    void submitAction({ type: "Occupy", moveArmies: state.pending?.maxMove ?? occupyMove });
+                  },
+                }
                 : !historyOpen && isMyTurn && phase === "Fortify" && selectedFrom && selectedTo
-                ? {
+                  ? {
                     mode: "fortify",
                     fromTerritoryId: selectedFrom,
                     toTerritoryId: selectedTo,
@@ -1080,27 +1178,27 @@ export default function GamePage() {
                       setSelectedTo(null);
                     },
                   }
-                : !historyOpen && isMyTurn && phase === "Attack" && !state.pending && selectedFrom && selectedTo
-                ? {
-                    mode: "attack",
-                    fromTerritoryId: selectedFrom,
-                    toTerritoryId: selectedTo,
-                    fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
-                    toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
-                    attackDice,
-                    maxDice: Math.max(0, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1)),
-                    autoRunning: autoAttacking,
-                    disabled: controlsDisabled,
-                    onSetAttackDice: setAttackDice,
-                    onResolveAttack: handleResolveAttack,
-                    onAutoAttack: handleAutoAttackToggle,
-                    onCancelSelection: () => {
-                      stopAutoAttack();
-                      setSelectedFrom(null);
-                      setSelectedTo(null);
-                    },
-                  }
-                : null
+                  : !historyOpen && isMyTurn && phase === "Attack" && !state.pending && selectedFrom && selectedTo
+                    ? {
+                      mode: "attack",
+                      fromTerritoryId: selectedFrom,
+                      toTerritoryId: selectedTo,
+                      fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
+                      toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
+                      attackDice,
+                      maxDice: Math.max(0, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1)),
+                      autoRunning: autoAttacking,
+                      disabled: controlsDisabled,
+                      onSetAttackDice: setAttackDice,
+                      onResolveAttack: handleResolveAttack,
+                      onAutoAttack: handleAutoAttackToggle,
+                      onCancelSelection: () => {
+                        stopAutoAttack();
+                        setSelectedFrom(null);
+                        setSelectedTo(null);
+                      },
+                    }
+                    : null
             }
           />
 
@@ -1186,8 +1284,8 @@ export default function GamePage() {
                 </Button>
               </div>
               <div className="space-y-1.5 text-sm">
-                <p><span className="font-semibold">1-9</span>: Set troops to place in Reinforcement</p>
-                <p><span className="font-semibold">1-3</span>: Set attack dice in Attack</p>
+                <p><span className="font-semibold">1-9</span>: Set active troop/dice count</p>
+                <p><span className="font-semibold">↑/↓</span>: Increase or decrease troop/dice counts</p>
                 <p><span className="font-semibold">U</span>: Undo last placement</p>
                 <p><span className="font-semibold">C</span>: Open cards</p>
                 <p><span className="font-semibold">?</span>: Toggle this help</p>
@@ -1225,11 +1323,10 @@ export default function GamePage() {
                     <button
                       key={card.cardId}
                       type="button"
-                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                        selected
-                          ? "border-primary bg-primary/15 text-primary"
-                          : "border-border bg-background/80 hover:border-primary/50"
-                      }`}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${selected
+                        ? "border-primary bg-primary/15 text-primary"
+                        : "border-border bg-background/80 hover:border-primary/50"
+                        }`}
                       onClick={() => toggleCard(card.cardId)}
                     >
                       {card.kind}

@@ -32,18 +32,16 @@ function appEmailHtml(args: AppEmailArgs): string {
     <div style="background: #0b0d10; padding: 24px 12px; color: #e4e8ee;">
       <div style="margin: 0 auto; width: 100%; max-width: 560px; border: 1px solid #323844; background: #0f1216; font-family: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;">
         <div style="padding: 14px 16px; border-bottom: 1px solid #323844;">
-          <div style="font-size: 20px; letter-spacing: 0.16em; color: #f2bf62; text-transform: uppercase;">LDGD</div>
-          <div style="margin-top: 2px; font-size: 11px; letter-spacing: 0.08em; color: #8b95a7; text-transform: uppercase;">Legally Distinct Global Domination</div>
+          <div style="font-size: 20px; letter-spacing: 0.16em; color: #f2bf62; text-transform: uppercase;">Legally Distinct Global Domination</div>
         </div>
 
         <div style="padding: 20px 16px 16px;">
           <h2 style="margin: 0 0 12px; color: #e4e8ee; font-size: 22px; line-height: 1.25;">${escapeHtml(args.title)}</h2>
           <p style="margin: 0 0 14px; color: #e4e8ee; font-size: 14px; line-height: 1.6;">${escapeHtml(args.intro)}</p>
-          ${
-            detailRowsHtml
-              ? `<table role="presentation" cellspacing="0" cellpadding="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px;">${detailRowsHtml}</table>`
-              : ""
-          }
+          ${detailRowsHtml
+      ? `<table role="presentation" cellspacing="0" cellpadding="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px;">${detailRowsHtml}</table>`
+      : ""
+    }
           <a href="${escapeHtml(args.ctaUrl)}" style="display: inline-block; padding: 10px 16px; border: 1px solid #f2bf62; color: #f2bf62; text-decoration: none; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase;">
             ${escapeHtml(args.ctaLabel)}
           </a>
