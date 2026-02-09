@@ -1,18 +1,14 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import type { GenericDatabaseReader } from "convex/server";
-import type { DataModel } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { authComponent } from "./auth.js";
 import { applyAction, ActionError, calculateReinforcements, createDeck, createRng } from "risk-engine";
 import type { Action, CardId, GameState, PlayerId, GraphMap, TerritoryId, GameEvent, RulesetConfig } from "risk-engine";
-import type { Id } from "./_generated/dataModel";
 import { summarizeTimelineFrame } from "./historyTimeline";
 import { resolveEffectiveRuleset, type RulesetOverrides } from "./rulesets";
 import { computeTurnDeadlineAt, didTurnAdvance, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
 import { readGameState, readGraphMap } from "./typeAdapters";
 
-const ACTION_RATE_LIMIT_MS = 500;
 const actionValidator = v.union(
   v.object({
     type: v.literal("TradeCards"),
@@ -144,26 +140,6 @@ function extractGameWinner(events: unknown[]): {
   };
 }
 
-async function enforceRateLimit(
-  db: GenericDatabaseReader<DataModel>,
-  gameId: Id<"games">,
-  playerId: string,
-) {
-  const lastPlayerAction = await db
-    .query("gameActions")
-    .withIndex("by_gameId_playerId", (q) =>
-      q.eq("gameId", gameId).eq("playerId", playerId),
-    )
-    .order("desc")
-    .first();
-  if (
-    lastPlayerAction &&
-    Date.now() - lastPlayerAction.createdAt < ACTION_RATE_LIMIT_MS
-  ) {
-    throw new Error("Too many actions. Please wait before submitting another.");
-  }
-}
-
 export const submitAction = mutation({
   args: {
     gameId: v.id("games"),
@@ -209,9 +185,6 @@ export const submitAction = mutation({
       throw new Error("You are not a player in this game");
     }
     const playerId = playerDoc.enginePlayerId as PlayerId;
-
-    // Rate limit
-    await enforceRateLimit(ctx.db, args.gameId, playerId);
 
     // Fetch map for actions that need it
     const mapDoc = await ctx.db
@@ -351,8 +324,6 @@ export const submitReinforcementPlacements = mutation({
     }
     const playerId = playerDoc.enginePlayerId as PlayerId;
 
-    await enforceRateLimit(ctx.db, args.gameId, playerId);
-
     const mapDoc = await ctx.db
       .query("maps")
       .withIndex("by_mapId", (q) => q.eq("mapId", game.mapId))
@@ -487,8 +458,6 @@ export const resign = mutation({
       throw new Error("You are not a player in this game");
     }
     const playerId = playerDoc.enginePlayerId as PlayerId;
-
-    await enforceRateLimit(ctx.db, gameId, playerId);
 
     // Check player is still alive
     if (state.players[playerId]?.status !== "alive") {

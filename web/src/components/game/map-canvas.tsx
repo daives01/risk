@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Lock, LockOpen, Minus, Plus, RotateCcw, X } from "lucide-react";
+import { Loader2, Lock, LockOpen, Minus, Plus, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { NumberStepper } from "@/components/ui/number-stepper";
@@ -37,6 +37,7 @@ interface MapCanvasProps {
   graphEdgeMode?: "all" | "action" | "none";
   interactive: boolean;
   troopDeltaDurationMs?: number;
+  showTerritoryNames?: boolean;
   onClickTerritory: (territoryId: string) => void;
   onClearSelection?: () => void;
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
@@ -50,10 +51,12 @@ interface MapCanvasProps {
         attackDice: number;
         maxDice: number;
         autoRunning: boolean;
+        resolving: boolean;
         disabled: boolean;
         onSetAttackDice: (dice: number) => void;
         onResolveAttack: () => void;
         onAutoAttack: () => void;
+        onStopAutoAttack: () => void;
         onCancelSelection: () => void;
       }
     | {
@@ -109,6 +112,7 @@ export function MapCanvas({
   graphEdgeMode = "all",
   interactive,
   troopDeltaDurationMs = 1000,
+  showTerritoryNames = false,
   onClickTerritory,
   onClearSelection,
   getPlayerColor,
@@ -369,10 +373,14 @@ export function MapCanvas({
 
               const fromOwner = territories[from]?.ownerId ?? "neutral";
               const fromOwnerColor = getPlayerColor(fromOwner, turnOrder);
-              const actionEdgeColor = withAlpha(fromOwnerColor, 0.7);
+              const selectedOwnerColor = selectedFrom
+                ? getPlayerColor(territories[selectedFrom]?.ownerId ?? "neutral", turnOrder)
+                : null;
+              const actionEdgeBase = showActionEdge && selectedOwnerColor ? selectedOwnerColor : fromOwnerColor;
+              const actionEdgeColor = withAlpha(actionEdgeBase, 0.7);
 
               const edgeStroke = isSelectedPair
-                ? withAlpha(fromOwnerColor, 0.95)
+                ? withAlpha(actionEdgeBase, 0.95)
                 : touchesFrom || isCandidate
                   ? actionEdgeColor
                   : highlightActive
@@ -415,32 +423,48 @@ export function MapCanvas({
             const outlineColor = isFrom || isTo ? actionOutline : isActionable ? actionEdge : "transparent";
 
             return (
-              <button
+              <div
                 key={territoryId}
-                type="button"
-                onClick={() => {
-                  if (shouldSuppressClick()) return;
-                  onClickTerritory(territoryId);
-                }}
-                onPointerDown={(event) => event.stopPropagation()}
-                disabled={!selectable}
-                title={territory.name ?? territoryId}
-                className={cn(
-                  "absolute min-w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 px-2 py-1 text-xs font-bold text-white shadow-sm transition-opacity",
-                  selectable ? "cursor-pointer" : "cursor-default opacity-80",
-                  shouldDeEmphasize && "opacity-30 saturate-50",
-                )}
+                className="absolute"
                 style={{
                   left: `${anchor.x * 100}%`,
                   top: `${anchor.y * 100}%`,
-                  outline: outlineWidth > 0 ? `${outlineWidth}px solid ${outlineColor}` : "none",
-                  outlineOffset: outlineWidth > 0 ? 2 : 0,
-                  backgroundColor: getPlayerColor(territoryState.ownerId, turnOrder),
-                  borderColor: isActionable ? actionEdge : "transparent",
                 }}
               >
-                {territoryState.armies}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (shouldSuppressClick()) return;
+                    onClickTerritory(territoryId);
+                  }}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  disabled={!selectable}
+                  title={territory.name ?? territoryId}
+                  className={cn(
+                    "min-w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 px-2 py-1 text-xs font-bold text-white shadow-sm transition-opacity",
+                    selectable ? "cursor-pointer" : "cursor-default opacity-80",
+                    shouldDeEmphasize && "opacity-30 saturate-50",
+                  )}
+                  style={{
+                    outline: outlineWidth > 0 ? `${outlineWidth}px solid ${outlineColor}` : "none",
+                    outlineOffset: outlineWidth > 0 ? 2 : 0,
+                    backgroundColor: getPlayerColor(territoryState.ownerId, turnOrder),
+                    borderColor: isActionable ? actionEdge : "transparent",
+                  }}
+                >
+                  {territoryState.armies}
+                </button>
+                {showTerritoryNames && (
+                  <span
+                    className={cn(
+                      "pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 rounded border border-border/70 bg-background/85 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/80 shadow-sm",
+                      shouldDeEmphasize && "opacity-40",
+                    )}
+                  >
+                    {territory.name ?? territoryId}
+                  </span>
+                )}
+              </div>
             );
           })}
 
@@ -487,6 +511,17 @@ export function MapCanvas({
                 >
                   {battleOverlay.mode === "occupy" ? "Move" : battleOverlay.mode === "fortify" ? "Fortify" : "Attack"}
                 </p>
+                {battleOverlay.mode === "attack" && (
+                  <span
+                    className={cn(
+                      "flex min-w-[96px] items-center justify-end gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-opacity",
+                      battleOverlay.resolving ? "opacity-100" : "opacity-0",
+                    )}
+                  >
+                    <Loader2 className="size-3 animate-spin" />
+                    Attacking...
+                  </span>
+                )}
                 {(battleOverlay.mode === "attack" || battleOverlay.mode === "fortify") && (
                   <Button
                     type="button"
@@ -514,7 +549,7 @@ export function MapCanvas({
                       type="button"
                       size="xs"
                       variant={battleOverlay.attackDice === dice ? "default" : "outline"}
-                      disabled={dice > battleOverlay.maxDice}
+                      disabled={dice > battleOverlay.maxDice || battleOverlay.resolving}
                       onClick={() => battleOverlay.onSetAttackDice(dice)}
                     >
                       {dice}
@@ -524,7 +559,12 @@ export function MapCanvas({
                     type="button"
                     size="xs"
                     onClick={battleOverlay.onResolveAttack}
-                    disabled={battleOverlay.disabled || !battleOverlay.toLabel || battleOverlay.maxDice < 1}
+                    disabled={
+                      battleOverlay.disabled ||
+                      battleOverlay.resolving ||
+                      !battleOverlay.toLabel ||
+                      battleOverlay.maxDice < 1
+                    }
                   >
                     Attack
                   </Button>
@@ -536,12 +576,23 @@ export function MapCanvas({
                     onClick={battleOverlay.onAutoAttack}
                     disabled={
                       battleOverlay.disabled ||
+                      battleOverlay.resolving ||
                       !battleOverlay.toLabel ||
                       (!battleOverlay.autoRunning && battleOverlay.maxDice < 3)
                     }
                   >
                     Auto
                   </Button>
+                  {battleOverlay.autoRunning && (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      onClick={battleOverlay.onStopAutoAttack}
+                    >
+                      Stop
+                    </Button>
+                  )}
                 </div>
               ) : battleOverlay.mode === "occupy" ? (
                 <div className="mt-2 flex items-center gap-1.5">

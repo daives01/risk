@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { Flag, History, Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { Flag, History, Pause, Play, SkipBack, SkipForward, Tag } from "lucide-react";
 import type { Id } from "@backend/_generated/dataModel";
 import { defaultRuleset } from "risk-engine";
 import type { Action, CardId, TerritoryId } from "risk-engine";
@@ -64,17 +64,26 @@ function findAutoTradeSet(
   hand: Array<{ cardId: string; kind: string }>,
   tradeSets: TradeSetsConfig,
 ): string[] | null {
+  let bestSelection: string[] | null = null;
+  let bestWildCount = Number.POSITIVE_INFINITY;
   for (let i = 0; i < hand.length; i++) {
     for (let j = i + 1; j < hand.length; j++) {
       for (let k = j + 1; k < hand.length; k++) {
         const selected = [hand[i]!, hand[j]!, hand[k]!];
         if (isValidTradeSet(selected.map((card) => card.kind), tradeSets)) {
-          return selected.map((card) => card.cardId);
+          const wildCount = selected.filter((card) => card.kind === "W").length;
+          if (wildCount < bestWildCount) {
+            bestSelection = selected.map((card) => card.cardId);
+            bestWildCount = wildCount;
+          }
+          if (bestWildCount === 0) {
+            return bestSelection;
+          }
         }
       }
     }
   }
-  return null;
+  return bestSelection;
 }
 
 function formatTurnTimer(ms: number): string {
@@ -126,6 +135,7 @@ export default function GamePage() {
   const [cardsOpen, setCardsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [attackSubmitting, setAttackSubmitting] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyPlaying, setHistoryPlaying] = useState(false);
   const [historyFrameIndex, setHistoryFrameIndex] = useState(0);
@@ -134,6 +144,9 @@ export default function GamePage() {
   const [autoAttacking, setAutoAttacking] = useState(false);
   const autoAttackSubmittedVersionRef = useRef<number | null>(null);
   const autoEndFortifyVersionRef = useRef<number | null>(null);
+  const optionalTradeAutoOpenRef = useRef<number | null>(null);
+  const actionInFlightRef = useRef(false);
+  const [territoryNamesVisible, setTerritoryNamesVisible] = useState(false);
 
   const phase = state?.turn.phase ?? "GameOver";
   const isSpectator = !myEnginePlayerId;
@@ -195,6 +208,13 @@ export default function GamePage() {
   const myTeamName = myTeamId ? teamNames[myTeamId] ?? myTeamId : null;
   const canUseTeamChat = !!view?.teamModeEnabled && !!myTeamId;
   const canSendChat = !isSpectator && !historyOpen && view?.status === "active";
+  const myCardCount = myHand?.length ?? 0;
+  const mustTradeNow =
+    !historyOpen &&
+    isMyTurn &&
+    phase === "Reinforcement" &&
+    myCardCount >= forcedTradeHandSize;
+  const autoTradeCardIds = findAutoTradeSet(myHand ?? [], tradeSets);
   const timingMode = (view as { timingMode?: "realtime" | "async_1d" | "async_3d" } | null)?.timingMode ?? "realtime";
   const turnDeadlineAt = (view as { turnDeadlineAt?: number | null } | null)?.turnDeadlineAt ?? null;
   const remainingTurnMs = turnDeadlineAt ? Math.max(0, turnDeadlineAt - nowMs) : null;
@@ -316,17 +336,19 @@ export default function GamePage() {
       },
     ) => {
       if (!typedGameId || !state) return;
+      if (actionInFlightRef.current) return;
+      actionInFlightRef.current = true;
+      const isOptimisticAction =
+        action.type === "PlaceReinforcements" ||
+        action.type === "Occupy" ||
+        action.type === "Fortify" ||
+        action.type === "EndAttackPhase";
+      const isAttackAction = action.type === "Attack";
       setSubmitting(true);
-      try {
-        const mutationAction =
-          action.type === "TradeCards"
-            ? { ...action, cardIds: [...action.cardIds] }
-            : action;
-        await submitActionMutation({
-          gameId: typedGameId,
-          expectedVersion: state.stateVersion,
-          action: mutationAction,
-        });
+      if (isAttackAction) {
+        setAttackSubmitting(true);
+      }
+      const resetAfterAction = () => {
         if (!options?.preserveSelection) {
           setSelectedFrom(null);
           setSelectedTo(null);
@@ -339,12 +361,33 @@ export default function GamePage() {
         setOccupyMove(1);
         setFortifyCount(1);
         setSelectedCardIds(new Set());
+      };
+      if (isOptimisticAction) {
+        resetAfterAction();
+      }
+      try {
+        const mutationAction =
+          action.type === "TradeCards"
+            ? { ...action, cardIds: [...action.cardIds] }
+            : action;
+        await submitActionMutation({
+          gameId: typedGameId,
+          expectedVersion: state.stateVersion,
+          action: mutationAction,
+        });
+        if (!isOptimisticAction) {
+          resetAfterAction();
+        }
       } catch (error) {
         autoAttackSubmittedVersionRef.current = null;
         setAutoAttacking(false);
         toast.error(error instanceof Error ? error.message : "Action failed");
       } finally {
+        actionInFlightRef.current = false;
         setSubmitting(false);
+        if (isAttackAction) {
+          setAttackSubmitting(false);
+        }
       }
     },
     [state, submitActionMutation, typedGameId],
@@ -360,6 +403,7 @@ export default function GamePage() {
       if (!state || controlsDisabled) return;
 
       if (state.turn.phase === "Reinforcement") {
+        if (mustTradeNow) return;
         if (validFromIds.has(territoryId) && uncommittedReinforcements > 0) {
           const queuedCount = Math.min(placeCount, uncommittedReinforcements);
           setReinforcementDrafts((prev) => [...prev, { territoryId, count: queuedCount }]);
@@ -423,7 +467,17 @@ export default function GamePage() {
         }
       }
     },
-    [controlsDisabled, placeCount, selectedFrom, state, stopAutoAttack, uncommittedReinforcements, validFromIds, validToIds],
+    [
+      controlsDisabled,
+      mustTradeNow,
+      placeCount,
+      selectedFrom,
+      state,
+      stopAutoAttack,
+      uncommittedReinforcements,
+      validFromIds,
+      validToIds,
+    ],
   );
 
   const handleUndoPlacement = useCallback(() => {
@@ -431,24 +485,23 @@ export default function GamePage() {
   }, []);
 
   const handleConfirmPlacements = useCallback(async () => {
-    if (!typedGameId || !state || reinforcementDrafts.length === 0) return;
-    setSubmitting(true);
+    if (!typedGameId || !state || reinforcementDrafts.length === 0 || mustTradeNow) return;
+    const previousDrafts = reinforcementDrafts;
+    setReinforcementDrafts([]);
+    setPlaceCount(1);
+    setSelectedFrom(null);
+    setSelectedTo(null);
     try {
       await submitReinforcementPlacementsMutation({
         gameId: typedGameId,
         expectedVersion: state.stateVersion,
-        placements: reinforcementDrafts,
+        placements: previousDrafts,
       });
-      setReinforcementDrafts([]);
-      setPlaceCount(1);
-      setSelectedFrom(null);
-      setSelectedTo(null);
     } catch (error) {
+      setReinforcementDrafts(previousDrafts);
       toast.error(error instanceof Error ? error.message : "Could not confirm placements");
-    } finally {
-      setSubmitting(false);
     }
-  }, [reinforcementDrafts, state, submitReinforcementPlacementsMutation, typedGameId]);
+  }, [mustTradeNow, reinforcementDrafts, state, submitReinforcementPlacementsMutation, typedGameId]);
 
   useEffect(() => {
     if (!isPlacementPhase || !isMyTurn) {
@@ -696,14 +749,64 @@ export default function GamePage() {
   const flattenedEvents = useMemo(() => {
     if (!recentActions) return [];
     const events: Array<{ key: string; text: string }> = [];
+    let attackStreak: {
+      key: string;
+      from: string;
+      to: string;
+      count: number;
+      attackerLosses: number;
+      defenderLosses: number;
+    } | null = null;
+    const flushAttackStreak = () => {
+      if (!attackStreak) return;
+      const attackLabel = attackStreak.count > 1
+        ? `${attackStreak.from} attacked ${attackStreak.to} x${attackStreak.count} (${attackStreak.attackerLosses}/${attackStreak.defenderLosses} losses)`
+        : `${attackStreak.from} attacked ${attackStreak.to} (${attackStreak.attackerLosses}/${attackStreak.defenderLosses} losses)`;
+      events.push({ key: attackStreak.key, text: attackLabel });
+      attackStreak = null;
+    };
     for (const action of recentActions) {
       for (const [index, event] of action.events.entries()) {
+        if (event.type === "AttackResolved") {
+          const from = String(event.from ?? "");
+          const to = String(event.to ?? "");
+          const nextKey = `${action._id}-${index}`;
+          const attackerLosses = Number(event.attackerLosses ?? 0);
+          const defenderLosses = Number(event.defenderLosses ?? 0);
+          if (!attackStreak) {
+            attackStreak = {
+              key: nextKey,
+              from,
+              to,
+              count: 1,
+              attackerLosses,
+              defenderLosses,
+            };
+          } else if (attackStreak.from === from && attackStreak.to === to) {
+            attackStreak.count += 1;
+            attackStreak.attackerLosses += attackerLosses;
+            attackStreak.defenderLosses += defenderLosses;
+          } else {
+            flushAttackStreak();
+            attackStreak = {
+              key: nextKey,
+              from,
+              to,
+              count: 1,
+              attackerLosses,
+              defenderLosses,
+            };
+          }
+          continue;
+        }
+        flushAttackStreak();
         events.push({
           key: `${action._id}-${index}`,
           text: formatEvent(event, playerMap),
         });
       }
     }
+    flushAttackStreak();
     return events.slice(-40).reverse();
   }, [playerMap, recentActions]);
 
@@ -793,6 +896,32 @@ export default function GamePage() {
     return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [highlightFilter]);
 
+  useEffect(() => {
+    if (historyOpen || isSpectator || !isMyTurn) return;
+    if (phase !== "Reinforcement") return;
+    if (!myHand || myHand.length === 0) return;
+    if (!autoTradeCardIds) return;
+    if (cardsOpen) return;
+    const stateVersion = state?.stateVersion ?? 0;
+    if (mustTradeNow) {
+      setCardsOpen(true);
+      return;
+    }
+    if (optionalTradeAutoOpenRef.current === stateVersion) return;
+    optionalTradeAutoOpenRef.current = stateVersion;
+    setCardsOpen(true);
+  }, [
+    autoTradeCardIds,
+    cardsOpen,
+    historyOpen,
+    isMyTurn,
+    isSpectator,
+    mustTradeNow,
+    myHand,
+    phase,
+    state?.stateVersion,
+  ]);
+
   useGameShortcuts({
     historyOpen,
     historyAtEnd,
@@ -876,13 +1005,6 @@ export default function GamePage() {
     maxFortifiesPerTurn >= Number.MAX_SAFE_INTEGER
       ? "Unlimited fortifies"
       : `${fortifiesRemainingForDisplay} fortifies left`;
-  const myCardCount = myHand?.length ?? 0;
-  const mustTradeNow =
-    !historyOpen &&
-    isMyTurn &&
-    phase === "Reinforcement" &&
-    myCardCount >= forcedTradeHandSize;
-  const autoTradeCardIds = findAutoTradeSet(myHand ?? [], tradeSets);
   const winnerId =
     resolvedDisplayState.turnOrder.find((playerId) => resolvedDisplayState.players[playerId]?.status === "alive") ??
     null;
@@ -1023,6 +1145,20 @@ export default function GamePage() {
               </>
             )}
             <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={territoryNamesVisible ? "default" : "outline"}
+                    size="icon-sm"
+                    type="button"
+                    aria-label="Toggle territory names"
+                    onClick={() => setTerritoryNamesVisible((prev) => !prev)}
+                  >
+                    <Tag className="size-4" aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Toggle territory names</TooltipContent>
+              </Tooltip>
               {!isSpectator && !historyOpen && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1117,6 +1253,7 @@ export default function GamePage() {
             graphEdgeMode={showActionEdges ? "action" : "none"}
             interactive={!historyOpen && isMyTurn}
             troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
+            showTerritoryNames={territoryNamesVisible}
             onClickTerritory={handleTerritoryClick}
             onClearSelection={() => {
               stopAutoAttack();
@@ -1185,13 +1322,15 @@ export default function GamePage() {
                       toTerritoryId: selectedTo,
                       fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
                       toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
-                      attackDice,
-                      maxDice: Math.max(0, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1)),
-                      autoRunning: autoAttacking,
-                      disabled: controlsDisabled,
-                      onSetAttackDice: setAttackDice,
-                      onResolveAttack: handleResolveAttack,
+                  attackDice,
+                  maxDice: Math.max(0, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1)),
+                  autoRunning: autoAttacking,
+                  resolving: attackSubmitting,
+                  disabled: controlsDisabled,
+                  onSetAttackDice: setAttackDice,
+                  onResolveAttack: handleResolveAttack,
                       onAutoAttack: handleAutoAttackToggle,
+                      onStopAutoAttack: stopAutoAttack,
                       onCancelSelection: () => {
                         stopAutoAttack();
                         setSelectedFrom(null);
@@ -1343,7 +1482,7 @@ export default function GamePage() {
                 >
                   Trade 3
                 </Button>
-                {mustTradeNow && autoTradeCardIds && (
+                {autoTradeCardIds && (
                   <Button
                     size="xs"
                     variant="outline"
