@@ -1,19 +1,8 @@
-import { internalAction, mutation } from "./_generated/server";
+import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { classicMap } from "risk-maps";
 import { validateMap } from "risk-engine";
-import type { GraphMap } from "risk-engine";
 import { defaultMapPlayerLimits } from "./mapPlayerLimits";
-
-interface MapDef {
-  mapId: string;
-  name: string;
-  graphMap: GraphMap;
-}
-
-const MAPS: MapDef[] = [
-  { mapId: "classic", name: "Classic Global Domination", graphMap: classicMap },
-];
 
 const CLASSIC_STARTER_ANCHORS: Record<string, { x: number; y: number }> = {
   "afghanistan": { x: 0.668152057409402, y: 0.36122067415437464 },
@@ -60,17 +49,29 @@ const CLASSIC_STARTER_ANCHORS: Record<string, { x: number; y: number }> = {
   "yakutsk": { x: 0.8057874326798908, y: 0.1138823800289654 },
 };
 
+const MAP_DEFS = {
+  classic: {
+    name: "Classic Global Domination",
+    graphMap: classicMap,
+    anchors: CLASSIC_STARTER_ANCHORS,
+  },
+} as const;
+
 /**
- * Seeds a draft map with classic graph + starter anchors.
+ * Seeds a draft map with a predefined graph + starter anchors.
  *
  * Expected flow:
  * 1) Create draft map in /admin/maps and upload board image.
- * 2) Run this mutation for that mapId.
+ * 2) Run this mutation for that mapId + type.
  * 3) Fine-tune territory positions in /admin/maps/:mapId.
  */
-export const seedClassicDraft = mutation({
-  args: { mapId: v.string() },
-  handler: async (ctx, { mapId }) => {
+export const seedMap = mutation({
+  args: {
+    mapId: v.string(),
+    type: v.union(v.literal("classic")),
+  },
+  handler: async (ctx, { mapId, type }) => {
+    const mapDef = MAP_DEFS[type];
     const map = await ctx.db
       .query("maps")
       .withIndex("by_mapId", (q) => q.eq("mapId", mapId))
@@ -82,32 +83,32 @@ export const seedClassicDraft = mutation({
       );
     }
 
-    const validation = validateMap(classicMap);
+    const validation = validateMap(mapDef.graphMap);
     if (!validation.valid) {
       throw new Error(
-        `Classic map validation failed:\n${validation.errors.join("\n")}`,
+        `${mapDef.name} map validation failed:\n${validation.errors.join("\n")}`,
       );
     }
 
     const now = Date.now();
 
-    const graphMapForDb = JSON.parse(JSON.stringify(classicMap)) as {
+    const graphMapForDb = JSON.parse(JSON.stringify(mapDef.graphMap)) as {
       territories: Record<string, { name?: string; continentId?: string; tags?: string[] }>;
       adjacency: Record<string, string[]>;
       continents?: Record<string, { territoryIds: string[]; bonus: number }>;
     };
 
     await ctx.db.patch(map._id, {
-      name: map.name?.trim() ? map.name : "Classic Global Domination",
+      name: map.name?.trim() ? map.name : mapDef.name,
       graphMap: graphMapForDb,
       playerLimits: defaultMapPlayerLimits(
-        Object.keys(classicMap.territories).length,
+        Object.keys(mapDef.graphMap.territories).length,
       ),
       visual: {
         imageStorageId: map.visual.imageStorageId,
         imageWidth: map.visual.imageWidth,
         imageHeight: map.visual.imageHeight,
-        territoryAnchors: CLASSIC_STARTER_ANCHORS,
+        territoryAnchors: mapDef.anchors,
       },
       authoring: {
         status: "draft",
@@ -117,33 +118,10 @@ export const seedClassicDraft = mutation({
 
     return {
       mapId,
-      territoryCount: Object.keys(classicMap.territories).length,
-      anchorCount: Object.keys(CLASSIC_STARTER_ANCHORS).length,
+      type,
+      territoryCount: Object.keys(mapDef.graphMap.territories).length,
+      anchorCount: Object.keys(mapDef.anchors).length,
       next: `Open /admin/maps/${mapId} to tweak anchors and publish`,
     };
-  },
-});
-
-export const seedMaps = internalAction({
-  handler: async () => {
-    const results: string[] = [];
-
-    for (const { mapId, name, graphMap } of MAPS) {
-      const validation = validateMap(graphMap);
-      if (!validation.valid) {
-        throw new Error(
-          `Map "${mapId}" failed validation:\n${validation.errors.join("\n")}`,
-        );
-      }
-
-      results.push(
-        `Validated map "${mapId}" (${name}, ${Object.keys(graphMap.territories).length} territories)`,
-      );
-    }
-
-    results.push(
-      "No maps were inserted. Use /admin/maps to upload an image, author anchors/graph, and publish.",
-    );
-    return results;
   },
 });

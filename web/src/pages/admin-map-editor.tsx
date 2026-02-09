@@ -71,6 +71,7 @@ export default function AdminMapEditorPage() {
   const saveAnchors = useMutation(api.adminMaps.saveAnchors);
   const publish = useMutation(api.adminMaps.publish);
   const generateUploadUrl = useMutation(api.adminMaps.generateUploadUrl);
+  const seedMap = useMutation(api.seed.seedMap);
 
   const [name, setName] = useState("");
   const [territories, setTerritories] = useState<Record<string, TerritoryInfo>>({});
@@ -104,6 +105,7 @@ export default function AdminMapEditorPage() {
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [replacingImage, setReplacingImage] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [importJsonText, setImportJsonText] = useState("");
   const [importParseErrors, setImportParseErrors] = useState<string[]>([]);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
@@ -481,6 +483,18 @@ export default function AdminMapEditorPage() {
     }
   }
 
+  async function handleSeedClassic() {
+    setSeeding(true);
+    try {
+      await seedMap({ mapId, type: "classic" });
+      toast.success("Classic map seeded");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Seeding failed");
+    } finally {
+      setSeeding(false);
+    }
+  }
+
   async function handleImportFile(file: File | null) {
     if (!file) return;
     try {
@@ -578,6 +592,15 @@ export default function AdminMapEditorPage() {
                 <span className="text-xs uppercase text-muted-foreground">{getDraft.authoring.status}</span>
               </div>
               <div className="flex flex-wrap gap-2">
+                {territoryIds.length === 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={handleSeedClassic}
+                    disabled={seeding || saving || publishing}
+                  >
+                    {seeding ? "Seeding..." : "Seed Classic"}
+                  </Button>
+                )}
                 <Button onClick={handleSaveDraft} disabled={saving || publishing}>
                   {saving ? "Saving..." : "Save Draft"}
                 </Button>
