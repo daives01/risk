@@ -31,7 +31,7 @@ describe("player colors", () => {
     expect(first).toEqual(second);
     expect(new Set(Object.values(first)).size).toBe(4);
     expect(first.u1).toBe(PLAYER_COLOR_PALETTE[0]);
-    expect(first.u2).toBe(PLAYER_COLOR_PALETTE[1]);
+    expect(first.u2).toBe(PLAYER_COLOR_PALETTE[PLAYER_COLOR_PALETTE.length - 1]);
   });
 
   test("returns next available palette color", () => {
@@ -39,6 +39,6 @@ describe("player colors", () => {
       { userId: "u1", joinedAt: 1, color: PLAYER_COLOR_PALETTE[0] },
       { userId: "u2", joinedAt: 2, color: PLAYER_COLOR_PALETTE[1] },
     ]);
-    expect(next).toBe(PLAYER_COLOR_PALETTE[2]);
+    expect(next).toBe(PLAYER_COLOR_PALETTE[PLAYER_COLOR_PALETTE.length - 1]);
   });
 });

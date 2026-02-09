@@ -238,11 +238,10 @@ export default function CreateGamePage() {
                         key={map.mapId}
                         type="button"
                         onClick={() => setSelectedMapId(map.mapId)}
-                        className={`rounded-lg border p-3 text-left transition ${
-                          selectedMapId === map.mapId
-                            ? "border-primary bg-primary/12"
-                            : "bg-background/70 hover:border-primary/45"
-                        }`}
+                        className={`rounded-lg border p-3 text-left transition ${selectedMapId === map.mapId
+                          ? "border-primary bg-primary/12"
+                          : "bg-background/70 hover:border-primary/45"
+                          }`}
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-semibold">{map.name}</span>
@@ -296,14 +295,15 @@ export default function CreateGamePage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <RulesSwitch
-                  label="Exclude weekends from turn timer"
-                  checked={excludeWeekends}
-                  onCheckedChange={setExcludeWeekends}
-                  disabled={timingMode === "realtime"}
-                />
+                {timingMode !== "realtime" && (
+                  <RulesSwitch
+                    label="Exclude weekends from turn timer"
+                    checked={excludeWeekends}
+                    onCheckedChange={setExcludeWeekends}
+                  />
+                )}
                 {timingMode === "realtime" && (
-                  <p className="text-xs text-muted-foreground">Realtime games do not use turn deadlines.</p>
+                  <p className="text-xs text-muted-foreground">Realtime games have no turn deadlines.</p>
                 )}
               </div>
 

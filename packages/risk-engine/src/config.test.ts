@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { defaultRuleset } from "./config.js";
+import { defaultRuleset, resolveInitialArmies } from "./config.js";
 import type { RulesetConfig } from "./config.js";
 
 describe("RulesetConfig", () => {
@@ -18,6 +18,18 @@ describe("RulesetConfig", () => {
     for (let p = 2; p <= 6; p++) {
       expect(defaultRuleset.setup.playerInitialArmies[p]).toBeGreaterThan(0);
     }
+  });
+
+  test("resolveInitialArmies scales with territory count", () => {
+    const setup = defaultRuleset.setup;
+    const neutralArmies = setup.neutralTerritoryCount * setup.neutralInitialArmies;
+
+    expect(resolveInitialArmies(setup, 4, 42, setup.neutralTerritoryCount)).toBe(
+      Math.ceil((Math.round(42 * 2.8) - neutralArmies) / 4),
+    );
+    expect(resolveInitialArmies(setup, 4, 84, setup.neutralTerritoryCount)).toBeGreaterThan(
+      resolveInitialArmies(setup, 4, 42, setup.neutralTerritoryCount),
+    );
   });
 
   test("combat defaults to classic values", () => {

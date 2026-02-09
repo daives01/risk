@@ -2,12 +2,20 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { authComponent } from "./auth.js";
-import { applyAction, ActionError, calculateReinforcements, createDeck, createRng } from "risk-engine";
+import {
+  applyAction,
+  ActionError,
+  calculateReinforcements,
+  createDeck,
+  createRng,
+  resolveInitialArmies,
+} from "risk-engine";
 import type { Action, CardId, GameState, PlayerId, GraphMap, TerritoryId, GameEvent, RulesetConfig } from "risk-engine";
 import { summarizeTimelineFrame } from "./historyTimeline";
 import { resolveEffectiveRuleset, type RulesetOverrides } from "./rulesets";
 import { computeTurnDeadlineAt, didTurnAdvance, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
 import { readGameState, readGraphMap } from "./typeAdapters";
+import { distributeInitialArmiesCappedRandom } from "./initialPlacement";
 
 const actionValidator = v.union(
   v.object({
@@ -759,7 +767,12 @@ function createInitialStateFromSeed(
   const turnOrder = rng.shuffle(playerIds);
 
   const shuffledTerritories = rng.shuffle(territoryIds);
-  const initialArmies = setup.playerInitialArmies[playerIds.length] ?? 20;
+  const initialArmies = resolveInitialArmies(
+    setup,
+    playerIds.length,
+    territoryIds.length,
+    setup.neutralTerritoryCount,
+  );
 
   const neutralCount = Math.min(
     setup.neutralTerritoryCount,
@@ -785,12 +798,7 @@ function createInitialStateFromSeed(
 
   for (const pid of turnOrder) {
     const owned = assignments[pid]!;
-    let remaining = initialArmies - owned.length;
-    while (remaining > 0) {
-      const idx = rng.nextInt(0, owned.length - 1);
-      territories[owned[idx]!]!.armies += 1;
-      remaining -= 1;
-    }
+    distributeInitialArmiesCappedRandom(rng, owned, territories, initialArmies, 4);
   }
 
   const players: GameState["players"] = {};

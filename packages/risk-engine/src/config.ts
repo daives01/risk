@@ -10,6 +10,29 @@ export interface SetupConfig {
   readonly distribution: "roundRobin" | "random";
 }
 
+const DEFAULT_TROOP_DENSITY = 2.8;
+
+export function resolveInitialArmies(
+  setup: SetupConfig,
+  playerCount: number,
+  territoryCount: number,
+  neutralTerritoryCount: number,
+): number {
+  const classicArmies = setup.playerInitialArmies[playerCount] ?? 20;
+  if (territoryCount <= 0 || playerCount <= 0) return classicArmies;
+
+  const targetTotal = Math.round(territoryCount * DEFAULT_TROOP_DENSITY);
+  const neutralArmies =
+    Math.min(territoryCount, neutralTerritoryCount) * setup.neutralInitialArmies;
+  const playerTotal = Math.max(0, targetTotal - neutralArmies);
+  const scaledArmies = Math.ceil(playerTotal / playerCount);
+  const minPlayerTerritories = Math.ceil(
+    Math.max(0, territoryCount - neutralTerritoryCount) / playerCount,
+  );
+
+  return Math.max(minPlayerTerritories, scaledArmies);
+}
+
 // ── Combat ────────────────────────────────────────────────────────────
 
 export interface CombatConfig {

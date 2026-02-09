@@ -7,6 +7,7 @@ import {
   createDeck,
   calculateReinforcements,
   PLAYER_COLOR_PALETTE,
+  resolveInitialArmies,
 } from "risk-engine";
 import type {
   CardId,
@@ -41,6 +42,7 @@ import {
   isPlayerColor,
   resolvePlayerColors,
 } from "./playerColors";
+import { distributeInitialArmiesCappedRandom } from "./initialPlacement";
 import { computeTurnDeadlineAt, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
 import { readGraphMap } from "./typeAdapters";
 import { generateUniqueInviteCode } from "./inviteCodes";
@@ -646,8 +648,12 @@ export const startGame = mutation({
 
     // Determine initial armies per player
     const playerCount = playerIds.length;
-    const initialArmies =
-      setup.playerInitialArmies[playerCount] ?? 20;
+    const initialArmies = resolveInitialArmies(
+      setup,
+      playerCount,
+      territoryIds.length,
+      setup.neutralTerritoryCount,
+    );
 
     // Assign territories round-robin + neutrals
     const neutralCount = Math.min(
@@ -679,15 +685,10 @@ export const startGame = mutation({
       playerTerritoryAssignments[pid]!.push(tid);
     }
 
-    // Distribute remaining armies randomly across each player's territories
+    // Distribute remaining armies randomly with a per-territory cap
     for (const pid of turnOrder) {
       const owned = playerTerritoryAssignments[pid]!;
-      let remaining = initialArmies - owned.length; // already placed 1 per territory
-      while (remaining > 0) {
-        const idx = rng.nextInt(0, owned.length - 1);
-        territories[owned[idx]!]!.armies += 1;
-        remaining--;
-      }
+      distributeInitialArmiesCappedRandom(rng, owned, territories, initialArmies, 4);
     }
 
     // Build players record

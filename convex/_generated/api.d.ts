@@ -20,6 +20,7 @@ import type * as gameplay from "../gameplay.js";
 import type * as games from "../games.js";
 import type * as historyTimeline from "../historyTimeline.js";
 import type * as http from "../http.js";
+import type * as initialPlacement from "../initialPlacement.js";
 import type * as inviteCodes from "../inviteCodes.js";
 import type * as lobby from "../lobby.js";
 import type * as mapPlayerLimits from "../mapPlayerLimits.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   games: typeof games;
   historyTimeline: typeof historyTimeline;
   http: typeof http;
+  initialPlacement: typeof initialPlacement;
   inviteCodes: typeof inviteCodes;
   lobby: typeof lobby;
   mapPlayerLimits: typeof mapPlayerLimits;

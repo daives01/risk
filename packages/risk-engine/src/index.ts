@@ -17,7 +17,7 @@ export type {
   MapVisual,
   AuthoredMap,
 } from "./map.js";
-export { defaultRuleset } from "./config.js";
+export { defaultRuleset, resolveInitialArmies } from "./config.js";
 export type { RulesetConfig, SetupConfig, CombatConfig, FortifyConfig, CardsConfig, TeamsConfig } from "./config.js";
 export { calculateReinforcements } from "./reinforcements.js";
 export type { ReinforcementResult } from "./reinforcements.js";
