@@ -596,6 +596,14 @@ export default function HomePage() {
           </CardContent>
         </Card>
       </div>
+      <a
+        href="https://buymeacoffee.com/danielives"
+        target="_blank"
+        rel="noreferrer"
+        className="fixed bottom-4 left-4 text-xs font-medium text-muted-foreground/60 transition hover:text-muted-foreground"
+      >
+        Support the dev
+      </a>
     </div>
   );
 }
