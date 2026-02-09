@@ -88,6 +88,8 @@ export function GamePlayersCard({
         </div>
         {playerStats.map((player) => {
           const isCurrent = player.playerId === displayState.turn.currentPlayerId;
+          const isGameOver = displayState.turn.phase === "GameOver";
+          const isWinner = isGameOver && player.status === "alive";
           const isDefeated = player.status === "defeated";
           const teamId = player.teamId;
           const playerHighlightKey = `player:${player.playerId}` as HighlightFilter;
@@ -95,6 +97,13 @@ export function GamePlayersCard({
           const isPlayerHighlighted = activeHighlight === playerHighlightKey;
           const isTeamHighlighted = teamHighlightKey ? activeHighlight === teamHighlightKey : false;
           const color = getPlayerColor(player.playerId, displayState.turnOrder);
+          const statusLabel = isGameOver
+            ? isWinner
+              ? "Winner"
+              : player.status
+            : isCurrent
+              ? "Turn"
+              : player.status;
 
           return (
             <div
@@ -147,10 +156,10 @@ export function GamePlayersCard({
                 )}
                 <span
                   className={`text-center text-xs font-medium capitalize ${
-                    isCurrent ? "font-semibold text-primary" : "text-muted-foreground"
+                    isWinner || (!isGameOver && isCurrent) ? "font-semibold text-primary" : "text-muted-foreground"
                   }`}
                 >
-                  {isCurrent ? "Turn" : player.status}
+                  {statusLabel}
                 </span>
               </div>
             </div>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { Flag, History, Pause, Play, SkipBack, SkipForward, Tag } from "lucide-react";
+import { Flag, History, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import type { Id } from "@backend/_generated/dataModel";
 import { defaultRuleset } from "risk-engine";
 import type { Action, CardId, TerritoryId } from "risk-engine";
@@ -146,7 +146,8 @@ export default function GamePage() {
   const autoEndFortifyVersionRef = useRef<number | null>(null);
   const optionalTradeAutoOpenRef = useRef<number | null>(null);
   const actionInFlightRef = useRef(false);
-  const [territoryNamesVisible, setTerritoryNamesVisible] = useState(false);
+  const [endgameModal, setEndgameModal] = useState<"won" | "lost" | null>(null);
+  const dismissedEndgameRef = useRef(false);
 
   const phase = state?.turn.phase ?? "GameOver";
   const isSpectator = !myEnginePlayerId;
@@ -218,6 +219,15 @@ export default function GamePage() {
   const timingMode = (view as { timingMode?: "realtime" | "async_1d" | "async_3d" } | null)?.timingMode ?? "realtime";
   const turnDeadlineAt = (view as { turnDeadlineAt?: number | null } | null)?.turnDeadlineAt ?? null;
   const remainingTurnMs = turnDeadlineAt ? Math.max(0, turnDeadlineAt - nowMs) : null;
+  const winningPlayerId = (view as { winningPlayerId?: string | null } | null)?.winningPlayerId ?? null;
+  const winningTeamId = (view as { winningTeamId?: string | null } | null)?.winningTeamId ?? null;
+  const isWinner = useMemo(() => {
+    if (!myEnginePlayerId) return false;
+    if (winningPlayerId) return myEnginePlayerId === winningPlayerId;
+    if (winningTeamId && myTeamId) return winningTeamId === myTeamId;
+    return false;
+  }, [myEnginePlayerId, myTeamId, winningPlayerId, winningTeamId]);
+  const isEliminated = !!myEnginePlayerId && state?.players[myEnginePlayerId]?.status === "defeated";
   const showTurnTimer = timingMode !== "realtime" && !!turnDeadlineAt;
   const turnTimerLabel = showTurnTimer
     ? remainingTurnMs === 0
@@ -922,6 +932,19 @@ export default function GamePage() {
     state?.stateVersion,
   ]);
 
+  useEffect(() => {
+    if (historyOpen || isSpectator || !state) return;
+    if (state.turn.phase !== "GameOver") return;
+    if (endgameModal || dismissedEndgameRef.current) return;
+    if (isWinner) {
+      setEndgameModal("won");
+      return;
+    }
+    if (isEliminated) {
+      setEndgameModal("lost");
+    }
+  }, [endgameModal, historyOpen, isEliminated, isSpectator, isWinner, state]);
+
   useGameShortcuts({
     historyOpen,
     historyAtEnd,
@@ -1145,20 +1168,6 @@ export default function GamePage() {
               </>
             )}
             <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={territoryNamesVisible ? "default" : "outline"}
-                    size="icon-sm"
-                    type="button"
-                    aria-label="Toggle territory names"
-                    onClick={() => setTerritoryNamesVisible((prev) => !prev)}
-                  >
-                    <Tag className="size-4" aria-hidden="true" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Toggle territory names</TooltipContent>
-              </Tooltip>
               {!isSpectator && !historyOpen && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1253,7 +1262,6 @@ export default function GamePage() {
             graphEdgeMode={showActionEdges ? "action" : "none"}
             interactive={!historyOpen && isMyTurn}
             troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
-            showTerritoryNames={territoryNamesVisible}
             onClickTerritory={handleTerritoryClick}
             onClearSelection={() => {
               stopAutoAttack();
@@ -1497,6 +1505,41 @@ export default function GamePage() {
                     Auto Trade
                   </Button>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {endgameModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/70 p-4 backdrop-blur-[2px]">
+          <Card className="glass-panel w-full max-w-sm border border-border/70 py-0 shadow-xl">
+            <CardContent className="space-y-4 p-5">
+              <div className="space-y-1">
+                <p className="text-base font-semibold">
+                  {endgameModal === "won" ? "You won!" : "You have been eliminated"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {endgameModal === "won" ? "Victory is yours." : "You are out of the match."}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {endgameModal === "won" ? (
+                  <Button asChild size="sm">
+                    <Link to="/">Go Home</Link>
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  type="button"
+                  onClick={() => {
+                    dismissedEndgameRef.current = true;
+                    setEndgameModal(null);
+                  }}
+                >
+                  Close
+                </Button>
               </div>
             </CardContent>
           </Card>

@@ -6,6 +6,8 @@ type ViewLike = {
   state?: unknown;
   mapId?: string;
   status?: string;
+  winningPlayerId?: string | null;
+  winningTeamId?: string | null;
   teamModeEnabled?: boolean;
   teamCount?: number | null;
   teamNames?: Record<string, string> | null;

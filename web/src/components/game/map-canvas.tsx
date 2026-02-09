@@ -37,7 +37,6 @@ interface MapCanvasProps {
   graphEdgeMode?: "all" | "action" | "none";
   interactive: boolean;
   troopDeltaDurationMs?: number;
-  showTerritoryNames?: boolean;
   onClickTerritory: (territoryId: string) => void;
   onClearSelection?: () => void;
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
@@ -112,7 +111,6 @@ export function MapCanvas({
   graphEdgeMode = "all",
   interactive,
   troopDeltaDurationMs = 1000,
-  showTerritoryNames = false,
   onClickTerritory,
   onClearSelection,
   getPlayerColor,
@@ -454,16 +452,6 @@ export function MapCanvas({
                 >
                   {territoryState.armies}
                 </button>
-                {showTerritoryNames && (
-                  <span
-                    className={cn(
-                      "pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 rounded border border-border/70 bg-background/85 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/80 shadow-sm",
-                      shouldDeEmphasize && "opacity-40",
-                    )}
-                  >
-                    {territory.name ?? territoryId}
-                  </span>
-                )}
               </div>
             );
           })}
