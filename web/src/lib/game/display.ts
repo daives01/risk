@@ -1,4 +1,5 @@
 import { NEUTRAL_PLAYER_COLOR, PLAYER_COLOR_PALETTE } from "risk-engine";
+import type { GraphMap } from "risk-engine";
 
 type PlayerRef = { displayName: string; enginePlayerId: string | null; color?: string | null };
 
@@ -14,23 +15,25 @@ export function getPlayerName(enginePlayerId: string, players: PlayerRef[]) {
   return players.find((player) => player.enginePlayerId === enginePlayerId)?.displayName ?? enginePlayerId;
 }
 
-export function formatEvent(event: Record<string, unknown>, playerMap: PlayerRef[]) {
+export function formatEvent(event: Record<string, unknown>, playerMap: PlayerRef[], graphMap?: GraphMap) {
   const playerName = (id: unknown) =>
     typeof id === "string" ? getPlayerName(id, playerMap) : "Unknown";
   const actionOwnerId = (id: unknown) =>
     typeof id === "string" ? getPlayerName(id, playerMap) : "Unknown";
+  const territoryName = (id: unknown) =>
+    typeof id === "string" ? graphMap?.territories[id]?.name ?? id : "Unknown";
 
   switch (event.type) {
     case "ReinforcementsPlaced":
-      return `${playerName(event.playerId)} placed ${event.count} armies on ${event.territoryId}`;
+      return `${playerName(event.playerId)} placed ${event.count} armies on ${territoryName(event.territoryId)}`;
     case "AttackResolved":
-      return `${event.from} attacked ${event.to} (${event.attackerLosses}/${event.defenderLosses} losses)`;
+      return `${territoryName(event.from)} attacked ${territoryName(event.to)} (${event.attackerLosses}/${event.defenderLosses} losses)`;
     case "TerritoryCaptured":
-      return `${playerName(event.newOwnerId)} captured ${event.to}`;
+      return `${playerName(event.newOwnerId)} captured ${territoryName(event.to)}`;
     case "OccupyResolved":
-      return `${actionOwnerId(event.playerId)} moved ${event.moved} armies to ${event.to}`;
+      return `${actionOwnerId(event.playerId)} moved ${event.moved} armies to ${territoryName(event.to)}`;
     case "FortifyResolved":
-      return `${actionOwnerId(event.playerId)} fortified ${event.from} to ${event.to} (${event.moved})`;
+      return `${actionOwnerId(event.playerId)} fortified ${territoryName(event.from)} to ${territoryName(event.to)} (${event.moved})`;
     case "CardsTraded":
       return `${playerName(event.playerId)} traded cards for ${event.value} armies`;
     case "CardDrawn":

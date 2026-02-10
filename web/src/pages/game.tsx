@@ -874,8 +874,10 @@ export default function GamePage() {
     const events: Array<{ key: string; text: string }> = [];
     let attackStreak: {
       key: string;
-      from: string;
-      to: string;
+      fromId: string;
+      toId: string;
+      fromLabel: string;
+      toLabel: string;
       count: number;
       attackerLosses: number;
       defenderLosses: number;
@@ -883,8 +885,8 @@ export default function GamePage() {
     const flushAttackStreak = () => {
       if (!attackStreak) return;
       const attackLabel = attackStreak.count > 1
-        ? `${attackStreak.from} attacked ${attackStreak.to} x${attackStreak.count} (${attackStreak.attackerLosses}/${attackStreak.defenderLosses} losses)`
-        : `${attackStreak.from} attacked ${attackStreak.to} (${attackStreak.attackerLosses}/${attackStreak.defenderLosses} losses)`;
+        ? `${attackStreak.fromLabel} attacked ${attackStreak.toLabel} x${attackStreak.count} (${attackStreak.attackerLosses}/${attackStreak.defenderLosses} losses)`
+        : `${attackStreak.fromLabel} attacked ${attackStreak.toLabel} (${attackStreak.attackerLosses}/${attackStreak.defenderLosses} losses)`;
       events.push({ key: attackStreak.key, text: attackLabel });
       attackStreak = null;
     };
@@ -893,19 +895,23 @@ export default function GamePage() {
         if (event.type === "AttackResolved") {
           const from = String(event.from ?? "");
           const to = String(event.to ?? "");
+          const fromLabel = graphMap?.territories[from]?.name ?? from;
+          const toLabel = graphMap?.territories[to]?.name ?? to;
           const nextKey = `${action._id}-${index}`;
           const attackerLosses = Number(event.attackerLosses ?? 0);
           const defenderLosses = Number(event.defenderLosses ?? 0);
           if (!attackStreak) {
             attackStreak = {
               key: nextKey,
-              from,
-              to,
+              fromId: from,
+              toId: to,
+              fromLabel,
+              toLabel,
               count: 1,
               attackerLosses,
               defenderLosses,
             };
-          } else if (attackStreak.from === from && attackStreak.to === to) {
+          } else if (attackStreak.fromId === from && attackStreak.toId === to) {
             attackStreak.count += 1;
             attackStreak.attackerLosses += attackerLosses;
             attackStreak.defenderLosses += defenderLosses;
@@ -913,8 +919,10 @@ export default function GamePage() {
             flushAttackStreak();
             attackStreak = {
               key: nextKey,
-              from,
-              to,
+              fromId: from,
+              toId: to,
+              fromLabel,
+              toLabel,
               count: 1,
               attackerLosses,
               defenderLosses,
@@ -925,13 +933,13 @@ export default function GamePage() {
         flushAttackStreak();
         events.push({
           key: `${action._id}-${index}`,
-          text: formatEvent(event, playerMap),
+          text: formatEvent(event, playerMap, graphMap),
         });
       }
     }
     flushAttackStreak();
     return events.slice(-40).reverse();
-  }, [playerMap, recentActions]);
+  }, [graphMap, playerMap, recentActions]);
 
   const resolvePlayerColor = useCallback(
     (playerId: string, turnOrder: string[]) => getPlayerColor(playerId, playerMap, turnOrder),
