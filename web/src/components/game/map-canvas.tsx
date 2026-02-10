@@ -42,53 +42,53 @@ interface MapCanvasProps {
   onClearSelection?: () => void;
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
   battleOverlay?:
-    | {
-        mode: "attack";
-        fromTerritoryId: string;
-        toTerritoryId: string;
-        fromLabel: string | null;
-        toLabel: string | null;
-        attackDice: number;
-        maxDice: number;
-        autoRunning: boolean;
-        resolving: boolean;
-        disabled: boolean;
-        onSetAttackDice: (dice: number) => void;
-        onResolveAttack: () => void;
-        onAutoAttack: () => void;
-        onStopAutoAttack: () => void;
-        onCancelSelection: () => void;
-      }
-    | {
-        mode: "occupy";
-        fromTerritoryId: string;
-        toTerritoryId: string;
-        fromLabel: string;
-        toLabel: string;
-        disabled: boolean;
-        occupyMove: number;
-        minMove: number;
-        maxMove: number;
-        onSetOccupyMove: (count: number) => void;
-        onSubmitOccupy: () => void;
-        onSubmitOccupyAll: () => void;
-      }
-    | {
-        mode: "fortify";
-        fromTerritoryId: string;
-        toTerritoryId: string;
-        fromLabel: string;
-        toLabel: string;
-        disabled: boolean;
-        fortifyCount: number;
-        minCount: number;
-        maxCount: number;
-        onSetFortifyCount: (count: number) => void;
-        onSubmitFortify: () => void;
-        onSubmitFortifyAll: () => void;
-        onCancelSelection: () => void;
-      }
-    | null;
+  | {
+    mode: "attack";
+    fromTerritoryId: string;
+    toTerritoryId: string;
+    fromLabel: string | null;
+    toLabel: string | null;
+    attackDice: number;
+    maxDice: number;
+    autoRunning: boolean;
+    resolving: boolean;
+    disabled: boolean;
+    onSetAttackDice: (dice: number) => void;
+    onResolveAttack: () => void;
+    onAutoAttack: () => void;
+    onStopAutoAttack: () => void;
+    onCancelSelection: () => void;
+  }
+  | {
+    mode: "occupy";
+    fromTerritoryId: string;
+    toTerritoryId: string;
+    fromLabel: string;
+    toLabel: string;
+    disabled: boolean;
+    occupyMove: number;
+    minMove: number;
+    maxMove: number;
+    onSetOccupyMove: (count: number) => void;
+    onSubmitOccupy: () => void;
+    onSubmitOccupyAll: () => void;
+  }
+  | {
+    mode: "fortify";
+    fromTerritoryId: string;
+    toTerritoryId: string;
+    fromLabel: string;
+    toLabel: string;
+    disabled: boolean;
+    fortifyCount: number;
+    minCount: number;
+    maxCount: number;
+    onSetFortifyCount: (count: number) => void;
+    onSubmitFortify: () => void;
+    onSubmitFortifyAll: () => void;
+    onCancelSelection: () => void;
+  }
+  | null;
 }
 
 interface FloatingTroopDelta {
@@ -150,7 +150,6 @@ export function MapCanvas({
   const imageAspect = visual.imageWidth / visual.imageHeight;
   const highlightActive = highlightedTerritoryIds.size > 0;
   const explicitActionEdges = actionEdgeIds !== undefined && actionEdgeIds.size > 0;
-  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
   const withAlpha = (color: string, alpha: number) => {
     if (color.startsWith("#") && color.length === 7) {
@@ -187,11 +186,12 @@ export function MapCanvas({
     };
   }, [containerSize.height, containerSize.width, imageFit.height, imageFit.width]);
 
+  const markerScaleFactor = 0.035;
   const markerSize = useMemo(() => {
     if (!imagePixelSize.width || !imagePixelSize.height) return 18;
-    const base = Math.min(imagePixelSize.width, imagePixelSize.height) * 0.055;
-    return clamp(base, 14, 28);
-  }, [imagePixelSize.height, imagePixelSize.width]);
+    const base = Math.min(imagePixelSize.width, imagePixelSize.height) * markerScaleFactor;
+    return base;
+  }, [imagePixelSize.height, imagePixelSize.width, markerScaleFactor]);
 
   const projectedAnchors = useMemo(() => {
     const result: Record<string, { x: number; y: number }> = {};
