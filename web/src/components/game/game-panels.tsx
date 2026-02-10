@@ -1,5 +1,5 @@
 import { ArrowUp, Check, Pencil, Trash2, Users, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -230,6 +230,49 @@ export function GameChatCard({
   onSend,
 }: GameChatCardProps) {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const messagesWithTimestamps = useMemo(() => {
+    const currentYear = new Date(now).getFullYear();
+
+    const formatChatTimestamp = (timestamp: number) => {
+      const date = new Date(timestamp);
+      if (Number.isNaN(date.getTime())) return "";
+
+      const diffMs = Math.max(0, now - timestamp);
+      const diffMinutes = Math.floor(diffMs / 60000);
+
+      if (diffMinutes < 1) return "just now";
+      if (diffMinutes < 60) return `${diffMinutes}m`;
+
+      const diffHours = Math.floor(diffMinutes / 60);
+      if (diffHours < 24) return `${diffHours}h`;
+
+      const diffDays = Math.floor(diffHours / 24);
+      if (diffDays === 1) return "yesterday";
+      if (diffDays < 7) return `${diffDays}d`;
+
+      const monthLabel = date.toLocaleString("en-US", { month: "short" });
+      const dayLabel = date.getDate();
+      if (date.getFullYear() === currentYear) {
+        return `${monthLabel} ${dayLabel}`;
+      }
+
+      return `${monthLabel} ${dayLabel}, ${date.getFullYear()}`;
+    };
+
+    return messages.map((message) => ({
+      ...message,
+      timestampLabel: formatChatTimestamp(message.createdAt),
+    }));
+  }, [messages, now]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -284,13 +327,16 @@ export function GameChatCard({
         >
           <div className="mt-auto space-y-2">
             {messages.length === 0 && <p className="text-muted-foreground">No messages yet.</p>}
-            {messages.map((message) => (
-              <div key={message._id} className={`group flex ${message.isMine ? "justify-end" : "justify-start"}`}>
-                <div className={`flex max-w-[85%] flex-col gap-1 ${message.isMine ? "items-end" : "items-start"}`}>
-                  <div className="text-xs text-muted-foreground">
-                    {message.isMine ? "You" : message.senderDisplayName}
-                    {message.editedAt ? " (edited)" : ""}
-                  </div>
+            {messagesWithTimestamps.map((message) => {
+              const timestampLabel = message.timestampLabel;
+              return (
+                <div key={message._id} className={`group flex ${message.isMine ? "justify-end" : "justify-start"}`}>
+                  <div className={`flex max-w-[85%] flex-col gap-1 ${message.isMine ? "items-end" : "items-start"}`}>
+                    <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
+                      <span>{message.isMine ? "You" : message.senderDisplayName}</span>
+                      {timestampLabel ? <span className="text-[0.7rem] tracking-wide">{timestampLabel}</span> : null}
+                      {message.editedAt ? <span className="text-[0.7rem] tracking-wide">edited</span> : null}
+                    </div>
                   <div
                     className={`rounded-none px-3 py-2 ${
                       message.isMine
@@ -322,9 +368,10 @@ export function GameChatCard({
                       </Button>
                     </div>
                   )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
