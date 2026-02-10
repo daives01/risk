@@ -404,7 +404,11 @@ export function MapCanvas({
                 !!selectedFrom &&
                 !!selectedTo &&
                 ((from === selectedFrom && to === selectedTo) || (to === selectedFrom && from === selectedTo));
-              const showActionEdge = explicitActionEdges ? hasExplicitEdge : isCandidate || isSelectedPair;
+              const showActionEdge = explicitActionEdges
+                ? hasExplicitEdge
+                : selectedTo
+                  ? isSelectedPair
+                  : isCandidate || isSelectedPair;
               if (graphEdgeMode === "none") return null;
               if (graphEdgeMode === "action" && !showActionEdge) return null;
 

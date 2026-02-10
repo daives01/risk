@@ -1153,8 +1153,14 @@ export default function GamePage() {
     resolvedDisplayState.turnOrder.find((playerId) => resolvedDisplayState.players[playerId]?.status === "alive") ??
     null;
   const playbackTerritories = historyOpen ? resolvedDisplayState.territories : displayedTerritories;
+  const pendingOccupy = state.pending?.type === "Occupy" ? state.pending : null;
+  const mapSelectedFrom = pendingOccupy?.from ?? selectedFrom;
+  const mapSelectedTo = pendingOccupy?.to ?? selectedTo;
   const showActionEdges =
-    !historyOpen && isMyTurn && !!selectedFrom && (phase === "Attack" || phase === "Fortify");
+    !historyOpen &&
+    isMyTurn &&
+    !!mapSelectedFrom &&
+    (phase === "Attack" || phase === "Fortify" || (phase === "Occupy" && !!state.pending));
   const showSignInCta = !sessionPending && !session;
   const loginHref = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`;
 
@@ -1375,8 +1381,8 @@ export default function GamePage() {
             imageUrl={mapImageUrl}
             territories={playbackTerritories}
             turnOrder={resolvedDisplayState.turnOrder}
-            selectedFrom={selectedFrom}
-            selectedTo={selectedTo}
+            selectedFrom={mapSelectedFrom}
+            selectedTo={mapSelectedTo}
             validFromIds={!historyOpen && isMyTurn ? validFromIds : new Set()}
             validToIds={!historyOpen && isMyTurn ? validToIds : new Set()}
             highlightedTerritoryIds={highlightedTerritoryIds}
