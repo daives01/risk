@@ -18,7 +18,8 @@ export default function ForgotPasswordPage() {
     setError(null);
     setLoading(true);
     try {
-      const result = await authClient.requestPasswordReset({ email, redirectTo: "/reset-password" });
+      const redirectTo = new URL("/reset-password", window.location.origin).toString();
+      const result = await authClient.requestPasswordReset({ email, redirectTo });
       if (result.error) {
         setError(result.error.message ?? "Request failed");
       } else {

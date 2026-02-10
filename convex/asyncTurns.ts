@@ -316,7 +316,7 @@ export const sendYourTurnEmail = internalAction({
     if (!email) return { sent: false, reason: "email_missing" };
 
     const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
-    const siteUrl = env.VITE_SITE_URL ?? env.WEB_ORIGIN ?? env.SITE_URL ?? "http://localhost:5173";
+    const siteUrl = env.SITE_URL ?? "http://localhost:5173";
     const gameUrl = `${siteUrl}/play/${game._id}`;
     const turnDeadlineLabel = game.turnDeadlineAt
       ? new Date(game.turnDeadlineAt).toUTCString()
