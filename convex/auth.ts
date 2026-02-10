@@ -33,10 +33,16 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
       enabled: true,
       requireEmailVerification: true,
       sendResetPassword: async ({ user, url }) => {
+        const rawResetUrl = new URL(url);
+        const token = rawResetUrl.pathname.split("/").pop();
+        const appResetUrl = new URL("/reset-password", webOrigin);
+        if (token) {
+          appResetUrl.searchParams.set("token", token);
+        }
         await (ctx as any).runAction("sendEmail:sendEmail", {
           to: user.email,
           subject: "Reset your password",
-          html: resetPasswordEmailHtml(url),
+          html: resetPasswordEmailHtml(appResetUrl.toString()),
         });
       },
     },
