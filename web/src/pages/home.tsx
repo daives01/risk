@@ -566,7 +566,7 @@ export default function HomePage() {
                     <label className="flex items-center justify-between gap-3">
                       <span className="text-sm text-muted-foreground">Email me when it's my turn</span>
                       <Switch
-                        checked={settings?.emailTurnNotificationsEnabled ?? true}
+                        checked={settings?.emailTurnNotificationsEnabled ?? false}
                         onCheckedChange={(checked) => {
                           void toggleTurnEmails(checked);
                         }}

@@ -362,7 +362,7 @@ export const getUserTurnEmailSetting = internalQuery({
       .unique();
     return {
       emailTurnNotificationsEnabled:
-        settings?.emailTurnNotificationsEnabled ?? true,
+        settings?.emailTurnNotificationsEnabled ?? false,
     };
   },
 });
