@@ -168,6 +168,10 @@ export function MapCanvas({
     return { left, top: 0, width: drawWidth, height: 1 };
   }, [frameAspect, imageAspect]);
 
+  const markerScale = useMemo(() => {
+    return Math.min(imageFit.width, imageFit.height);
+  }, [imageFit.height, imageFit.width]);
+
   const projectedAnchors = useMemo(() => {
     const result: Record<string, { x: number; y: number }> = {};
     for (const [territoryId, anchor] of Object.entries(visual.territoryAnchors)) {
@@ -328,8 +332,8 @@ export function MapCanvas({
       <div
         ref={containerRef}
         className={cn(
-          "relative mx-auto aspect-video w-full overflow-hidden rounded-xl border border-border/70 bg-muted touch-none select-none",
-          zoomLocked && "touch-auto",
+          "relative mx-auto aspect-video w-full overflow-hidden rounded-xl border border-border/70 bg-muted select-none",
+          zoomLocked ? "touch-auto" : "touch-none",
         )}
         {...(zoomLocked ? {} : handlers)}
       >
@@ -435,11 +439,13 @@ export function MapCanvas({
                     if (shouldSuppressClick()) return;
                     onClickTerritory(territoryId);
                   }}
-                  onPointerDown={(event) => event.stopPropagation()}
+                  onPointerDown={(event) => {
+                    if (zoomLocked) event.stopPropagation();
+                  }}
                   disabled={!selectable}
                   title={territory.name ?? territoryId}
                   className={cn(
-                    "min-w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 px-2 py-1 text-xs font-bold text-white shadow-sm transition-opacity",
+                    "min-w-9 rounded-full border-2 px-2 py-1 text-xs font-bold text-white shadow-sm transition-opacity",
                     selectable ? "cursor-pointer" : "cursor-default opacity-80",
                     shouldDeEmphasize && "opacity-30 saturate-50",
                   )}
@@ -448,6 +454,8 @@ export function MapCanvas({
                     outlineOffset: outlineWidth > 0 ? 2 : 0,
                     backgroundColor: getPlayerColor(territoryState.ownerId, turnOrder),
                     borderColor: isActionable ? actionEdge : "transparent",
+                    transform: `translate(-50%, -50%) scale(${markerScale})`,
+                    transformOrigin: "center",
                   }}
                 >
                   {territoryState.armies}

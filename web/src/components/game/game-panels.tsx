@@ -74,97 +74,101 @@ export function GamePlayersCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 pb-4">
-        <div
-          className={`grid items-center gap-2 rounded-md border border-border/70 bg-background/70 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground ${columnsClass}`}
-        >
-          <span>Player</span>
-          {teamModeEnabled && <span>Team</span>}
-          <span className="text-center">Terr.</span>
-          <span className="text-center">Armies</span>
-          <span className="text-center">Reserve</span>
-          <span className="text-center">Cards</span>
-          {showTurnTimer && <span className="text-center">Timer</span>}
-          <span className="text-center">Status</span>
-        </div>
-        {playerStats.map((player) => {
-          const isCurrent = player.playerId === displayState.turn.currentPlayerId;
-          const isGameOver = displayState.turn.phase === "GameOver";
-          const isWinner = isGameOver && player.status === "alive";
-          const isDefeated = player.status === "defeated";
-          const teamId = player.teamId;
-          const playerHighlightKey = `player:${player.playerId}` as HighlightFilter;
-          const teamHighlightKey = teamId ? (`team:${teamId}` as HighlightFilter) : null;
-          const isPlayerHighlighted = activeHighlight === playerHighlightKey;
-          const isTeamHighlighted = teamHighlightKey ? activeHighlight === teamHighlightKey : false;
-          const color = getPlayerColor(player.playerId, displayState.turnOrder);
-          const statusLabel = isGameOver
-            ? isWinner
-              ? "Winner"
-              : player.status
-            : isCurrent
-              ? "Turn"
-              : player.status;
-
-          return (
+        <div className="overflow-x-auto">
+          <div className="min-w-[620px] space-y-2">
             <div
-              key={player.playerId}
-              role="button"
-              tabIndex={0}
-              onClick={() => onTogglePlayerHighlight(player.playerId)}
-              onKeyDown={(event) => handleRowKeyDown(event, player.playerId)}
-              className={`cursor-pointer rounded-lg border bg-background/80 px-3 py-2 transition hover:border-primary/50 ${
-                isDefeated ? "opacity-55" : ""
-              } ${isPlayerHighlighted ? "ring-2 ring-primary/80" : ""}`}
+              className={`grid items-center gap-2 rounded-md border border-border/70 bg-background/70 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground ${columnsClass}`}
             >
-              <div className={`grid items-center gap-2 text-sm ${columnsClass}`}>
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-                  <span className={`truncate font-semibold ${isDefeated ? "line-through" : ""}`}>
-                    {getPlayerName(player.playerId, playerMap)}
-                  </span>
-                </div>
-                {teamModeEnabled && (
-                  <div>
-                    {teamId ? (
-                      <button
-                        type="button"
-                        className={`w-full rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition ${
-                          isTeamHighlighted
-                            ? "border-primary bg-primary/15 text-primary"
-                            : "border-border text-muted-foreground hover:border-primary/50"
-                        }`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onToggleTeamHighlight(teamId);
-                        }}
-                      >
-                        {teamNames?.[teamId] ?? teamId}
-                      </button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/80">-</span>
-                    )}
-                  </div>
-                )}
-                <span className="text-center text-xs tabular-nums">{player.territories}</span>
-                <span className="text-center text-xs tabular-nums">{player.armies}</span>
-                <span className="text-center text-xs tabular-nums">{player.reserveTroops}</span>
-                <span className="text-center text-xs tabular-nums">{player.cards}</span>
-                {showTurnTimer && (
-                  <span className="text-center text-xs tabular-nums text-muted-foreground">
-                    {isCurrent ? (turnTimerLabel ?? "-") : "-"}
-                  </span>
-                )}
-                <span
-                  className={`text-center text-xs font-medium capitalize ${
-                    isWinner || (!isGameOver && isCurrent) ? "font-semibold text-primary" : "text-muted-foreground"
-                  }`}
-                >
-                  {statusLabel}
-                </span>
-              </div>
+              <span>Player</span>
+              {teamModeEnabled && <span>Team</span>}
+              <span className="text-center">Terr.</span>
+              <span className="text-center">Armies</span>
+              <span className="text-center">Reserve</span>
+              <span className="text-center">Cards</span>
+              {showTurnTimer && <span className="text-center">Timer</span>}
+              <span className="text-center">Status</span>
             </div>
-          );
-        })}
+            {playerStats.map((player) => {
+              const isCurrent = player.playerId === displayState.turn.currentPlayerId;
+              const isGameOver = displayState.turn.phase === "GameOver";
+              const isWinner = isGameOver && player.status === "alive";
+              const isDefeated = player.status === "defeated";
+              const teamId = player.teamId;
+              const playerHighlightKey = `player:${player.playerId}` as HighlightFilter;
+              const teamHighlightKey = teamId ? (`team:${teamId}` as HighlightFilter) : null;
+              const isPlayerHighlighted = activeHighlight === playerHighlightKey;
+              const isTeamHighlighted = teamHighlightKey ? activeHighlight === teamHighlightKey : false;
+              const color = getPlayerColor(player.playerId, displayState.turnOrder);
+              const statusLabel = isGameOver
+                ? isWinner
+                  ? "Winner"
+                  : player.status
+                : isCurrent
+                  ? "Turn"
+                  : player.status;
+
+              return (
+                <div
+                  key={player.playerId}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onTogglePlayerHighlight(player.playerId)}
+                  onKeyDown={(event) => handleRowKeyDown(event, player.playerId)}
+                  className={`cursor-pointer rounded-lg border bg-background/80 px-3 py-2 transition hover:border-primary/50 ${
+                    isDefeated ? "opacity-55" : ""
+                  } ${isPlayerHighlighted ? "ring-2 ring-primary/80" : ""}`}
+                >
+                  <div className={`grid items-center gap-2 text-sm ${columnsClass}`}>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                      <span className={`truncate font-semibold ${isDefeated ? "line-through" : ""}`}>
+                        {getPlayerName(player.playerId, playerMap)}
+                      </span>
+                    </div>
+                    {teamModeEnabled && (
+                      <div>
+                        {teamId ? (
+                          <button
+                            type="button"
+                            className={`w-full rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition ${
+                              isTeamHighlighted
+                                ? "border-primary bg-primary/15 text-primary"
+                                : "border-border text-muted-foreground hover:border-primary/50"
+                            }`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onToggleTeamHighlight(teamId);
+                            }}
+                          >
+                            {teamNames?.[teamId] ?? teamId}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/80">-</span>
+                        )}
+                      </div>
+                    )}
+                    <span className="text-center text-xs tabular-nums">{player.territories}</span>
+                    <span className="text-center text-xs tabular-nums">{player.armies}</span>
+                    <span className="text-center text-xs tabular-nums">{player.reserveTroops}</span>
+                    <span className="text-center text-xs tabular-nums">{player.cards}</span>
+                    {showTurnTimer && (
+                      <span className="text-center text-xs tabular-nums text-muted-foreground">
+                        {isCurrent ? (turnTimerLabel ?? "-") : "-"}
+                      </span>
+                    )}
+                    <span
+                      className={`text-center text-xs font-medium capitalize ${
+                        isWinner || (!isGameOver && isCurrent) ? "font-semibold text-primary" : "text-muted-foreground"
+                      }`}
+                    >
+                      {statusLabel}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
