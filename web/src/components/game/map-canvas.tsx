@@ -98,6 +98,12 @@ interface FloatingTroopDelta {
   color: string;
 }
 
+const touchFriendlyDefaultLock = () => {
+  if (typeof window === "undefined") return true;
+  const prefersTouch = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
+  return !(prefersTouch || navigator.maxTouchPoints > 0);
+};
+
 export function MapCanvas({
   map,
   visual,
@@ -118,8 +124,9 @@ export function MapCanvas({
   getPlayerColor,
   battleOverlay,
 }: MapCanvasProps) {
-  const [zoomLocked, setZoomLocked] = useState(true);
+  const [zoomLocked, setZoomLocked] = useState(touchFriendlyDefaultLock);
   const [floatingDeltas, setFloatingDeltas] = useState<FloatingTroopDelta[]>([]);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [overlayDragState, setOverlayDragState] = useState<{ key: string; x: number; y: number }>({
     key: "",
     x: 0,
@@ -143,6 +150,7 @@ export function MapCanvas({
   const imageAspect = visual.imageWidth / visual.imageHeight;
   const highlightActive = highlightedTerritoryIds.size > 0;
   const explicitActionEdges = actionEdgeIds !== undefined && actionEdgeIds.size > 0;
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
   const withAlpha = (color: string, alpha: number) => {
     if (color.startsWith("#") && color.length === 7) {
@@ -171,9 +179,19 @@ export function MapCanvas({
     return { left, top: 0, width: drawWidth, height: 1 };
   }, [frameAspect, imageAspect]);
 
-  const markerScale = useMemo(() => {
-    return Math.min(imageFit.width, imageFit.height);
-  }, [imageFit.height, imageFit.width]);
+  const imagePixelSize = useMemo(() => {
+    if (!containerSize.width || !containerSize.height) return { width: 0, height: 0 };
+    return {
+      width: containerSize.width * imageFit.width,
+      height: containerSize.height * imageFit.height,
+    };
+  }, [containerSize.height, containerSize.width, imageFit.height, imageFit.width]);
+
+  const markerSize = useMemo(() => {
+    if (!imagePixelSize.width || !imagePixelSize.height) return 18;
+    const base = Math.min(imagePixelSize.width, imagePixelSize.height) * 0.055;
+    return clamp(base, 14, 28);
+  }, [imagePixelSize.height, imagePixelSize.width]);
 
   const projectedAnchors = useMemo(() => {
     const result: Record<string, { x: number; y: number }> = {};
@@ -253,6 +271,18 @@ export function MapCanvas({
     event.currentTarget.releasePointerCapture(event.pointerId);
     event.stopPropagation();
   };
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      setContainerSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [containerRef]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -450,7 +480,7 @@ export function MapCanvas({
                   disabled={!selectable}
                   title={territory.name ?? territoryId}
                   className={cn(
-                    "min-w-9 rounded-full border-2 px-2 py-1 text-xs font-bold text-white shadow-sm transition-opacity",
+                    "flex items-center justify-center rounded-full border-2 px-0 py-0 font-bold text-white shadow-sm transition-opacity",
                     selectable ? "cursor-pointer" : "cursor-default opacity-80",
                     shouldDeEmphasize && "opacity-30 saturate-50",
                   )}
@@ -459,8 +489,12 @@ export function MapCanvas({
                     outlineOffset: outlineWidth > 0 ? 2 : 0,
                     backgroundColor: getPlayerColor(territoryState.ownerId, turnOrder),
                     borderColor: isActionable ? actionEdge : "transparent",
-                    transform: `translate(-50%, -50%) scale(${markerScale})`,
-                    transformOrigin: "center",
+                    minWidth: `${markerSize * 1.6}px`,
+                    height: `${markerSize}px`,
+                    padding: `0 ${markerSize * 0.35}px`,
+                    fontSize: `${markerSize * 0.45}px`,
+                    lineHeight: 1,
+                    transform: "translate(-50%, -50%)",
                   }}
                 >
                   {territoryState.armies}

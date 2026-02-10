@@ -17,7 +17,7 @@ export function useMapPanZoom({
   initialScale = 1,
   zoomStep = 0.2,
 }: UseMapPanZoomOptions = {}) {
-  const PAN_DRAG_THRESHOLD_PX = 4;
+  const PAN_DRAG_THRESHOLD_PX = 2;
   const CLICK_SUPPRESS_WINDOW_MS = 150;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const pointersRef = useRef(new Map<number, Point>());
@@ -102,6 +102,9 @@ export function useMapPanZoom({
   );
 
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "touch") {
+      event.preventDefault();
+    }
     const point = { x: event.clientX, y: event.clientY };
     pointersRef.current.set(event.pointerId, point);
     movedDuringGestureRef.current = false;
@@ -129,6 +132,9 @@ export function useMapPanZoom({
 
   const onPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!pointersRef.current.has(event.pointerId)) return;
+    if (event.pointerType === "touch") {
+      event.preventDefault();
+    }
     pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
     if (pointersRef.current.size === 2 && pinchStartRef.current) {
@@ -170,6 +176,9 @@ export function useMapPanZoom({
   }, [maxScale, minScale]);
 
   const onPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "touch") {
+      event.preventDefault();
+    }
     pointersRef.current.delete(event.pointerId);
     if (pointersRef.current.size < 2) pinchStartRef.current = null;
     if (pointersRef.current.size === 1) {

@@ -53,11 +53,11 @@ export function GamePlayersCard({
 }: PlayersCardProps) {
   const columnsClass = showTurnTimer
     ? teamModeEnabled
-      ? "grid-cols-[minmax(9rem,2fr)_minmax(4.5rem,1fr)_repeat(4,minmax(3.5rem,0.75fr))_minmax(5rem,0.95fr)_minmax(4.5rem,0.9fr)]"
-      : "grid-cols-[minmax(9rem,2fr)_repeat(4,minmax(3.5rem,0.75fr))_minmax(5rem,0.95fr)_minmax(4.5rem,0.9fr)]"
+      ? "grid-cols-[minmax(6.75rem,1.45fr)_minmax(3.5rem,0.8fr)_repeat(4,minmax(2.75rem,0.65fr))_minmax(4rem,0.85fr)_minmax(3.75rem,0.8fr)] sm:grid-cols-[minmax(8rem,1.7fr)_minmax(4rem,0.9fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.5rem,0.9fr)_minmax(4.25rem,0.85fr)]"
+      : "grid-cols-[minmax(6.75rem,1.45fr)_repeat(4,minmax(2.75rem,0.65fr))_minmax(4rem,0.85fr)_minmax(3.75rem,0.8fr)] sm:grid-cols-[minmax(8rem,1.7fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.5rem,0.9fr)_minmax(4.25rem,0.85fr)]"
     : teamModeEnabled
-      ? "grid-cols-[minmax(9rem,2fr)_minmax(4.5rem,1fr)_repeat(4,minmax(3.5rem,0.75fr))_minmax(4.5rem,0.9fr)]"
-      : "grid-cols-[minmax(9rem,2fr)_repeat(4,minmax(3.5rem,0.75fr))_minmax(4.5rem,0.9fr)]";
+      ? "grid-cols-[minmax(6.75rem,1.45fr)_minmax(3.5rem,0.8fr)_repeat(4,minmax(2.75rem,0.65fr))_minmax(3.75rem,0.8fr)] sm:grid-cols-[minmax(8rem,1.7fr)_minmax(4rem,0.9fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.25rem,0.85fr)]"
+      : "grid-cols-[minmax(6.75rem,1.45fr)_repeat(4,minmax(2.75rem,0.65fr))_minmax(3.75rem,0.8fr)] sm:grid-cols-[minmax(8rem,1.7fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.25rem,0.85fr)]";
 
   const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>, playerId: string) => {
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -67,17 +67,17 @@ export function GamePlayersCard({
 
   return (
     <Card className="glass-panel border-0 py-0" data-player-highlight-zone="true">
-      <CardHeader className="flex flex-row items-center justify-between py-3">
+      <CardHeader className="flex flex-row items-center justify-between py-2.5">
         <CardTitle className="flex items-center gap-2 text-base">
           <Users className="size-4" />
           Players
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2 pb-4">
+      <CardContent className="space-y-2 pb-3">
         <div className="overflow-x-auto">
-          <div className="min-w-[620px] space-y-2">
+          <div className="min-w-[520px] space-y-2">
             <div
-              className={`grid items-center gap-2 rounded-md border border-border/70 bg-background/70 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground ${columnsClass}`}
+              className={`grid items-center gap-2 rounded-md border border-border/70 bg-background/70 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground ${columnsClass}`}
             >
               <span>Player</span>
               {teamModeEnabled && <span>Team</span>}
@@ -114,7 +114,7 @@ export function GamePlayersCard({
                   tabIndex={0}
                   onClick={() => onTogglePlayerHighlight(player.playerId)}
                   onKeyDown={(event) => handleRowKeyDown(event, player.playerId)}
-                  className={`cursor-pointer rounded-lg border bg-background/80 px-3 py-2 transition hover:border-primary/50 ${
+                  className={`cursor-pointer rounded-lg border bg-background/80 px-2.5 py-1.5 transition hover:border-primary/50 ${
                     isDefeated ? "opacity-55" : ""
                   } ${isPlayerHighlighted ? "ring-2 ring-primary/80" : ""}`}
                 >
