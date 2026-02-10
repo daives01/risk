@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { Flag, History, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import type { Id } from "@backend/_generated/dataModel";
@@ -98,9 +98,12 @@ function formatTurnTimer(ms: number): string {
 export default function GamePage() {
   const HISTORY_PLAYBACK_INTERVAL_MS = 840;
   const TROOP_DELTA_DURATION_MS = Math.round(HISTORY_PLAYBACK_INTERVAL_MS * 1.25);
+  const MAP_MAX_HEIGHT = "min(75vh, calc(100vh - 11rem))";
   const { gameId } = useParams<{ gameId: string }>();
   const location = useLocation();
   const { data: session, isPending: sessionPending } = authClient.useSession();
+  const mapPanelRef = useRef<HTMLDivElement | null>(null);
+  const [mapPanelHeight, setMapPanelHeight] = useState<number | null>(null);
 
   const typedGameId = gameId as Id<"games"> | undefined;
   const { playerView, publicView } = useGameViewQueries(session, typedGameId);
@@ -108,7 +111,7 @@ export default function GamePage() {
   const [chatChannel, setChatChannel] = useState<ChatChannel>("global");
   const [chatDraft, setChatDraft] = useState("");
   const [chatEditingMessageId, setChatEditingMessageId] = useState<string | null>(null);
-  const { mapDoc, recentActions, historyTimeline, chatMessages } = useGameRuntimeQueries(
+  const { mapDoc, historyTimeline, timelineActions, chatMessages } = useGameRuntimeQueries(
     typedGameId,
     !!session,
     view?.mapId,
@@ -869,9 +872,9 @@ export default function GamePage() {
     [chatEditingMessageId, deleteGameChatMessageMutation],
   );
 
-  const flattenedEvents = useMemo(() => {
-    if (!recentActions) return [];
-    const events: Array<{ key: string; text: string }> = [];
+  const historyEvents = useMemo(() => {
+    if (!timelineActions?.length) return [];
+    const events: Array<{ key: string; text: string; index: number }> = [];
     let attackStreak: {
       key: string;
       fromId: string;
@@ -881,23 +884,25 @@ export default function GamePage() {
       count: number;
       attackerLosses: number;
       defenderLosses: number;
+      index: number;
     } | null = null;
     const flushAttackStreak = () => {
       if (!attackStreak) return;
       const attackLabel = attackStreak.count > 1
         ? `${attackStreak.fromLabel} attacked ${attackStreak.toLabel} x${attackStreak.count} (${attackStreak.attackerLosses}/${attackStreak.defenderLosses} losses)`
         : `${attackStreak.fromLabel} attacked ${attackStreak.toLabel} (${attackStreak.attackerLosses}/${attackStreak.defenderLosses} losses)`;
-      events.push({ key: attackStreak.key, text: attackLabel });
+      events.push({ key: attackStreak.key, text: attackLabel, index: attackStreak.index });
       attackStreak = null;
     };
-    for (const action of recentActions) {
-      for (const [index, event] of action.events.entries()) {
+
+    for (const action of timelineActions) {
+      for (const [eventIndex, event] of action.events.entries()) {
         if (event.type === "AttackResolved") {
           const from = String(event.from ?? "");
           const to = String(event.to ?? "");
           const fromLabel = graphMap?.territories[from]?.name ?? from;
           const toLabel = graphMap?.territories[to]?.name ?? to;
-          const nextKey = `${action._id}-${index}`;
+          const nextKey = `${action._id}-${eventIndex}`;
           const attackerLosses = Number(event.attackerLosses ?? 0);
           const defenderLosses = Number(event.defenderLosses ?? 0);
           if (!attackStreak) {
@@ -910,6 +915,7 @@ export default function GamePage() {
               count: 1,
               attackerLosses,
               defenderLosses,
+              index: action.index,
             };
           } else if (attackStreak.fromId === from && attackStreak.toId === to) {
             attackStreak.count += 1;
@@ -926,20 +932,27 @@ export default function GamePage() {
               count: 1,
               attackerLosses,
               defenderLosses,
+              index: action.index,
             };
           }
           continue;
         }
         flushAttackStreak();
         events.push({
-          key: `${action._id}-${index}`,
+          key: `${action._id}-${eventIndex}`,
           text: formatEvent(event, playerMap, graphMap),
+          index: action.index,
         });
       }
     }
     flushAttackStreak();
-    return events.slice(-40).reverse();
-  }, [graphMap, playerMap, recentActions]);
+    return events.slice(-80).reverse();
+  }, [graphMap, playerMap, timelineActions]);
+
+  const activeHistoryEventIndex = useMemo(() => {
+    if (!historyOpen) return null;
+    return historyFrames[historyFrameIndex]?.index ?? null;
+  }, [historyFrameIndex, historyFrames, historyOpen]);
 
   const resolvePlayerColor = useCallback(
     (playerId: string, turnOrder: string[]) => getPlayerColor(playerId, playerMap, turnOrder),
@@ -1118,6 +1131,26 @@ export default function GamePage() {
     [displayState, highlightFilter],
   );
   const playerStats = useMemo(() => (displayState ? buildPlayerPanelStats(displayState) : []), [displayState]);
+
+  useLayoutEffect(() => {
+    const node = mapPanelRef.current;
+    if (!node) return;
+    const updateHeight = () => {
+      const rect = node.getBoundingClientRect();
+      const widthFallback = rect.width > 0 ? (rect.width * 9) / 16 : 0;
+      const nextHeight = rect.height > 0 ? rect.height : widthFallback;
+      setMapPanelHeight(nextHeight > 0 ? nextHeight : null);
+    };
+    updateHeight();
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const nextHeight = entry.contentRect.height;
+      setMapPanelHeight(nextHeight > 0 ? nextHeight : null);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   if (!typedGameId) {
     return <div className="page-shell flex items-center justify-center">Invalid game URL</div>;
@@ -1375,128 +1408,170 @@ export default function GamePage() {
         </div>
 
         <div className="flex min-w-0 flex-col gap-1" data-map-canvas-zone="true">
-          <MapCanvas
-            map={graphMap}
-            visual={mapVisual}
-            imageUrl={mapImageUrl}
-            territories={playbackTerritories}
-            turnOrder={resolvedDisplayState.turnOrder}
-            selectedFrom={mapSelectedFrom}
-            selectedTo={mapSelectedTo}
-            validFromIds={!historyOpen && isMyTurn ? validFromIds : new Set()}
-            validToIds={!historyOpen && isMyTurn ? validToIds : new Set()}
-            highlightedTerritoryIds={highlightedTerritoryIds}
-            graphEdgeMode={showActionEdges ? "action" : "none"}
-            actionEdgeIds={fortifyConnectedEdgeIds}
-            interactive={!historyOpen && isMyTurn}
-            troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
-            onClickTerritory={handleTerritoryClick}
-            onClearSelection={() => {
-              stopAutoAttack();
-              setSelectedFrom(null);
-              setSelectedTo(null);
-            }}
-            getPlayerColor={resolvePlayerColor}
-            battleOverlay={
-              !historyOpen && isMyTurn && (phase === "Occupy" || (phase === "Attack" && !!state.pending)) && state.pending
-                ? {
-                  mode: "occupy",
-                  fromTerritoryId: state.pending.from,
-                  toTerritoryId: state.pending.to,
-                  fromLabel: graphMap.territories[state.pending.from]?.name ?? state.pending.from,
-                  toLabel: graphMap.territories[state.pending.to]?.name ?? state.pending.to,
-                  occupyMove,
-                  minMove: state.pending.minMove,
-                  maxMove: state.pending.maxMove,
-                  disabled: controlsDisabled,
-                  onSetOccupyMove: setOccupyMove,
-                  onSubmitOccupy: () => {
-                    void submitAction({ type: "Occupy", moveArmies: occupyMove });
-                  },
-                  onSubmitOccupyAll: () => {
-                    void submitAction({ type: "Occupy", moveArmies: state.pending?.maxMove ?? occupyMove });
-                  },
-                }
-                : !historyOpen && isMyTurn && phase === "Fortify" && selectedFrom && selectedTo
-                  ? {
-                    mode: "fortify",
-                    fromTerritoryId: selectedFrom,
-                    toTerritoryId: selectedTo,
-                    fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
-                    toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
-                    fortifyCount,
-                    minCount: 1,
-                    maxCount: Math.max(1, (state.territories[selectedFrom]?.armies ?? 2) - 1),
-                    disabled: controlsDisabled,
-                    onSetFortifyCount: setFortifyCount,
-                    onSubmitFortify: () => {
-                      void submitAction({
-                        type: "Fortify",
-                        from: selectedFrom as TerritoryId,
-                        to: selectedTo as TerritoryId,
-                        count: fortifyCount,
-                      });
-                    },
-                    onSubmitFortifyAll: () => {
-                      void submitAction({
-                        type: "Fortify",
-                        from: selectedFrom as TerritoryId,
-                        to: selectedTo as TerritoryId,
-                        count: Math.max(1, (state.territories[selectedFrom]?.armies ?? 2) - 1),
-                      });
-                    },
-                    onCancelSelection: () => {
-                      stopAutoAttack();
-                      setSelectedFrom(null);
-                      setSelectedTo(null);
-                    },
-                  }
-                  : !historyOpen && isMyTurn && phase === "Attack" && !state.pending && selectedFrom && selectedTo
+          <div className="flex min-w-0 flex-col gap-1 xl:flex-row xl:items-start">
+            <div ref={mapPanelRef} className="min-w-0 flex-1">
+              <MapCanvas
+                map={graphMap}
+                visual={mapVisual}
+                imageUrl={mapImageUrl}
+                territories={playbackTerritories}
+                turnOrder={resolvedDisplayState.turnOrder}
+                selectedFrom={mapSelectedFrom}
+                selectedTo={mapSelectedTo}
+                validFromIds={!historyOpen && isMyTurn ? validFromIds : new Set()}
+                validToIds={!historyOpen && isMyTurn ? validToIds : new Set()}
+                highlightedTerritoryIds={highlightedTerritoryIds}
+                graphEdgeMode={showActionEdges ? "action" : "none"}
+                actionEdgeIds={fortifyConnectedEdgeIds}
+                interactive={!historyOpen && isMyTurn}
+                troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
+                maxHeight={MAP_MAX_HEIGHT}
+                onClickTerritory={handleTerritoryClick}
+                onClearSelection={() => {
+                  stopAutoAttack();
+                  setSelectedFrom(null);
+                  setSelectedTo(null);
+                }}
+                getPlayerColor={resolvePlayerColor}
+                battleOverlay={
+                  !historyOpen && isMyTurn && (phase === "Occupy" || (phase === "Attack" && !!state.pending)) && state.pending
                     ? {
-                      mode: "attack",
-                      fromTerritoryId: selectedFrom,
-                      toTerritoryId: selectedTo,
-                      fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
-                      toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
-                  attackDice,
-                  maxDice: Math.max(0, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1)),
-                  autoRunning: autoAttacking,
-                  resolving: attackSubmitting,
-                  disabled: controlsDisabled,
-                  onSetAttackDice: setAttackDice,
-                  onResolveAttack: handleResolveAttack,
-                      onAutoAttack: handleAutoAttackToggle,
-                      onStopAutoAttack: stopAutoAttack,
-                      onCancelSelection: () => {
-                        stopAutoAttack();
-                        setSelectedFrom(null);
-                        setSelectedTo(null);
+                      mode: "occupy",
+                      fromTerritoryId: state.pending.from,
+                      toTerritoryId: state.pending.to,
+                      fromLabel: graphMap.territories[state.pending.from]?.name ?? state.pending.from,
+                      toLabel: graphMap.territories[state.pending.to]?.name ?? state.pending.to,
+                      occupyMove,
+                      minMove: state.pending.minMove,
+                      maxMove: state.pending.maxMove,
+                      disabled: controlsDisabled,
+                      onSetOccupyMove: setOccupyMove,
+                      onSubmitOccupy: () => {
+                        void submitAction({ type: "Occupy", moveArmies: occupyMove });
+                      },
+                      onSubmitOccupyAll: () => {
+                        void submitAction({ type: "Occupy", moveArmies: state.pending?.maxMove ?? occupyMove });
                       },
                     }
-                    : null
-            }
-          />
-
-          <GamePlayersCard
-            playerStats={playerStats}
-            displayState={resolvedDisplayState}
-            playerMap={playerMap}
-            teamModeEnabled={!!view.teamModeEnabled}
-            teamNames={teamNames}
-            showTurnTimer={showTurnTimer}
-            turnTimerLabel={turnTimerLabel}
-            activeHighlight={highlightFilter}
-            onTogglePlayerHighlight={handleTogglePlayerHighlight}
-            onToggleTeamHighlight={handleToggleTeamHighlight}
-            getPlayerColor={resolvePlayerColor}
-            getPlayerName={getPlayerName}
-          />
-
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div>
-              <GameEventsCard flattenedEvents={flattenedEvents} />
+                    : !historyOpen && isMyTurn && phase === "Fortify" && selectedFrom && selectedTo
+                      ? {
+                        mode: "fortify",
+                        fromTerritoryId: selectedFrom,
+                        toTerritoryId: selectedTo,
+                        fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
+                        toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
+                        fortifyCount,
+                        minCount: 1,
+                        maxCount: Math.max(1, (state.territories[selectedFrom]?.armies ?? 2) - 1),
+                        disabled: controlsDisabled,
+                        onSetFortifyCount: setFortifyCount,
+                        onSubmitFortify: () => {
+                          void submitAction({
+                            type: "Fortify",
+                            from: selectedFrom as TerritoryId,
+                            to: selectedTo as TerritoryId,
+                            count: fortifyCount,
+                          });
+                        },
+                        onSubmitFortifyAll: () => {
+                          void submitAction({
+                            type: "Fortify",
+                            from: selectedFrom as TerritoryId,
+                            to: selectedTo as TerritoryId,
+                            count: Math.max(1, (state.territories[selectedFrom]?.armies ?? 2) - 1),
+                          });
+                        },
+                        onCancelSelection: () => {
+                          stopAutoAttack();
+                          setSelectedFrom(null);
+                          setSelectedTo(null);
+                        },
+                      }
+                      : !historyOpen && isMyTurn && phase === "Attack" && !state.pending && selectedFrom && selectedTo
+                        ? {
+                          mode: "attack",
+                          fromTerritoryId: selectedFrom,
+                          toTerritoryId: selectedTo,
+                          fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
+                          toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
+                          attackDice,
+                          maxDice: Math.max(0, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1)),
+                          autoRunning: autoAttacking,
+                          resolving: attackSubmitting,
+                          disabled: controlsDisabled,
+                          onSetAttackDice: setAttackDice,
+                          onResolveAttack: handleResolveAttack,
+                          onAutoAttack: handleAutoAttackToggle,
+                          onStopAutoAttack: stopAutoAttack,
+                          onCancelSelection: () => {
+                            stopAutoAttack();
+                            setSelectedFrom(null);
+                            setSelectedTo(null);
+                          },
+                        }
+                        : null
+                }
+              />
             </div>
-            <div>
+            <div
+              className={`hidden min-h-0 shrink-0 overflow-hidden transition-[width,transform,opacity] duration-500 ease-out xl:flex ${
+                historyOpen
+                  ? "w-[300px] translate-x-0 opacity-100"
+                  : "pointer-events-none w-0 translate-x-10 opacity-0"
+              }`}
+              style={{
+                height: mapPanelHeight ?? MAP_MAX_HEIGHT,
+                maxHeight: MAP_MAX_HEIGHT,
+              }}
+              aria-hidden={!historyOpen}
+            >
+              <div className="h-full min-h-0 w-[300px] overflow-hidden">
+                <GameEventsCard
+                  events={historyEvents}
+                  activeIndex={activeHistoryEventIndex}
+                  onSelectEvent={(index) => {
+                    const frameIndex = historyFrames.findIndex((frame) => frame.index === index);
+                    if (frameIndex < 0) return;
+                    setHistoryFrameIndex(frameIndex);
+                    setHistoryPlaying(false);
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            {historyOpen && (
+              <div className="xl:hidden h-[25vh] min-h-0 overflow-hidden">
+                <GameEventsCard
+                  events={historyEvents}
+                  activeIndex={activeHistoryEventIndex}
+                  onSelectEvent={(index) => {
+                    const frameIndex = historyFrames.findIndex((frame) => frame.index === index);
+                    if (frameIndex < 0) return;
+                    setHistoryFrameIndex(frameIndex);
+                    setHistoryPlaying(false);
+                  }}
+                />
+              </div>
+            )}
+            <div className="space-y-4">
+              <GamePlayersCard
+                playerStats={playerStats}
+                displayState={resolvedDisplayState}
+                playerMap={playerMap}
+                teamModeEnabled={!!view.teamModeEnabled}
+                teamNames={teamNames}
+                showTurnTimer={showTurnTimer}
+                turnTimerLabel={turnTimerLabel}
+                activeHighlight={highlightFilter}
+                onTogglePlayerHighlight={handleTogglePlayerHighlight}
+                onToggleTeamHighlight={handleToggleTeamHighlight}
+                getPlayerColor={resolvePlayerColor}
+                getPlayerName={getPlayerName}
+              />
+            </div>
+            <div className="xl:order-last">
               <GameChatCard
                 messages={chatMessages ?? []}
                 activeChannel={chatChannel}

@@ -38,6 +38,7 @@ interface MapCanvasProps {
   actionEdgeIds?: Set<string>;
   interactive: boolean;
   troopDeltaDurationMs?: number;
+  maxHeight?: number | string;
   onClickTerritory: (territoryId: string) => void;
   onClearSelection?: () => void;
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
@@ -119,6 +120,7 @@ export function MapCanvas({
   actionEdgeIds,
   interactive,
   troopDeltaDurationMs = 1000,
+  maxHeight,
   onClickTerritory,
   onClearSelection,
   getPlayerColor,
@@ -238,6 +240,12 @@ export function MapCanvas({
     : "none";
   const overlayDragOffset =
     overlayDragState.key === overlayDragKey ? { x: overlayDragState.x, y: overlayDragState.y } : { x: 0, y: 0 };
+  const frameStyle = maxHeight
+    ? {
+      maxHeight,
+      maxWidth: typeof maxHeight === "number" ? `${(maxHeight * 16) / 9}px` : `calc(${maxHeight} * 16 / 9)`,
+    }
+    : undefined;
 
   const onStartOverlayDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!battleOverlay) return;
@@ -365,9 +373,10 @@ export function MapCanvas({
       <div
         ref={containerRef}
         className={cn(
-          "relative mx-auto aspect-video w-full overflow-hidden rounded-xl border border-border/70 bg-muted select-none",
+          "relative mx-auto aspect-video w-full max-w-full overflow-hidden rounded-xl border border-border/70 bg-muted select-none",
           zoomLocked ? "touch-auto" : "touch-none",
         )}
+        style={frameStyle}
         {...(zoomLocked ? {} : handlers)}
       >
         <div

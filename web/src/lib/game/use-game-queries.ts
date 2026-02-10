@@ -24,15 +24,15 @@ export function useGameRuntimeQueries(
 ) {
   const mapDoc = useQuery(api.maps.getByMapId, mapId ? { mapId } : "skip");
 
-  const recentActions = useQuery(
-    api.gameplay.listRecentActions,
-    typedGameId ? { gameId: typedGameId, limit: 40 } : "skip",
-  ) as GameAction[] | undefined;
-
   const historyTimeline = useQuery(
     api.gameplay.getHistoryTimeline,
     typedGameId ? { gameId: typedGameId, limit: 500 } : "skip",
   ) as HistoryFrame[] | undefined;
+
+  const timelineActions = useQuery(
+    api.gameplay.listActions,
+    typedGameId ? { gameId: typedGameId, limit: 500 } : "skip",
+  ) as GameAction[] | undefined;
 
   const chatMessages = useQuery(
     api.gameChat.listMessages,
@@ -47,8 +47,8 @@ export function useGameRuntimeQueries(
 
   return {
     mapDoc,
-    recentActions,
     historyTimeline,
+    timelineActions,
     chatMessages,
   };
 }
