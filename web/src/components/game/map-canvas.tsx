@@ -35,6 +35,7 @@ interface MapCanvasProps {
   validToIds: Set<string>;
   highlightedTerritoryIds: Set<string>;
   graphEdgeMode?: "all" | "action" | "none";
+  actionEdgeIds?: Set<string>;
   interactive: boolean;
   troopDeltaDurationMs?: number;
   onClickTerritory: (territoryId: string) => void;
@@ -109,6 +110,7 @@ export function MapCanvas({
   validToIds,
   highlightedTerritoryIds,
   graphEdgeMode = "all",
+  actionEdgeIds,
   interactive,
   troopDeltaDurationMs = 1000,
   onClickTerritory,
@@ -140,6 +142,7 @@ export function MapCanvas({
   const frameAspect = 16 / 9;
   const imageAspect = visual.imageWidth / visual.imageHeight;
   const highlightActive = highlightedTerritoryIds.size > 0;
+  const explicitActionEdges = actionEdgeIds !== undefined && actionEdgeIds.size > 0;
 
   const withAlpha = (color: string, alpha: number) => {
     if (color.startsWith("#") && color.length === 7) {
@@ -362,6 +365,8 @@ export function MapCanvas({
               const touchesFrom = selectedFrom === from || selectedFrom === to;
               const touchesHighlight =
                 highlightedTerritoryIds.has(from) || highlightedTerritoryIds.has(to);
+              const edgeKey = from < to ? `${from}|${to}` : `${to}|${from}`;
+              const hasExplicitEdge = !!actionEdgeIds?.has(edgeKey);
               const isCandidate =
                 !!selectedFrom &&
                 ((from === selectedFrom && validToIds.has(to)) || (to === selectedFrom && validToIds.has(from)));
@@ -369,7 +374,7 @@ export function MapCanvas({
                 !!selectedFrom &&
                 !!selectedTo &&
                 ((from === selectedFrom && to === selectedTo) || (to === selectedFrom && from === selectedTo));
-              const showActionEdge = isCandidate || isSelectedPair;
+              const showActionEdge = explicitActionEdges ? hasExplicitEdge : isCandidate || isSelectedPair;
               if (graphEdgeMode === "none") return null;
               if (graphEdgeMode === "action" && !showActionEdge) return null;
 
@@ -383,7 +388,7 @@ export function MapCanvas({
 
               const edgeStroke = isSelectedPair
                 ? withAlpha(actionEdgeBase, 0.95)
-                : touchesFrom || isCandidate
+                : touchesFrom || isCandidate || showActionEdge
                   ? actionEdgeColor
                   : highlightActive
                     ? touchesHighlight
@@ -399,7 +404,7 @@ export function MapCanvas({
                   x2={`${toAnchor.x * 100}%`}
                   y2={`${toAnchor.y * 100}%`}
                   stroke={edgeStroke}
-                  strokeWidth={touchesFrom || isCandidate || isSelectedPair ? 3 : 1.5}
+                  strokeWidth={touchesFrom || isCandidate || isSelectedPair || showActionEdge ? 3 : 1.5}
                 />
               );
             })}

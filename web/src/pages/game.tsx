@@ -176,20 +176,23 @@ export default function GamePage() {
   const isPlacementPhase = state?.turn.phase === "Reinforcement";
   const effectiveTeams = (view?.effectiveRuleset as {
     teams?: {
+      teamsEnabled?: boolean;
       allowPlaceOnTeammate?: boolean;
       allowFortifyWithTeammate?: boolean;
+      allowFortifyThroughTeammates?: boolean;
       preventAttackingTeammates?: boolean;
     };
   } | null)?.teams;
   const effectiveRuleset = view?.effectiveRuleset as {
     cards?: { forcedTradeHandSize?: number; tradeSets?: TradeSetsConfig };
-    fortify?: { maxFortifiesPerTurn?: number };
+    fortify?: { maxFortifiesPerTurn?: number; fortifyMode?: "adjacent" | "connected" };
   } | null;
   const effectiveCards = effectiveRuleset?.cards;
   const effectiveFortify = effectiveRuleset?.fortify;
   const forcedTradeHandSize = effectiveCards?.forcedTradeHandSize ?? defaultRuleset.cards.forcedTradeHandSize;
   const tradeSets = effectiveCards?.tradeSets ?? defaultRuleset.cards.tradeSets;
   const maxFortifiesPerTurn = effectiveFortify?.maxFortifiesPerTurn ?? defaultRuleset.fortify.maxFortifiesPerTurn;
+  const fortifyMode = effectiveFortify?.fortifyMode ?? defaultRuleset.fortify.fortifyMode;
   const fortifiesUsedThisTurn = state?.fortifiesUsedThisTurn ?? 0;
   const fortifiesRemaining = Math.max(0, maxFortifiesPerTurn - fortifiesUsedThisTurn);
   const maxFortifyMove = Math.max(1, (state?.territories[selectedFrom ?? ""]?.armies ?? 2) - 1);
@@ -203,6 +206,8 @@ export default function GamePage() {
     maxFortifyMove > 0;
   const allowPlaceOnTeammate = effectiveTeams?.allowPlaceOnTeammate ?? true;
   const allowFortifyWithTeammate = effectiveTeams?.allowFortifyWithTeammate ?? true;
+  const allowFortifyThroughTeammates = effectiveTeams?.allowFortifyThroughTeammates ?? true;
+  const teamsEnabled = effectiveTeams?.teamsEnabled ?? false;
   const preventAttackingTeammates = effectiveTeams?.preventAttackingTeammates ?? false;
   const teamNames = (view?.teamNames as Record<string, string> | null) ?? {};
   const myTeamId = myEnginePlayerId && state ? state.players[myEnginePlayerId]?.teamId : undefined;
@@ -321,21 +326,129 @@ export default function GamePage() {
     }
 
     if (state.turn.phase === "Fortify") {
-      for (const [territoryId, territory] of Object.entries(state.territories)) {
-        if (
-          territoryId !== selectedFrom &&
-          (
-            territory.ownerId === myEnginePlayerId ||
-            (allowFortifyWithTeammate && isTeammateOwner(territory.ownerId))
-          )
-        ) {
+      const canFortifyTo = (ownerId: string) => {
+        if (ownerId === myEnginePlayerId) return true;
+        if (!teamsEnabled) return false;
+        if (!allowFortifyWithTeammate) return false;
+        return isTeammateOwner(ownerId);
+      };
+
+      if (fortifyMode === "adjacent") {
+        const neighbors = graphMap.adjacency[selectedFrom] ?? [];
+        for (const neighborId of neighbors) {
+          if (neighborId === selectedFrom) continue;
+          const territory = state.territories[neighborId];
+          if (!territory) continue;
+          if (!canFortifyTo(territory.ownerId)) continue;
+          ids.add(neighborId);
+        }
+      } else {
+        const canTraverse = (ownerId: string) => {
+          if (ownerId === myEnginePlayerId) return true;
+          if (!teamsEnabled) return false;
+          if (!allowFortifyThroughTeammates) return false;
+          return isTeammateOwner(ownerId);
+        };
+
+        const visited = new Set<string>();
+        const queue: string[] = [selectedFrom];
+        visited.add(selectedFrom);
+
+        while (queue.length > 0) {
+          const current = queue.shift();
+          if (!current) continue;
+          const neighbors = graphMap.adjacency[current] ?? [];
+          for (const neighbor of neighbors) {
+            if (visited.has(neighbor)) continue;
+            const territory = state.territories[neighbor];
+            if (!territory) continue;
+            if (!canTraverse(territory.ownerId)) continue;
+            visited.add(neighbor);
+            queue.push(neighbor);
+          }
+        }
+
+        for (const territoryId of visited) {
+          if (territoryId === selectedFrom) continue;
+          const territory = state.territories[territoryId];
+          if (!territory) continue;
+          if (!canFortifyTo(territory.ownerId)) continue;
           ids.add(territoryId);
         }
       }
     }
 
     return ids;
-  }, [allowFortifyWithTeammate, graphMap, isTeammateOwner, myEnginePlayerId, preventAttackingTeammates, selectedFrom, state]);
+  }, [
+    allowFortifyThroughTeammates,
+    allowFortifyWithTeammate,
+    fortifyMode,
+    graphMap,
+    isTeammateOwner,
+    myEnginePlayerId,
+    preventAttackingTeammates,
+    selectedFrom,
+    state,
+    teamsEnabled,
+  ]);
+
+  const fortifyConnectedEdgeIds = useMemo(() => {
+    if (!state || !graphMap || !selectedFrom) return undefined;
+    if (historyOpen || !isMyTurn) return undefined;
+    if (phase !== "Fortify") return undefined;
+    if (fortifyMode !== "connected") return undefined;
+    if (!validFromIds.has(selectedFrom)) return undefined;
+
+    const canTraverse = (ownerId: string) => {
+      if (ownerId === myEnginePlayerId) return true;
+      if (!teamsEnabled) return false;
+      if (!allowFortifyThroughTeammates) return false;
+      return isTeammateOwner(ownerId);
+    };
+
+    const visited = new Set<string>();
+    const queue: string[] = [selectedFrom];
+    visited.add(selectedFrom);
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (!current) continue;
+      const neighbors = graphMap.adjacency[current] ?? [];
+      for (const neighbor of neighbors) {
+        if (visited.has(neighbor)) continue;
+        const territory = state.territories[neighbor];
+        if (!territory) continue;
+        if (!canTraverse(territory.ownerId)) continue;
+        visited.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+
+    const edgeIds = new Set<string>();
+    for (const fromId of visited) {
+      const neighbors = graphMap.adjacency[fromId] ?? [];
+      for (const toId of neighbors) {
+        if (!visited.has(toId)) continue;
+        const edgeKey = fromId < toId ? `${fromId}|${toId}` : `${toId}|${fromId}`;
+        edgeIds.add(edgeKey);
+      }
+    }
+
+    return edgeIds.size > 0 ? edgeIds : undefined;
+  }, [
+    allowFortifyThroughTeammates,
+    fortifyMode,
+    graphMap,
+    historyOpen,
+    isMyTurn,
+    isTeammateOwner,
+    myEnginePlayerId,
+    phase,
+    selectedFrom,
+    state,
+    teamsEnabled,
+    validFromIds,
+  ]);
 
   const submitAction = useCallback(
     async (
@@ -1260,6 +1373,7 @@ export default function GamePage() {
             validToIds={!historyOpen && isMyTurn ? validToIds : new Set()}
             highlightedTerritoryIds={highlightedTerritoryIds}
             graphEdgeMode={showActionEdges ? "action" : "none"}
+            actionEdgeIds={fortifyConnectedEdgeIds}
             interactive={!historyOpen && isMyTurn}
             troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
             onClickTerritory={handleTerritoryClick}
