@@ -38,6 +38,7 @@ interface MapCanvasProps {
   actionEdgeIds?: Set<string>;
   interactive: boolean;
   troopDeltaDurationMs?: number;
+  showTroopDeltas?: boolean;
   maxHeight?: number | string;
   onClickTerritory: (territoryId: string) => void;
   onClearSelection?: () => void;
@@ -120,6 +121,7 @@ export function MapCanvas({
   actionEdgeIds,
   interactive,
   troopDeltaDurationMs = 1000,
+  showTroopDeltas = true,
   maxHeight,
   onClickTerritory,
   onClearSelection,
@@ -148,7 +150,7 @@ export function MapCanvas({
     maxScale: 1.75,
     zoomStep: 0.1,
   });
-  const frameAspect = 16 / 9;
+  const frameAspect = 4 / 3;
   const imageAspect = visual.imageWidth / visual.imageHeight;
   const highlightActive = highlightedTerritoryIds.size > 0;
   const explicitActionEdges = actionEdgeIds !== undefined && actionEdgeIds.size > 0;
@@ -243,7 +245,7 @@ export function MapCanvas({
   const frameStyle = maxHeight
     ? {
       maxHeight,
-      maxWidth: typeof maxHeight === "number" ? `${(maxHeight * 16) / 9}px` : `calc(${maxHeight} * 16 / 9)`,
+      maxWidth: typeof maxHeight === "number" ? `${(maxHeight * 4) / 3}px` : `calc(${maxHeight} * 4 / 3)`,
     }
     : undefined;
 
@@ -321,6 +323,14 @@ export function MapCanvas({
   }, [reset, zoomIn, zoomLocked, zoomOut]);
 
   useEffect(() => {
+    if (!showTroopDeltas) {
+      previousTerritoriesRef.current = territories;
+      const frame = window.requestAnimationFrame(() => {
+        setFloatingDeltas([]);
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
+
     const previousTerritories = previousTerritoriesRef.current;
     if (!previousTerritories) {
       previousTerritoriesRef.current = territories;
@@ -358,7 +368,7 @@ export function MapCanvas({
       window.cancelAnimationFrame(frame);
       if (timeout !== null) window.clearTimeout(timeout);
     };
-  }, [getPlayerColor, territories, troopDeltaDurationMs, turnOrder]);
+  }, [getPlayerColor, showTroopDeltas, territories, troopDeltaDurationMs, turnOrder]);
 
   if (!imageUrl) {
     return (
@@ -373,7 +383,7 @@ export function MapCanvas({
       <div
         ref={containerRef}
         className={cn(
-          "relative mx-auto aspect-video w-full max-w-full overflow-hidden rounded-xl border border-border/70 bg-muted select-none",
+          "relative mx-auto aspect-[4/3] w-full max-w-full overflow-hidden rounded-xl border border-border/70 bg-muted select-none",
           zoomLocked ? "touch-auto" : "touch-none",
         )}
         style={frameStyle}

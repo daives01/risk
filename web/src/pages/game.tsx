@@ -98,7 +98,7 @@ function formatTurnTimer(ms: number): string {
 export default function GamePage() {
   const HISTORY_PLAYBACK_INTERVAL_MS = 840;
   const TROOP_DELTA_DURATION_MS = Math.round(HISTORY_PLAYBACK_INTERVAL_MS * 1.25);
-  const MAP_MAX_HEIGHT = "min(75vh, calc(100vh - 11rem))";
+  const MAP_MAX_HEIGHT = "min(88vh, calc(100vh - 7rem))";
   const { gameId } = useParams<{ gameId: string }>();
   const location = useLocation();
   const { data: session, isPending: sessionPending } = authClient.useSession();
@@ -142,6 +142,7 @@ export default function GamePage() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyPlaying, setHistoryPlaying] = useState(false);
   const [historyFrameIndex, setHistoryFrameIndex] = useState(0);
+  const [suppressTroopDeltas, setSuppressTroopDeltas] = useState(false);
   const [highlightFilter, setHighlightFilter] = useState<HighlightFilter>("none");
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [autoAttacking, setAutoAttacking] = useState(false);
@@ -151,6 +152,7 @@ export default function GamePage() {
   const actionInFlightRef = useRef(false);
   const [endgameModal, setEndgameModal] = useState<"won" | "lost" | null>(null);
   const dismissedEndgameRef = useRef(false);
+  const troopDeltaResumeTimeoutRef = useRef<number | null>(null);
 
   const phase = state?.turn.phase ?? "GameOver";
   const isSpectator = !myEnginePlayerId;
@@ -1137,7 +1139,7 @@ export default function GamePage() {
     if (!node) return;
     const updateHeight = () => {
       const rect = node.getBoundingClientRect();
-      const widthFallback = rect.width > 0 ? (rect.width * 9) / 16 : 0;
+      const widthFallback = rect.width > 0 ? (rect.width * 3) / 4 : 0;
       const nextHeight = rect.height > 0 ? rect.height : widthFallback;
       setMapPanelHeight(nextHeight > 0 ? nextHeight : null);
     };
@@ -1150,6 +1152,25 @@ export default function GamePage() {
     });
     observer.observe(node);
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    setSuppressTroopDeltas(true);
+    if (troopDeltaResumeTimeoutRef.current !== null) {
+      window.clearTimeout(troopDeltaResumeTimeoutRef.current);
+    }
+    troopDeltaResumeTimeoutRef.current = window.setTimeout(() => {
+      setSuppressTroopDeltas(false);
+      troopDeltaResumeTimeoutRef.current = null;
+    }, 320);
+  }, [historyOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (troopDeltaResumeTimeoutRef.current !== null) {
+        window.clearTimeout(troopDeltaResumeTimeoutRef.current);
+      }
+    };
   }, []);
 
   if (!typedGameId) {
@@ -1408,7 +1429,7 @@ export default function GamePage() {
         </div>
 
         <div className="flex min-w-0 flex-col gap-1" data-map-canvas-zone="true">
-          <div className="flex min-w-0 flex-col gap-1 xl:flex-row xl:items-start">
+          <div className="flex min-w-0 flex-col gap-1 [@media(orientation:landscape)]:flex-row [@media(orientation:landscape)]:items-start">
             <div ref={mapPanelRef} className="min-w-0 flex-1">
               <MapCanvas
                 map={graphMap}
@@ -1425,6 +1446,7 @@ export default function GamePage() {
                 actionEdgeIds={fortifyConnectedEdgeIds}
                 interactive={!historyOpen && isMyTurn}
                 troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
+                showTroopDeltas={!historyOpen && !suppressTroopDeltas}
                 maxHeight={MAP_MAX_HEIGHT}
                 onClickTerritory={handleTerritoryClick}
                 onClearSelection={() => {
@@ -1514,9 +1536,9 @@ export default function GamePage() {
               />
             </div>
             <div
-              className={`hidden min-h-0 shrink-0 overflow-hidden transition-[width,transform,opacity] duration-500 ease-out xl:flex ${
+              className={`hidden min-h-0 shrink-0 overflow-hidden transition-[width,transform,opacity] duration-220 ease-out [@media(orientation:landscape)]:flex ${
                 historyOpen
-                  ? "w-[300px] translate-x-0 opacity-100"
+                  ? "w-[min(34vw,300px)] translate-x-0 opacity-100"
                   : "pointer-events-none w-0 translate-x-10 opacity-0"
               }`}
               style={{
@@ -1525,7 +1547,7 @@ export default function GamePage() {
               }}
               aria-hidden={!historyOpen}
             >
-              <div className="h-full min-h-0 w-[300px] overflow-hidden">
+              <div className="h-full min-h-0 w-[min(34vw,300px)] overflow-hidden">
                 <GameEventsCard
                   events={historyEvents}
                   activeIndex={activeHistoryEventIndex}
@@ -1542,7 +1564,7 @@ export default function GamePage() {
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             {historyOpen && (
-              <div className="xl:hidden h-[25vh] min-h-0 overflow-hidden">
+              <div className="h-[25vh] min-h-0 overflow-hidden [@media(orientation:landscape)]:hidden">
                 <GameEventsCard
                   events={historyEvents}
                   activeIndex={activeHistoryEventIndex}
