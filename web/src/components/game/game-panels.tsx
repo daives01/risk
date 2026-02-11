@@ -1,9 +1,10 @@
-import { ArrowUp, Check, Pencil, Trash2, Users, X } from "lucide-react";
+import { ArrowUp, Check, Flag, Pencil, Trash2, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { HighlightFilter } from "@/lib/game/highlighting";
 import type { ChatChannel, ChatMessage, PublicState } from "@/lib/game/types";
 
@@ -35,6 +36,9 @@ interface PlayersCardProps {
   getPlayerName: (enginePlayerId: string, players: PlayerRef[]) => string;
   showTurnTimer: boolean;
   turnTimerLabel?: string | null;
+  myPlayerId?: string | null;
+  canResign?: boolean;
+  onResign?: () => void;
 }
 
 export function GamePlayersCard({
@@ -50,7 +54,11 @@ export function GamePlayersCard({
   getPlayerName,
   showTurnTimer,
   turnTimerLabel,
+  myPlayerId,
+  canResign = false,
+  onResign,
 }: PlayersCardProps) {
+  const [resignOpen, setResignOpen] = useState(false);
   const columnsClass = showTurnTimer
     ? teamModeEnabled
       ? "grid-cols-[minmax(6.75rem,1.45fr)_minmax(3.5rem,0.8fr)_repeat(4,minmax(2.75rem,0.65fr))_minmax(4rem,0.85fr)_minmax(3.75rem,0.8fr)] sm:grid-cols-[minmax(8rem,1.7fr)_minmax(4rem,0.9fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.5rem,0.9fr)_minmax(4.25rem,0.85fr)]"
@@ -106,6 +114,12 @@ export function GamePlayersCard({
                 : isCurrent
                   ? "Turn"
                   : player.status;
+              const showResign =
+                canResign &&
+                !!onResign &&
+                player.status === "alive" &&
+                !!myPlayerId &&
+                player.playerId === myPlayerId;
 
               return (
                 <div
@@ -116,14 +130,68 @@ export function GamePlayersCard({
                   onKeyDown={(event) => handleRowKeyDown(event, player.playerId)}
                   className={`cursor-pointer rounded-lg border bg-background/80 px-2.5 py-1.5 transition hover:border-primary/50 ${
                     isDefeated ? "opacity-55" : ""
-                  } ${isPlayerHighlighted ? "ring-2 ring-primary/80" : ""}`}
+                  } ${isPlayerHighlighted ? "border-primary/70 bg-primary/10" : ""}`}
                 >
                   <div className={`grid items-center gap-2 text-sm ${columnsClass}`}>
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-                      <span className={`truncate font-semibold ${isDefeated ? "line-through" : ""}`}>
+                      <span className={`min-w-0 truncate font-semibold ${isDefeated ? "line-through" : ""}`}>
                         {getPlayerName(player.playerId, playerMap)}
                       </span>
+                      {showResign && (
+                        <Popover open={resignOpen} onOpenChange={setResignOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              type="button"
+                              size="icon-xs"
+                              variant="ghost"
+                              aria-label="Resign game"
+                              title="Resign game"
+                              className="text-muted-foreground hover:text-foreground"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                              }}
+                            >
+                              <Flag className="size-3" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            side="bottom"
+                            align="start"
+                            className="w-auto rounded-none px-2.5 py-2"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <div className="flex items-center gap-3 text-xs">
+                              <span className="uppercase tracking-wide text-muted-foreground">Resign?</span>
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  type="button"
+                                  size="xs"
+                                  variant="outline"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setResignOpen(false);
+                                  }}
+                                >
+                                  No
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="xs"
+                                  variant="destructive"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setResignOpen(false);
+                                    onResign();
+                                  }}
+                                >
+                                  Yes
+                                </Button>
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      )}
                     </div>
                     {teamModeEnabled && (
                       <div>

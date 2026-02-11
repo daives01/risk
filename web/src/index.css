@@ -333,7 +333,13 @@
 
   .game-body {
     min-height: calc(100vh - 3rem);
-    padding: 0.5rem 1rem 1rem;
+    padding: 1rem 1rem 1.25rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .game-body {
+    padding: 1.25rem 1.5rem 1.5rem;
   }
 }
 

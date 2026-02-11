@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { Flag, History, Layers, Pause, Play, SkipBack, SkipForward, SlidersHorizontal } from "lucide-react";
+import { History, Layers, Pause, Play, SkipBack, SkipForward, SlidersHorizontal } from "lucide-react";
 import type { Id } from "@backend/_generated/dataModel";
 import { defaultRuleset } from "risk-engine";
 import type { Action, CardId, TerritoryId } from "risk-engine";
@@ -1521,16 +1521,6 @@ export default function GamePage() {
                 </PopoverContent>
               </Popover>
             )}
-            {!isSpectator && !historyOpen && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon-sm" onClick={handleResign} aria-label="Resign game">
-                    <Flag className="size-4" aria-hidden="true" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Resign game</TooltipContent>
-              </Tooltip>
-            )}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -1553,9 +1543,9 @@ export default function GamePage() {
         </div>
       </div>
 
-      <div className="page-container max-w-none flex flex-1 flex-col gap-1 game-body">
-        <div className="flex min-w-0 flex-col gap-1" data-map-canvas-zone="true">
-          <div className="flex min-w-0 flex-col gap-1 [@media(orientation:landscape)]:flex-row [@media(orientation:landscape)]:items-start">
+      <div className="page-container max-w-none flex flex-1 flex-col gap-4 game-body">
+        <div className="flex min-w-0 flex-col gap-4" data-map-canvas-zone="true">
+          <div className="flex min-w-0 flex-col gap-3 [@media(orientation:landscape)]:flex-row [@media(orientation:landscape)]:items-start">
             <div ref={mapPanelRef} className="min-w-0 flex-1">
               <MapCanvas
                 map={graphMap}
@@ -1716,6 +1706,9 @@ export default function GamePage() {
                 onToggleTeamHighlight={handleToggleTeamHighlight}
                 getPlayerColor={resolvePlayerColor}
                 getPlayerName={getPlayerName}
+                myPlayerId={myEnginePlayerId}
+                canResign={!isSpectator && !historyOpen}
+                onResign={handleResign}
               />
             </div>
             <div className="xl:order-last">
