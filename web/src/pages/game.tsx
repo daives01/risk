@@ -95,12 +95,30 @@ function formatTurnTimer(ms: number): string {
   return `${hours}hr`;
 }
 
+function territorySignature(territories: Record<string, { ownerId: string; armies: number }> | undefined) {
+  if (!territories) return "none";
+  let checksum = 0;
+  let count = 0;
+  for (const [territoryId, territory] of Object.entries(territories)) {
+    count += 1;
+    checksum = (checksum + territory.armies * 31) | 0;
+    checksum = (checksum + (territory.ownerId.codePointAt(0) ?? 0)) | 0;
+    checksum = (checksum + (territoryId.codePointAt(0) ?? 0)) | 0;
+  }
+  return `${count}:${checksum}`;
+}
+
 export default function GamePage() {
   const HISTORY_PLAYBACK_INTERVAL_MS = 840;
   const TROOP_DELTA_DURATION_MS = Math.round(HISTORY_PLAYBACK_INTERVAL_MS * 1.25);
   const MAP_MAX_HEIGHT = "min(88vh, calc(100vh - 7rem))";
   const { gameId } = useParams<{ gameId: string }>();
   const location = useLocation();
+  const historyDebugEnabled = useMemo(() => {
+    if (new URLSearchParams(location.search).get("historyDebug") === "1") return true;
+    if (typeof window === "undefined") return false;
+    return (window as { __RISK_HISTORY_DEBUG?: boolean }).__RISK_HISTORY_DEBUG === true;
+  }, [location.search]);
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const mapPanelRef = useRef<HTMLDivElement | null>(null);
   const [mapPanelHeight, setMapPanelHeight] = useState<number | null>(null);
@@ -153,6 +171,7 @@ export default function GamePage() {
   const [endgameModal, setEndgameModal] = useState<"won" | "lost" | null>(null);
   const dismissedEndgameRef = useRef(false);
   const troopDeltaResumeTimeoutRef = useRef<number | null>(null);
+  const historyDebugRef = useRef<{ framePos: number; signature: string; staleRun: number } | null>(null);
 
   const phase = state?.turn.phase ?? "GameOver";
   const isSpectator = !myEnginePlayerId;
@@ -1173,6 +1192,49 @@ export default function GamePage() {
     };
   }, []);
 
+  const debugTerritories = historyOpen ? historyFrames[historyFrameIndex]?.state?.territories : displayedTerritories;
+
+  useEffect(() => {
+    if (!historyDebugEnabled || !historyFrames.length) return;
+    const replayErrors = historyFrames
+      .filter((frame) => !!frame.replayError)
+      .map((frame) => ({ index: frame.index, actionType: frame.actionType, replayError: frame.replayError }));
+    if (replayErrors.length > 0) {
+      console.warn("[HistoryDebug] Replay errors found in history timeline", replayErrors);
+    }
+  }, [historyDebugEnabled, historyFrames]);
+
+  useEffect(() => {
+    if (!historyDebugEnabled || !historyOpen) return;
+    const frame = historyFrames[historyFrameIndex];
+    const signature = territorySignature(debugTerritories);
+    const prev = historyDebugRef.current;
+    const staleRun = prev && prev.signature === signature && prev.framePos !== historyFrameIndex
+      ? prev.staleRun + 1
+      : 0;
+    historyDebugRef.current = { framePos: historyFrameIndex, signature, staleRun };
+
+    console.debug("[HistoryDebug] Frame update", {
+      framePos: historyFrameIndex,
+      frameIndex: frame?.index ?? null,
+      actionType: frame?.actionType ?? null,
+      turnRound: frame?.turnRound ?? null,
+      turnPhase: frame?.turnPhase ?? null,
+      stateVersion: frame?.state?.stateVersion ?? null,
+      territorySig: signature,
+      replayError: frame?.replayError ?? null,
+      staleRun,
+    });
+
+    if (staleRun >= 3) {
+      console.warn("[HistoryDebug] Territory signature unchanged across multiple frame advances", {
+        framePos: historyFrameIndex,
+        frameIndex: frame?.index ?? null,
+        staleRun,
+      });
+    }
+  }, [debugTerritories, historyDebugEnabled, historyFrameIndex, historyFrames, historyOpen]);
+
   if (!typedGameId) {
     return <div className="page-shell flex items-center justify-center">Invalid game URL</div>;
   }
@@ -1446,7 +1508,7 @@ export default function GamePage() {
                 actionEdgeIds={fortifyConnectedEdgeIds}
                 interactive={!historyOpen && isMyTurn}
                 troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
-                showTroopDeltas={!historyOpen && !suppressTroopDeltas}
+                showTroopDeltas={!suppressTroopDeltas}
                 maxHeight={MAP_MAX_HEIGHT}
                 onClickTerritory={handleTerritoryClick}
                 onClearSelection={() => {

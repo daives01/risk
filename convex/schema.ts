@@ -74,6 +74,7 @@ export default defineSchema({
     finishedAt: v.optional(v.number()),
     winningPlayerId: v.optional(v.string()),
     winningTeamId: v.optional(v.string()),
+    initialState: v.optional(v.any()),
     state: v.optional(v.any()),
     stateVersion: v.optional(v.number()),
     turnStartedAt: v.optional(v.number()),

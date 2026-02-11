@@ -65,6 +65,7 @@ export type HistoryFrame = {
   hasCapture: boolean;
   eliminatedPlayerIds: string[];
   state: PublicState;
+  replayError?: string | null;
 };
 
 export const PHASE_COPY: Record<Phase, { title: string; description: string }> = {

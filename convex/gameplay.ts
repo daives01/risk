@@ -930,6 +930,155 @@ function applyResignForTimeline(
   };
 }
 
+function applyEventsFallbackForTimeline(
+  state: GameState,
+  rawEvents: unknown[],
+  stateVersionAfter?: number,
+): GameState {
+  const territories: Record<string, { ownerId: PlayerId | "neutral"; armies: number }> = {
+    ...state.territories,
+  };
+  const players: GameState["players"] = { ...state.players };
+  const hands: Record<string, readonly CardId[]> = { ...state.hands };
+  const turn = { ...state.turn };
+  let reinforcements = state.reinforcements ? { ...state.reinforcements } : undefined;
+  let pending = state.pending;
+  let capturedThisTurn = state.capturedThisTurn;
+  let tradesCompleted = state.tradesCompleted;
+  let fortifiesUsedThisTurn = state.fortifiesUsedThisTurn;
+
+  const ensureTerritory = (territoryId: string) => {
+    if (!territories[territoryId]) {
+      territories[territoryId] = { ownerId: "neutral", armies: 0 };
+    }
+    return territories[territoryId]!;
+  };
+
+  for (const rawEvent of rawEvents) {
+    if (!rawEvent || typeof rawEvent !== "object") continue;
+    const event = rawEvent as Record<string, unknown>;
+    switch (event.type) {
+      case "ReinforcementsGranted": {
+        const amount = typeof event.amount === "number" ? event.amount : 0;
+        const sources = event.sources && typeof event.sources === "object"
+          ? event.sources as Record<string, number>
+          : undefined;
+        reinforcements = { remaining: amount, sources };
+        turn.phase = "Reinforcement";
+        break;
+      }
+      case "CardsTraded": {
+        if (typeof event.tradesCompletedAfter === "number") {
+          tradesCompleted = event.tradesCompletedAfter;
+        }
+        if (reinforcements && typeof event.value === "number") {
+          reinforcements = {
+            ...reinforcements,
+            remaining: reinforcements.remaining + event.value,
+          };
+        }
+        break;
+      }
+      case "ReinforcementsPlaced": {
+        if (typeof event.territoryId !== "string" || typeof event.count !== "number") break;
+        const territory = ensureTerritory(event.territoryId);
+        territory.armies += event.count;
+        if (reinforcements) {
+          reinforcements = {
+            ...reinforcements,
+            remaining: Math.max(0, reinforcements.remaining - event.count),
+          };
+        }
+        break;
+      }
+      case "AttackResolved": {
+        if (typeof event.from !== "string" || typeof event.to !== "string") break;
+        const from = ensureTerritory(event.from);
+        const to = ensureTerritory(event.to);
+        const attackerLosses = typeof event.attackerLosses === "number" ? event.attackerLosses : 0;
+        const defenderLosses = typeof event.defenderLosses === "number" ? event.defenderLosses : 0;
+        from.armies = Math.max(1, from.armies - attackerLosses);
+        to.armies = Math.max(0, to.armies - defenderLosses);
+        turn.phase = "Attack";
+        break;
+      }
+      case "TerritoryCaptured": {
+        if (typeof event.to !== "string" || typeof event.newOwnerId !== "string") break;
+        const to = ensureTerritory(event.to);
+        to.ownerId = event.newOwnerId as PlayerId;
+        capturedThisTurn = true;
+        turn.phase = "Occupy";
+        break;
+      }
+      case "OccupyResolved": {
+        if (typeof event.from !== "string" || typeof event.to !== "string") break;
+        const moved = typeof event.moved === "number" ? event.moved : 0;
+        const from = ensureTerritory(event.from);
+        const to = ensureTerritory(event.to);
+        from.armies = Math.max(1, from.armies - moved);
+        to.armies += moved;
+        if (typeof event.playerId === "string") {
+          to.ownerId = event.playerId as PlayerId;
+        }
+        pending = undefined;
+        turn.phase = "Attack";
+        break;
+      }
+      case "FortifyResolved": {
+        if (typeof event.from !== "string" || typeof event.to !== "string") break;
+        const moved = typeof event.moved === "number" ? event.moved : 0;
+        const from = ensureTerritory(event.from);
+        const to = ensureTerritory(event.to);
+        from.armies = Math.max(1, from.armies - moved);
+        to.armies += moved;
+        turn.phase = "Fortify";
+        fortifiesUsedThisTurn = (fortifiesUsedThisTurn ?? 0) + 1;
+        break;
+      }
+      case "PlayerEliminated": {
+        if (typeof event.eliminatedId === "string" && players[event.eliminatedId as PlayerId]) {
+          players[event.eliminatedId as PlayerId] = {
+            ...players[event.eliminatedId as PlayerId]!,
+            status: "defeated",
+          };
+        }
+        break;
+      }
+      case "TurnAdvanced": {
+        if (typeof event.nextPlayerId !== "string" || typeof event.round !== "number") break;
+        turn.currentPlayerId = event.nextPlayerId as PlayerId;
+        turn.round = event.round;
+        turn.phase = "Reinforcement";
+        pending = undefined;
+        capturedThisTurn = false;
+        fortifiesUsedThisTurn = 0;
+        break;
+      }
+      case "GameEnded": {
+        turn.phase = "GameOver";
+        pending = undefined;
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  return {
+    ...state,
+    territories,
+    players,
+    hands,
+    turn,
+    reinforcements,
+    pending,
+    capturedThisTurn,
+    tradesCompleted,
+    fortifiesUsedThisTurn,
+    stateVersion: typeof stateVersionAfter === "number" ? stateVersionAfter : state.stateVersion + 1,
+  };
+}
+
 export const getHistoryTimeline = query({
   args: {
     gameId: v.id("games"),
@@ -966,9 +1115,11 @@ export const getHistoryTimeline = query({
       .query("gameActions")
       .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
       .order("asc")
-      .take(limit ?? 500);
+      .collect();
 
-    let simState = createInitialStateFromSeed(state, graphMap, playerIds, ruleset);
+    const storedInitialState = game.initialState ? readGameState(game.initialState) : null;
+    let simState = storedInitialState ?? createInitialStateFromSeed(state, graphMap, playerIds, ruleset);
+    const allowEventFallback = !storedInitialState;
     const timeline: Array<{
       index: number;
       actionType: string;
@@ -980,6 +1131,7 @@ export const getHistoryTimeline = query({
       hasCapture: boolean;
       eliminatedPlayerIds: string[];
       state: TimelinePublicState;
+      replayError?: string | null;
     }> = [
       {
         index: -1,
@@ -999,6 +1151,7 @@ export const getHistoryTimeline = query({
       const action = actionDoc.action as Record<string, unknown>;
       const actionType = typeof action.type === "string" ? action.type : "Unknown";
       const actorId = actionDoc.playerId as PlayerId;
+      let replayError: string | null = null;
 
       try {
         if (actionType === "Resign") {
@@ -1039,8 +1192,16 @@ export const getHistoryTimeline = query({
           );
           simState = result.state;
         }
-      } catch {
+      } catch (error) {
         // Keep playback available even if one legacy action cannot be replayed.
+        replayError = error instanceof Error ? error.message : "Unknown replay error";
+        if (allowEventFallback) {
+          simState = applyEventsFallbackForTimeline(
+            simState,
+            actionDoc.events as unknown[],
+            actionDoc.stateVersionAfter ?? undefined,
+          );
+        }
       }
 
       const events = actionDoc.events as GameEvent[];
@@ -1062,7 +1223,15 @@ export const getHistoryTimeline = query({
         hasCapture: summary.hasCapture,
         eliminatedPlayerIds: summary.eliminatedPlayerIds,
         state: toTimelinePublicState(simState),
+        replayError,
       });
+    }
+
+    if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
+      const keep = Math.floor(limit) + 1;
+      if (timeline.length > keep) {
+        return timeline.slice(timeline.length - keep);
+      }
     }
 
     return timeline;
