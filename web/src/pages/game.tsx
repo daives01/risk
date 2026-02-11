@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { Flag, History, Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { Flag, History, Pause, Play, SkipBack, SkipForward, SlidersHorizontal } from "lucide-react";
 import type { Id } from "@backend/_generated/dataModel";
 import { defaultRuleset } from "risk-engine";
 import type { Action, CardId, TerritoryId } from "risk-engine";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ShortcutHint } from "@/components/ui/shortcut-hint";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { MapCanvas } from "@/components/game/map-canvas";
@@ -1279,217 +1280,237 @@ export default function GamePage() {
     (phase === "Attack" || phase === "Fortify" || (phase === "Occupy" && !!state.pending));
   const showSignInCta = !sessionPending && !session;
   const loginHref = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`;
+  const renderHistoryControls = () => (
+    <>
+      <Button
+        size="xs"
+        type="button"
+        variant="outline"
+        title="Previous frame ([)"
+        disabled={historyFrameIndex <= 0}
+        onClick={() => setHistoryFrameIndex((prev) => Math.max(0, prev - 1))}
+      >
+        <SkipBack className="size-4" />
+      </Button>
+      <Button
+        size="xs"
+        type="button"
+        variant="outline"
+        title="Play/Pause (P)"
+        disabled={historyAtEnd}
+        onClick={() => setHistoryPlaying((prev) => !prev)}
+      >
+        {historyPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
+      </Button>
+      <Button
+        size="xs"
+        type="button"
+        variant="outline"
+        title="Next frame (])"
+        disabled={historyAtEnd}
+        onClick={() => setHistoryFrameIndex((prev) => Math.min(historyMaxIndex, prev + 1))}
+      >
+        <SkipForward className="size-4" />
+      </Button>
+      <Button
+        size="xs"
+        type="button"
+        variant="outline"
+        title="Reset history (R)"
+        onClick={() => {
+          setHistoryFrameIndex(0);
+          setHistoryPlaying(false);
+        }}
+      >
+        Reset
+      </Button>
+      <span className="rounded border bg-background/70 px-2 py-1 text-xs text-muted-foreground">
+        {historyFrameIndex + 1}/{historyCount}
+      </span>
+    </>
+  );
+  const renderHistoryScrubber = () => (
+    <HistoryScrubber
+      min={0}
+      max={historyMaxIndex}
+      value={historyFrameIndex}
+      onChange={(value) => {
+        setHistoryFrameIndex(value);
+        setHistoryPlaying(false);
+      }}
+    />
+  );
 
   return (
-    <div className="page-shell soft-grid overflow-x-hidden">
-      <div className="page-container max-w-none flex min-h-[calc(100vh-2rem)] flex-col gap-1">
-        <div className="glass-panel flex min-h-12 items-center gap-2 overflow-x-auto px-2 py-1.5">
-          {showPhaseTitle && (
-            <span className="shrink-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              {phaseCopy.title}
+    <div className="page-shell soft-grid game-shell overflow-x-hidden">
+      <div className="game-header glass-panel flex min-h-12 flex-wrap items-center gap-2 px-2 py-1.5">
+        {showPhaseTitle && (
+          <span className="shrink-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            {phaseCopy.title}
+          </span>
+        )}
+
+        {!historyOpen && !isMyTurn && displayPhase !== "GameOver" && (
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              It's {getPlayerName(resolvedDisplayState.turn.currentPlayerId, playerMap)}'s turn
             </span>
-          )}
-
-          {!historyOpen && !isMyTurn && displayPhase !== "GameOver" && (
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="text-sm text-muted-foreground">
-                It's {getPlayerName(resolvedDisplayState.turn.currentPlayerId, playerMap)}'s turn
-              </span>
-              {showSignInCta && (
-                <Button asChild size="xs" variant="outline">
-                  <Link to={loginHref}>Sign in</Link>
-                </Button>
-              )}
-            </div>
-          )}
-
-          {!historyOpen && isMyTurn && phase === "Reinforcement" && (
-            <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-sm">
-              <Button
-                size="xs"
-                type="button"
-                variant="outline"
-                disabled={controlsDisabled || uncommittedReinforcements <= 0 || placeCount <= 1}
-                onClick={() => setPlaceCount((prev) => Math.max(1, prev - 1))}
-              >
-                -
+            {showSignInCta && (
+              <Button asChild size="xs" variant="outline">
+                <Link to={loginHref}>Sign in</Link>
               </Button>
-              <span className="inline-flex min-w-8 items-center justify-center rounded border bg-background/80 px-2 py-1 font-semibold">
-                {placeCount}
-              </span>
-              <Button
-                size="xs"
-                type="button"
-                variant="outline"
-                disabled={controlsDisabled || uncommittedReinforcements <= 0 || placeCount >= uncommittedReinforcements}
-                onClick={() => setPlaceCount((prev) => Math.min(Math.max(1, uncommittedReinforcements), prev + 1))}
-              >
-                +
-              </Button>
-              <Button
-                type="button"
-                size="xs"
-                variant="outline"
-                disabled={controlsDisabled || reinforcementDrafts.length === 0}
-                onClick={handleUndoPlacement}
-              >
-                Undo
-              </Button>
-              <span className="text-xs text-muted-foreground">{uncommittedReinforcements} left</span>
-            </div>
-          )}
-
-          {!historyOpen && isMyTurn && phase === "Fortify" && (
-            <div className="flex shrink-0 items-center gap-2 text-sm">
-              <span className="text-xs text-muted-foreground">{fortifyRemainingLabel}</span>
-            </div>
-          )}
-
-          {displayPhase === "GameOver" && (
-            <span className="shrink-0 rounded border bg-background/70 px-2 py-1 text-sm">
-              {winnerId ? getPlayerName(winnerId, playerMap) : "Unknown"}
-            </span>
-          )}
-
-          <div className="ml-auto flex shrink-0 items-center gap-1.5">
-            {historyOpen && (
-              <>
-                <Button
-                  size="xs"
-                  type="button"
-                  variant="outline"
-                  title="Previous frame ([)"
-                  disabled={historyFrameIndex <= 0}
-                  onClick={() => setHistoryFrameIndex((prev) => Math.max(0, prev - 1))}
-                >
-                  <SkipBack className="size-4" />
-                </Button>
-                <Button
-                  size="xs"
-                  type="button"
-                  variant="outline"
-                  title="Play/Pause (P)"
-                  disabled={historyAtEnd}
-                  onClick={() => setHistoryPlaying((prev) => !prev)}
-                >
-                  {historyPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
-                </Button>
-                <Button
-                  size="xs"
-                  type="button"
-                  variant="outline"
-                  title="Next frame (])"
-                  disabled={historyAtEnd}
-                  onClick={() => setHistoryFrameIndex((prev) => Math.min(historyMaxIndex, prev + 1))}
-                >
-                  <SkipForward className="size-4" />
-                </Button>
-                <Button
-                  size="xs"
-                  type="button"
-                  variant="outline"
-                  title="Reset history (R)"
-                  onClick={() => {
-                    setHistoryFrameIndex(0);
-                    setHistoryPlaying(false);
-                  }}
-                >
-                  Reset
-                </Button>
-                <span className="rounded border bg-background/70 px-2 py-1 text-xs text-muted-foreground">
-                  {historyFrameIndex + 1}/{historyCount}
-                </span>
-                <HistoryScrubber
-                  min={0}
-                  max={historyMaxIndex}
-                  value={historyFrameIndex}
-                  onChange={(value) => {
-                    setHistoryFrameIndex(value);
-                    setHistoryPlaying(false);
-                  }}
-                />
-              </>
             )}
-            <TooltipProvider>
-              {!isSpectator && !historyOpen && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="sm" type="button" onClick={() => setCardsOpen(true)}>
-                      Cards ({myCardCount})
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Open cards (C)</TooltipContent>
-                </Tooltip>
-              )}
-              {!historyOpen && isMyTurn && phase === "Reinforcement" && (
-                <Button
-                  type="button"
-                  size="sm"
-                  title="Confirm placements (Cmd/Ctrl+Enter)"
-                  disabled={controlsDisabled || reinforcementDrafts.length === 0}
-                  onClick={() => void handleConfirmPlacements()}
-                >
-                  Confirm
-                  <ShortcutHint shortcut="mod+enter" />
-                </Button>
-              )}
-              {!historyOpen && isMyTurn && phase === "Attack" && !state.pending && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  title="End attack phase (Cmd/Ctrl+Enter)"
-                  disabled={controlsDisabled}
-                  onClick={handleEndAttackPhase}
-                >
-                  End Attack
-                  <ShortcutHint shortcut="mod+enter" />
-                </Button>
-              )}
-              {!historyOpen && isMyTurn && phase === "Fortify" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  title="End turn (Cmd/Ctrl+Enter)"
-                  disabled={controlsDisabled}
-                  onClick={handleEndTurn}
-                >
-                  End Turn
-                  <ShortcutHint shortcut="mod+enter" />
-                </Button>
-              )}
-              {!isSpectator && !historyOpen && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="icon-sm" onClick={handleResign} aria-label="Resign game">
-                      <Flag className="size-4" aria-hidden="true" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Resign game</TooltipContent>
-                </Tooltip>
-              )}
+          </div>
+        )}
+
+        {!historyOpen && isMyTurn && phase === "Reinforcement" && (
+          <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-sm">
+            <Button
+              size="xs"
+              type="button"
+              variant="outline"
+              disabled={controlsDisabled || uncommittedReinforcements <= 0 || placeCount <= 1}
+              onClick={() => setPlaceCount((prev) => Math.max(1, prev - 1))}
+            >
+              -
+            </Button>
+            <span className="inline-flex min-w-8 items-center justify-center rounded border bg-background/80 px-2 py-1 font-semibold">
+              {placeCount}
+            </span>
+            <Button
+              size="xs"
+              type="button"
+              variant="outline"
+              disabled={controlsDisabled || uncommittedReinforcements <= 0 || placeCount >= uncommittedReinforcements}
+              onClick={() => setPlaceCount((prev) => Math.min(Math.max(1, uncommittedReinforcements), prev + 1))}
+            >
+              +
+            </Button>
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              disabled={controlsDisabled || reinforcementDrafts.length === 0}
+              onClick={handleUndoPlacement}
+            >
+              Undo
+            </Button>
+            <span className="text-xs text-muted-foreground">{uncommittedReinforcements} left</span>
+          </div>
+        )}
+
+        {!historyOpen && isMyTurn && phase === "Fortify" && (
+          <div className="flex shrink-0 items-center gap-2 text-sm">
+            <span className="text-xs text-muted-foreground">{fortifyRemainingLabel}</span>
+          </div>
+        )}
+
+        {displayPhase === "GameOver" && (
+          <span className="shrink-0 rounded border bg-background/70 px-2 py-1 text-sm">
+            {winnerId ? getPlayerName(winnerId, playerMap) : "Unknown"}
+          </span>
+        )}
+
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          {historyOpen && <div className="flex flex-wrap items-center gap-1.5">{renderHistoryControls()}</div>}
+          <TooltipProvider>
+            {!isSpectator && !historyOpen && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant={historyOpen ? "default" : "outline"}
-                    size="icon-sm"
-                    type="button"
-                    aria-label="Toggle history"
-                    onClick={() => {
-                      setHistoryOpen((prev) => !prev);
-                      setHistoryPlaying(false);
-                    }}
-                    disabled={historyCount === 0}
-                  >
-                    <History className="size-4" aria-hidden="true" />
+                  <Button variant="outline" size="sm" type="button" onClick={() => setCardsOpen(true)}>
+                    Cards ({myCardCount})
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Toggle history (H)</TooltipContent>
+                <TooltipContent>Open cards (C)</TooltipContent>
               </Tooltip>
-            </TooltipProvider>
-          </div>
+            )}
+            {!historyOpen && isMyTurn && phase === "Reinforcement" && (
+              <Button
+                type="button"
+                size="sm"
+                title="Confirm placements (Cmd/Ctrl+Enter)"
+                disabled={controlsDisabled || reinforcementDrafts.length === 0}
+                onClick={() => void handleConfirmPlacements()}
+              >
+                Confirm
+                <ShortcutHint shortcut="mod+enter" />
+              </Button>
+            )}
+            {!historyOpen && isMyTurn && phase === "Attack" && !state.pending && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                title="End attack phase (Cmd/Ctrl+Enter)"
+                disabled={controlsDisabled}
+                onClick={handleEndAttackPhase}
+              >
+                End Attack
+                <ShortcutHint shortcut="mod+enter" />
+              </Button>
+            )}
+            {!historyOpen && isMyTurn && phase === "Fortify" && (
+              <Button
+                size="sm"
+                variant="outline"
+                title="End turn (Cmd/Ctrl+Enter)"
+                disabled={controlsDisabled}
+                onClick={handleEndTurn}
+              >
+                End Turn
+                <ShortcutHint shortcut="mod+enter" />
+              </Button>
+            )}
+            {historyOpen && (
+              <Popover>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <PopoverTrigger asChild>
+                      <Button size="icon-sm" variant="outline" aria-label="Open timeline scrubber">
+                        <SlidersHorizontal className="size-4" aria-hidden="true" />
+                      </Button>
+                    </PopoverTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent>Timeline scrubber</TooltipContent>
+                </Tooltip>
+                <PopoverContent align="end" side="bottom" className="w-[min(90vw,420px)] p-3">
+                  {renderHistoryScrubber()}
+                </PopoverContent>
+              </Popover>
+            )}
+            {!isSpectator && !historyOpen && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon-sm" onClick={handleResign} aria-label="Resign game">
+                    <Flag className="size-4" aria-hidden="true" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Resign game</TooltipContent>
+              </Tooltip>
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={historyOpen ? "default" : "outline"}
+                  size="icon-sm"
+                  type="button"
+                  aria-label="Toggle history"
+                  onClick={() => {
+                    setHistoryOpen((prev) => !prev);
+                    setHistoryPlaying(false);
+                  }}
+                  disabled={historyCount === 0}
+                >
+                  <History className="size-4" aria-hidden="true" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Toggle history (H)</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
+      </div>
 
+      <div className="page-container max-w-none flex flex-1 flex-col gap-1 game-body">
         <div className="flex min-w-0 flex-col gap-1" data-map-canvas-zone="true">
           <div className="flex min-w-0 flex-col gap-1 [@media(orientation:landscape)]:flex-row [@media(orientation:landscape)]:items-start">
             <div ref={mapPanelRef} className="min-w-0 flex-1">
