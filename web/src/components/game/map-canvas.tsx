@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Loader2, Lock, LockOpen, Minus, Plus, RotateCcw, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { NumberStepper } from "@/components/ui/number-stepper";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useMapPanZoom } from "@/lib/use-map-pan-zoom";
-import { hasModifierKey, isTypingTarget } from "@/lib/keyboard-shortcuts";
 
 interface GraphMapLike {
   territories: Record<string, { name?: string }>;
@@ -100,12 +97,6 @@ interface FloatingTroopDelta {
   color: string;
 }
 
-const touchFriendlyDefaultLock = () => {
-  if (typeof window === "undefined") return true;
-  const prefersTouch = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
-  return !(prefersTouch || navigator.maxTouchPoints > 0);
-};
-
 export function MapCanvas({
   map,
   visual,
@@ -128,7 +119,6 @@ export function MapCanvas({
   getPlayerColor,
   battleOverlay,
 }: MapCanvasProps) {
-  const [zoomLocked, setZoomLocked] = useState(touchFriendlyDefaultLock);
   const [floatingDeltas, setFloatingDeltas] = useState<FloatingTroopDelta[]>([]);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [overlayDragState, setOverlayDragState] = useState<{ key: string; x: number; y: number }>({
@@ -145,12 +135,7 @@ export function MapCanvas({
     originY: number;
   } | null>(null);
   const previousTerritoriesRef = useRef<Record<string, TerritoryState> | null>(null);
-  const { containerRef, handlers, transformStyle, scale, zoomIn, zoomOut, reset, shouldSuppressClick } = useMapPanZoom({
-    minScale: 0.85,
-    maxScale: 1.75,
-    zoomStep: 0.1,
-    wheelEnabled: !zoomLocked,
-  });
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const frameAspect = 4 / 3;
   const imageAspect = visual.imageWidth / visual.imageHeight;
   const highlightActive = highlightedTerritoryIds.size > 0;
@@ -296,34 +281,6 @@ export function MapCanvas({
   }, [containerRef]);
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (isTypingTarget(event.target)) return;
-      if (hasModifierKey(event)) return;
-
-      if (event.key.toLowerCase() === "l") {
-        event.preventDefault();
-        setZoomLocked((prev) => !prev);
-        return;
-      }
-
-      if (zoomLocked) return;
-      if (event.key === "=" || event.key === "+") {
-        event.preventDefault();
-        zoomIn();
-      } else if (event.key === "-" || event.key === "_") {
-        event.preventDefault();
-        zoomOut();
-      } else if (event.key.toLowerCase() === "r") {
-        event.preventDefault();
-        reset();
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [reset, zoomIn, zoomLocked, zoomOut]);
-
-  useEffect(() => {
     if (!showTroopDeltas) {
       previousTerritoriesRef.current = territories;
       const frame = window.requestAnimationFrame(() => {
@@ -384,17 +341,14 @@ export function MapCanvas({
       <div
         ref={containerRef}
         className={cn(
-          "relative mx-auto aspect-[4/3] w-full max-w-full overflow-hidden rounded-xl border border-border/70 bg-muted select-none touch-none",
+          "relative mx-auto aspect-[4/3] w-full max-w-full overflow-hidden rounded-xl border border-border/70 bg-muted select-none",
         )}
         style={frameStyle}
-        {...(zoomLocked ? {} : handlers)}
       >
         <div
           className="relative h-full w-full"
-          style={transformStyle}
           onClick={(event) => {
             if (event.target !== event.currentTarget) return;
-            if (shouldSuppressClick()) return;
             if (interactive && onClearSelection) onClearSelection();
           }}
         >
@@ -497,11 +451,7 @@ export function MapCanvas({
                 <button
                   type="button"
                   onClick={() => {
-                    if (shouldSuppressClick()) return;
                     onClickTerritory(territoryId);
-                  }}
-                  onPointerDown={(event) => {
-                    if (zoomLocked) event.stopPropagation();
                   }}
                   disabled={!selectable}
                   title={territory.name ?? territoryId}
@@ -716,81 +666,6 @@ export function MapCanvas({
           )}
         </div>
 
-        <div className="pointer-events-none absolute bottom-3 left-3 z-30">
-          <div
-            className="pointer-events-auto flex items-center gap-1 rounded-lg border border-border/60 bg-background/88 p-1 shadow-lg backdrop-blur-sm"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant={zoomLocked ? "default" : "outline"}
-                    className="rounded-md"
-                    onClick={() => setZoomLocked((prev) => !prev)}
-                    aria-label={zoomLocked ? "Unlock map" : "Lock map"}
-                  >
-                    {zoomLocked ? <Lock className="size-3.5" /> : <LockOpen className="size-3.5" />}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">{zoomLocked ? "Unlock map (L)" : "Lock map (L)"}</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="outline"
-                    className="rounded-md"
-                    onClick={zoomOut}
-                    disabled={zoomLocked}
-                    aria-label="Zoom out"
-                  >
-                    <Minus className="size-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">Zoom out (-)</TooltipContent>
-              </Tooltip>
-              <span className="min-w-11 rounded-md border border-border/50 px-1.5 py-1 text-center text-[11px] font-semibold tabular-nums text-foreground/90">
-                {Math.round(scale * 100)}%
-              </span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="outline"
-                    className="rounded-md"
-                    onClick={zoomIn}
-                    disabled={zoomLocked}
-                    aria-label="Zoom in"
-                  >
-                    <Plus className="size-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">Zoom in (+)</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="outline"
-                    className="rounded-md"
-                    onClick={reset}
-                    aria-label="Reset zoom"
-                  >
-                    <RotateCcw className="size-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">Reset map (R)</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        </div>
       </div>
     </div>
   );
