@@ -1,9 +1,0 @@
-project:
-  name: risk
-  language: TypeScript
-  framework: ""
-  description: ""
-rules:
-  - after task completion, use `bun run check`, then if it's good, git commit with a conventional commit with a short message
-boundaries:
-  never_touch: null

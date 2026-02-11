@@ -426,4 +426,13 @@
     color: var(--app-accent);
     animation: action-pulse-text 2.4s ease-in-out infinite;
   }
+
+  .hint-text {
+    color: color-mix(in oklab, var(--app-accent), var(--foreground) 35%);
+    letter-spacing: 0.01em;
+  }
+
+  .hint-next {
+    color: color-mix(in oklab, var(--app-accent), var(--foreground) 20%);
+  }
 }

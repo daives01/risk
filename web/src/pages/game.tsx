@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { History, Layers, Pause, Play, SkipBack, SkipForward, SlidersHorizontal } from "lucide-react";
+import { ChevronRight, History, Layers, Pause, Play, SkipBack, SkipForward, SlidersHorizontal } from "lucide-react";
 import type { Id } from "@backend/_generated/dataModel";
 import { defaultRuleset } from "risk-engine";
 import type { Action, CardId, TerritoryId } from "risk-engine";
@@ -27,6 +27,7 @@ import { findLastTurnEndForPlayer } from "@/lib/game/history-navigation";
 import type { ChatMessage } from "@/lib/game/types";
 import type { ChatChannel } from "@/lib/game/types";
 import type { ReinforcementDraft } from "@/lib/game/types";
+import { ROTATING_HINTS } from "@/lib/game/rotating-hints";
 import { useGameActions } from "@/lib/game/use-game-actions";
 import { useGameRuntimeQueries, useGameViewQueries } from "@/lib/game/use-game-queries";
 import { useGameShortcuts } from "@/lib/game/use-game-shortcuts";
@@ -37,6 +38,8 @@ type TradeSetsConfig = {
   allowOneOfEach: boolean;
   wildActsAsAny: boolean;
 };
+
+const HINT_ROTATION_MS = 18000;
 
 function isValidTradeSet(kinds: readonly string[], tradeSets: TradeSetsConfig): boolean {
   if (kinds.length !== 3) return false;
@@ -175,6 +178,8 @@ export default function GamePage() {
   const [endgameModal, setEndgameModal] = useState<"won" | "lost" | null>(null);
   const dismissedEndgameRef = useRef(false);
   const troopDeltaResumeTimeoutRef = useRef<number | null>(null);
+  const [hintIndex, setHintIndex] = useState(() => Math.floor(Math.random() * ROTATING_HINTS.length));
+  const hintIntervalRef = useRef<number | null>(null);
   const historyDebugRef = useRef<{ framePos: number; signature: string; staleRun: number } | null>(null);
 
   const phase = state?.turn.phase ?? "GameOver";
@@ -1028,6 +1033,28 @@ export default function GamePage() {
   }, []);
 
   useEffect(() => {
+    if (!ROTATING_HINTS.length) return undefined;
+    if (hintIntervalRef.current) {
+      window.clearInterval(hintIntervalRef.current);
+    }
+    hintIntervalRef.current = window.setInterval(() => {
+      setHintIndex((prev) => {
+        if (ROTATING_HINTS.length === 1) return prev;
+        let next = Math.floor(Math.random() * ROTATING_HINTS.length);
+        if (next === prev) {
+          next = (next + 1) % ROTATING_HINTS.length;
+        }
+        return next;
+      });
+    }, HINT_ROTATION_MS);
+    return () => {
+      if (hintIntervalRef.current) {
+        window.clearInterval(hintIntervalRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!historyOpen || !historyPlaying) return;
     const maxIndex = historyCount - 1;
     if (maxIndex <= 0) return;
@@ -1356,6 +1383,7 @@ export default function GamePage() {
       return null;
     })()
     : null;
+  const currentHint = ROTATING_HINTS[hintIndex] ?? null;
   const winnerId =
     resolvedDisplayState.turnOrder.find((playerId) => resolvedDisplayState.players[playerId]?.status === "alive") ??
     null;
@@ -1433,7 +1461,7 @@ export default function GamePage() {
 
   return (
     <div className="page-shell soft-grid game-shell overflow-x-hidden">
-      <div className="game-header glass-panel flex min-h-12 flex-wrap items-center gap-2 px-2 py-1.5">
+      <div className="game-header glass-panel relative flex min-h-12 flex-wrap items-center gap-2 px-2 py-1.5">
         <div className="flex min-w-0 flex-col">
           {showPhaseTitle && (
             <span className="shrink-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1465,6 +1493,31 @@ export default function GamePage() {
                 <Link to={loginHref}>Sign in</Link>
               </Button>
             )}
+          </div>
+        )}
+
+        {!historyOpen && !isMyTurn && currentHint && (
+          <div className="absolute left-1/2 hidden w-[min(60vw,640px)] -translate-x-1/2 items-center justify-center gap-2 text-xs text-muted-foreground md:flex">
+            <span className="hint-text truncate text-center">{currentHint}</span>
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              aria-label="Show another hint"
+              className="hint-next"
+              onClick={() => {
+                setHintIndex((prev) => {
+                  if (ROTATING_HINTS.length <= 1) return prev;
+                  let next = Math.floor(Math.random() * ROTATING_HINTS.length);
+                  if (next === prev) {
+                    next = (next + 1) % ROTATING_HINTS.length;
+                  }
+                  return next;
+                });
+              }}
+            >
+              <ChevronRight className="size-3.5" aria-hidden="true" />
+            </Button>
           </div>
         )}
 
