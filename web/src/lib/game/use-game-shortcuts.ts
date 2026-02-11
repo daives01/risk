@@ -8,6 +8,7 @@ interface UseGameShortcutsOptions {
   historyMaxIndex: number;
   isMyTurn: boolean;
   phase: Phase;
+  cardsOpen: boolean;
   placeCount: number;
   attackDice: number;
   occupyMove: number;
@@ -30,7 +31,8 @@ interface UseGameShortcutsOptions {
   onSetAttackDice: (dice: number) => void;
   onSetOccupyMove: (count: number) => void;
   onSetFortifyCount: (count: number) => void;
-  onOpenCards: () => void;
+  onToggleCards: () => void;
+  onCloseCards: () => void;
   onClearSelection: () => void;
   onUndoPlacement: () => void;
   onConfirmPlacements: () => void;
@@ -44,6 +46,7 @@ export function useGameShortcuts({
   historyMaxIndex,
   isMyTurn,
   phase,
+  cardsOpen,
   placeCount,
   attackDice,
   occupyMove,
@@ -66,7 +69,8 @@ export function useGameShortcuts({
   onSetAttackDice,
   onSetOccupyMove,
   onSetFortifyCount,
-  onOpenCards,
+  onToggleCards,
+  onCloseCards,
   onClearSelection,
   onUndoPlacement,
   onConfirmPlacements,
@@ -81,6 +85,11 @@ export function useGameShortcuts({
       const withCommand = hasCommandModifier(event);
 
       if (event.key === "Escape") {
+        if (cardsOpen) {
+          event.preventDefault();
+          onCloseCards();
+          return;
+        }
         onClearSelection();
         return;
       }
@@ -125,7 +134,11 @@ export function useGameShortcuts({
 
         if (!historyOpen && key === "c") {
           event.preventDefault();
-          onOpenCards();
+          if (cardsOpen) {
+            onCloseCards();
+            return;
+          }
+          onToggleCards();
           return;
         }
 
@@ -238,11 +251,12 @@ export function useGameShortcuts({
     occupyMaxMove,
     occupyMinMove,
     occupyMove,
+    cardsOpen,
     onClearSelection,
     onConfirmPlacements,
     onEndAttackPhase,
     onEndTurn,
-    onOpenCards,
+    onCloseCards,
     onSetAttackDice,
     onSetFortifyCount,
     onSetHistoryFrameIndex,
@@ -251,6 +265,7 @@ export function useGameShortcuts({
     onSetPlaceCount,
     onToggleShortcutCheatSheet,
     onToggleHistory,
+    onToggleCards,
     onUndoPlacement,
     phase,
     placeCount,

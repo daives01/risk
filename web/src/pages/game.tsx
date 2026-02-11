@@ -1107,6 +1107,7 @@ export default function GamePage() {
     historyMaxIndex,
     isMyTurn,
     phase,
+    cardsOpen,
     placeCount,
     attackDice,
     occupyMove,
@@ -1129,10 +1130,13 @@ export default function GamePage() {
     onSetAttackDice: setAttackDice,
     onSetOccupyMove: setOccupyMove,
     onSetFortifyCount: setFortifyCount,
-    onOpenCards: () => {
+    onToggleCards: () => {
       if (!isSpectator && !historyOpen) {
-        setCardsOpen(true);
+        setCardsOpen((prev) => !prev);
       }
+    },
+    onCloseCards: () => {
+      setCardsOpen(false);
     },
     onClearSelection: () => {
       stopAutoAttack();
