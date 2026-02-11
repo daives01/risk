@@ -401,7 +401,10 @@ export function MapCanvas({
           <img
             src={imageUrl}
             alt="Global Domination map"
-            className="h-full w-full object-contain pointer-events-none select-none"
+            className={cn(
+              "h-full w-full object-contain pointer-events-none select-none transition-[filter] duration-200",
+              highlightActive && "saturate-50",
+            )}
             draggable={false}
           />
 
