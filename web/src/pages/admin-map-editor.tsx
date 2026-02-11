@@ -214,7 +214,7 @@ export default function AdminMapEditorPage() {
     reset,
     toNormalized,
     shouldSuppressClick,
-  } = useMapPanZoom({ minScale: 1, maxScale: 6, zoomStep: 0.25 });
+  } = useMapPanZoom({ minScale: 1, maxScale: 6, zoomStep: 0.25, wheelEnabled: !panZoomLocked });
 
   const setAnchorAt = useCallback(
     (territoryId: string, clientX: number, clientY: number) => {

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Point = { x: number; y: number };
 
@@ -7,6 +7,7 @@ interface UseMapPanZoomOptions {
   maxScale?: number;
   initialScale?: number;
   zoomStep?: number;
+  wheelEnabled?: boolean;
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -16,6 +17,7 @@ export function useMapPanZoom({
   maxScale = 4,
   initialScale = 1,
   zoomStep = 0.2,
+  wheelEnabled = true,
 }: UseMapPanZoomOptions = {}) {
   const PAN_DRAG_THRESHOLD_PX = 2;
   const CLICK_SUPPRESS_WINDOW_MS = 150;
@@ -91,15 +93,37 @@ export function useMapPanZoom({
     [pan.x, pan.y, scale],
   );
 
-  const onWheel = useCallback(
-    (event: React.WheelEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const direction: 1 | -1 = event.deltaY < 0 ? 1 : -1;
-      zoomAtPoint(scale + direction * zoomStep, event.clientX, event.clientY);
+  const handleWheel = useCallback(
+    (deltaY: number, clientX: number, clientY: number) => {
+      const direction: 1 | -1 = deltaY < 0 ? 1 : -1;
+      zoomAtPoint(scale + direction * zoomStep, clientX, clientY);
     },
     [scale, zoomAtPoint, zoomStep],
   );
+
+  const onWheel = useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      if (!wheelEnabled || event.defaultPrevented) return;
+      event.preventDefault();
+      event.stopPropagation();
+      handleWheel(event.deltaY, event.clientX, event.clientY);
+    },
+    [handleWheel, wheelEnabled],
+  );
+
+  useEffect(() => {
+    if (!wheelEnabled) return;
+    const node = containerRef.current;
+    if (!node) return;
+    const onWheelNative = (event: WheelEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      handleWheel(event.deltaY, event.clientX, event.clientY);
+    };
+
+    node.addEventListener("wheel", onWheelNative, { passive: false });
+    return () => node.removeEventListener("wheel", onWheelNative);
+  }, [handleWheel, wheelEnabled]);
 
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "touch") {

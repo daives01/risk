@@ -149,6 +149,7 @@ export function MapCanvas({
     minScale: 0.85,
     maxScale: 1.75,
     zoomStep: 0.1,
+    wheelEnabled: !zoomLocked,
   });
   const frameAspect = 4 / 3;
   const imageAspect = visual.imageWidth / visual.imageHeight;
@@ -383,8 +384,7 @@ export function MapCanvas({
       <div
         ref={containerRef}
         className={cn(
-          "relative mx-auto aspect-[4/3] w-full max-w-full overflow-hidden rounded-xl border border-border/70 bg-muted select-none",
-          zoomLocked ? "touch-auto" : "touch-none",
+          "relative mx-auto aspect-[4/3] w-full max-w-full overflow-hidden rounded-xl border border-border/70 bg-muted select-none touch-none",
         )}
         style={frameStyle}
         {...(zoomLocked ? {} : handlers)}
