@@ -158,6 +158,9 @@ export default function GamePage() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [attackSubmitting, setAttackSubmitting] = useState(false);
+  const [recentAttackEdgeIds, setRecentAttackEdgeIds] = useState<Set<string> | null>(null);
+  const recentAttackEventRef = useRef<string | null>(null);
+  const recentAttackTimeoutRef = useRef<number | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyPlaying, setHistoryPlaying] = useState(false);
   const [historyFrameIndex, setHistoryFrameIndex] = useState(0);
@@ -910,9 +913,10 @@ export default function GamePage() {
     } | null = null;
     const flushAttackStreak = () => {
       if (!attackStreak) return;
+      const lossLabel = `attacker -${attackStreak.attackerLosses}, defender -${attackStreak.defenderLosses}`;
       const attackLabel = attackStreak.count > 1
-        ? `${attackStreak.fromLabel} attacked ${attackStreak.toLabel} x${attackStreak.count} (${attackStreak.attackerLosses}/${attackStreak.defenderLosses} losses)`
-        : `${attackStreak.fromLabel} attacked ${attackStreak.toLabel} (${attackStreak.attackerLosses}/${attackStreak.defenderLosses} losses)`;
+        ? `${attackStreak.fromLabel} attacked ${attackStreak.toLabel} x${attackStreak.count} (${lossLabel})`
+        : `${attackStreak.fromLabel} attacked ${attackStreak.toLabel} (${lossLabel})`;
       events.push({ key: attackStreak.key, text: attackLabel, index: attackStreak.index });
       attackStreak = null;
     };
@@ -975,6 +979,26 @@ export default function GamePage() {
     if (!historyOpen) return null;
     return historyFrames[historyFrameIndex]?.index ?? null;
   }, [historyFrameIndex, historyFrames, historyOpen]);
+
+  const historyAttackEdgeIds = useMemo(() => {
+    if (!timelineActions?.length) return null;
+    const frame = historyFrames[historyFrameIndex];
+    if (!frame) return null;
+    const action = timelineActions.find((entry) => entry.index === frame.index);
+    if (!action) return null;
+
+    for (let i = action.events.length - 1; i >= 0; i -= 1) {
+      const event = action.events[i];
+      if (event?.type !== "AttackResolved") continue;
+      const from = typeof event.from === "string" ? event.from : null;
+      const to = typeof event.to === "string" ? event.to : null;
+      if (!from || !to) continue;
+      const edgeKey = from < to ? `${from}|${to}` : `${to}|${from}`;
+      return new Set([edgeKey]);
+    }
+
+    return null;
+  }, [historyFrameIndex, historyFrames, timelineActions]);
 
   const resolvePlayerColor = useCallback(
     (playerId: string, turnOrder: string[]) => getPlayerColor(playerId, playerMap, turnOrder),
@@ -1193,6 +1217,46 @@ export default function GamePage() {
     return () => {
       if (troopDeltaResumeTimeoutRef.current !== null) {
         window.clearTimeout(troopDeltaResumeTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (recentAttackTimeoutRef.current !== null) {
+      window.clearTimeout(recentAttackTimeoutRef.current);
+      recentAttackTimeoutRef.current = null;
+    }
+    if (historyOpen) {
+      setRecentAttackEdgeIds(null);
+      return;
+    }
+    if (!timelineActions?.length) return;
+    const latestAction = timelineActions[timelineActions.length - 1];
+    if (!latestAction) return;
+
+    for (let i = latestAction.events.length - 1; i >= 0; i -= 1) {
+      const event = latestAction.events[i];
+      if (event?.type !== "AttackResolved") continue;
+      const from = typeof event.from === "string" ? event.from : null;
+      const to = typeof event.to === "string" ? event.to : null;
+      if (!from || !to) return;
+      const eventKey = `${latestAction._id}-${i}`;
+      if (recentAttackEventRef.current === eventKey) return;
+      recentAttackEventRef.current = eventKey;
+      const edgeKey = from < to ? `${from}|${to}` : `${to}|${from}`;
+      setRecentAttackEdgeIds(new Set([edgeKey]));
+      recentAttackTimeoutRef.current = window.setTimeout(() => {
+        setRecentAttackEdgeIds(null);
+        recentAttackTimeoutRef.current = null;
+      }, TROOP_DELTA_DURATION_MS);
+      return;
+    }
+  }, [historyOpen, timelineActions, TROOP_DELTA_DURATION_MS]);
+
+  useEffect(() => {
+    return () => {
+      if (recentAttackTimeoutRef.current !== null) {
+        window.clearTimeout(recentAttackTimeoutRef.current);
       }
     };
   }, []);
@@ -1562,8 +1626,8 @@ export default function GamePage() {
                 validFromIds={!historyOpen && isMyTurn ? validFromIds : new Set()}
                 validToIds={!historyOpen && isMyTurn ? validToIds : new Set()}
                 highlightedTerritoryIds={highlightedTerritoryIds}
-                graphEdgeMode={showActionEdges ? "action" : "none"}
-                actionEdgeIds={fortifyConnectedEdgeIds}
+                graphEdgeMode={showActionEdges || !!historyAttackEdgeIds || !!recentAttackEdgeIds ? "action" : "none"}
+                actionEdgeIds={historyAttackEdgeIds ?? recentAttackEdgeIds ?? fortifyConnectedEdgeIds}
                 interactive={!historyOpen && isMyTurn}
                 troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
                 showTroopDeltas={!suppressTroopDeltas}

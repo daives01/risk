@@ -26,8 +26,11 @@ export function formatEvent(event: Record<string, unknown>, playerMap: PlayerRef
   switch (event.type) {
     case "ReinforcementsPlaced":
       return `${playerName(event.playerId)} placed ${event.count} armies on ${territoryName(event.territoryId)}`;
-    case "AttackResolved":
-      return `${territoryName(event.from)} attacked ${territoryName(event.to)} (${event.attackerLosses}/${event.defenderLosses} losses)`;
+    case "AttackResolved": {
+      const attackerLosses = Number(event.attackerLosses ?? 0);
+      const defenderLosses = Number(event.defenderLosses ?? 0);
+      return `${territoryName(event.from)} attacked ${territoryName(event.to)} (attacker -${attackerLosses}, defender -${defenderLosses})`;
+    }
     case "TerritoryCaptured":
       return `${playerName(event.newOwnerId)} captured ${territoryName(event.to)}`;
     case "OccupyResolved":
