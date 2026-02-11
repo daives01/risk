@@ -369,8 +369,55 @@
   }
 }
 
+@keyframes action-pulse-cta {
+  0% {
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--app-accent), transparent 55%),
+      0 0 8px color-mix(in oklab, var(--app-accent), transparent 80%);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--app-accent), transparent 35%),
+      0 0 18px color-mix(in oklab, var(--app-accent), transparent 45%);
+  }
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--app-accent), transparent 55%),
+      0 0 8px color-mix(in oklab, var(--app-accent), transparent 80%);
+  }
+}
+
+@keyframes action-pulse-text {
+  0% {
+    opacity: 0.75;
+    text-shadow: 0 0 0 transparent;
+  }
+  50% {
+    opacity: 1;
+    text-shadow: 0 0 12px color-mix(in oklab, var(--app-accent), transparent 65%);
+  }
+  100% {
+    opacity: 0.75;
+    text-shadow: 0 0 0 transparent;
+  }
+}
+
 @layer utilities {
   .troop-delta-float {
     animation: troop-delta-float 950ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  }
+
+  .action-cta {
+    position: relative;
+    overflow: hidden;
+    border-color: color-mix(in oklab, var(--app-accent), var(--border) 35%);
+    background-color: color-mix(in oklab, var(--app-accent), var(--background) 20%);
+    color: var(--app-bg);
+    animation: action-pulse-cta 2.4s ease-in-out infinite;
+  }
+
+  .turn-hint {
+    color: var(--app-accent);
+    animation: action-pulse-text 2.4s ease-in-out infinite;
   }
 }

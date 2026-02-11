@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { Flag, History, Pause, Play, SkipBack, SkipForward, SlidersHorizontal } from "lucide-react";
+import { Flag, History, Layers, Pause, Play, SkipBack, SkipForward, SlidersHorizontal } from "lucide-react";
 import type { Id } from "@backend/_generated/dataModel";
 import { defaultRuleset } from "risk-engine";
 import type { Action, CardId, TerritoryId } from "risk-engine";
@@ -1259,13 +1259,35 @@ export default function GamePage() {
   const resolvedDisplayState = displayState ?? state;
   const displayPhase = resolvedDisplayState.turn.phase;
   const phaseCopy = PHASE_COPY[displayPhase] ?? PHASE_COPY.GameOver;
-  const showPhaseTitle = historyOpen || isMyTurn || !["Reinforcement", "Attack", "Fortify"].includes(displayPhase);
+  const showPhaseTitle = historyOpen || !["Reinforcement", "Attack", "Fortify"].includes(displayPhase);
   const fortifiesUsedForDisplay = resolvedDisplayState.fortifiesUsedThisTurn ?? 0;
   const fortifiesRemainingForDisplay = Math.max(0, maxFortifiesPerTurn - fortifiesUsedForDisplay);
   const fortifyRemainingLabel =
     maxFortifiesPerTurn >= Number.MAX_SAFE_INTEGER
       ? "Unlimited fortifies"
-      : `${fortifiesRemainingForDisplay} fortifies left`;
+      : `${fortifiesRemainingForDisplay} ${fortifiesRemainingForDisplay === 1 ? "fortify" : "fortifies"} left`;
+  const actionHint = !historyOpen && isMyTurn
+    ? (() => {
+      if (phase === "Reinforcement") {
+        return "Click territory to place";
+      }
+      if (phase === "Attack") {
+        if (state.pending) return "Select troop count to move";
+        if (!selectedFrom) return "Select troops for attack";
+        if (!selectedTo) return "Select territory to attack";
+        return "Choose dice and attack";
+      }
+      if (phase === "Occupy") {
+        return "Select troop count to move";
+      }
+      if (phase === "Fortify") {
+        if (!selectedFrom) return "Select territory to move from";
+        if (!selectedTo) return "Select territory to move to";
+        return "Select troop count to move";
+      }
+      return null;
+    })()
+    : null;
   const winnerId =
     resolvedDisplayState.turnOrder.find((playerId) => resolvedDisplayState.players[playerId]?.status === "alive") ??
     null;
@@ -1344,11 +1366,26 @@ export default function GamePage() {
   return (
     <div className="page-shell soft-grid game-shell overflow-x-hidden">
       <div className="game-header glass-panel flex min-h-12 flex-wrap items-center gap-2 px-2 py-1.5">
-        {showPhaseTitle && (
-          <span className="shrink-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            {phaseCopy.title}
-          </span>
-        )}
+        <div className="flex min-w-0 flex-col">
+          {showPhaseTitle && (
+            <span className="shrink-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              {phaseCopy.title}
+            </span>
+          )}
+          {actionHint && (
+            <span className="turn-hint max-w-[min(52vw,260px)] truncate text-xs font-semibold uppercase tracking-wide">
+              {actionHint}
+            </span>
+          )}
+          {!historyOpen && isMyTurn && phase === "Reinforcement" && (
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              {uncommittedReinforcements} left
+            </span>
+          )}
+          {!historyOpen && isMyTurn && phase === "Fortify" && (
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{fortifyRemainingLabel}</span>
+          )}
+        </div>
 
         {!historyOpen && !isMyTurn && displayPhase !== "GameOver" && (
           <div className="flex shrink-0 items-center gap-2">
@@ -1395,13 +1432,6 @@ export default function GamePage() {
             >
               Undo
             </Button>
-            <span className="text-xs text-muted-foreground">{uncommittedReinforcements} left</span>
-          </div>
-        )}
-
-        {!historyOpen && isMyTurn && phase === "Fortify" && (
-          <div className="flex shrink-0 items-center gap-2 text-sm">
-            <span className="text-xs text-muted-foreground">{fortifyRemainingLabel}</span>
           </div>
         )}
 
@@ -1414,16 +1444,6 @@ export default function GamePage() {
         <div className="ml-auto flex flex-wrap items-center gap-1.5">
           {historyOpen && <div className="flex flex-wrap items-center gap-1.5">{renderHistoryControls()}</div>}
           <TooltipProvider>
-            {!isSpectator && !historyOpen && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="sm" type="button" onClick={() => setCardsOpen(true)}>
-                    Cards ({myCardCount})
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Open cards (C)</TooltipContent>
-              </Tooltip>
-            )}
             {!historyOpen && isMyTurn && phase === "Reinforcement" && (
               <Button
                 type="button"
@@ -1431,6 +1451,7 @@ export default function GamePage() {
                 title="Confirm placements (Cmd/Ctrl+Enter)"
                 disabled={controlsDisabled || reinforcementDrafts.length === 0}
                 onClick={() => void handleConfirmPlacements()}
+                className="action-cta"
               >
                 Confirm
                 <ShortcutHint shortcut="mod+enter" />
@@ -1444,6 +1465,7 @@ export default function GamePage() {
                 title="End attack phase (Cmd/Ctrl+Enter)"
                 disabled={controlsDisabled}
                 onClick={handleEndAttackPhase}
+                className="action-cta"
               >
                 End Attack
                 <ShortcutHint shortcut="mod+enter" />
@@ -1456,10 +1478,31 @@ export default function GamePage() {
                 title="End turn (Cmd/Ctrl+Enter)"
                 disabled={controlsDisabled}
                 onClick={handleEndTurn}
+                className="action-cta"
               >
                 End Turn
                 <ShortcutHint shortcut="mod+enter" />
               </Button>
+            )}
+            {!isSpectator && !historyOpen && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    type="button"
+                    className="relative"
+                    aria-label="Open cards"
+                    onClick={() => setCardsOpen(true)}
+                  >
+                    <Layers className="size-4" aria-hidden="true" />
+                    <span className="absolute -right-1 -top-1 rounded-full border border-border/70 bg-background px-1 text-[10px] font-semibold">
+                      {myCardCount}
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Open cards (C)</TooltipContent>
+              </Tooltip>
             )}
             {historyOpen && (
               <Popover>
@@ -1619,11 +1662,10 @@ export default function GamePage() {
               />
             </div>
             <div
-              className={`hidden min-h-0 shrink-0 overflow-hidden transition-[width,transform,opacity] duration-220 ease-out [@media(orientation:landscape)]:flex ${
-                historyOpen
-                  ? "w-[min(34vw,300px)] translate-x-0 opacity-100"
-                  : "pointer-events-none w-0 translate-x-10 opacity-0"
-              }`}
+              className={`hidden min-h-0 shrink-0 overflow-hidden transition-[width,transform,opacity] duration-220 ease-out [@media(orientation:landscape)]:flex ${historyOpen
+                ? "w-[min(34vw,300px)] translate-x-0 opacity-100"
+                : "pointer-events-none w-0 translate-x-10 opacity-0"
+                }`}
               style={{
                 height: mapPanelHeight ?? MAP_MAX_HEIGHT,
                 maxHeight: MAP_MAX_HEIGHT,
