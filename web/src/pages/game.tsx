@@ -152,13 +152,20 @@ export default function GamePage() {
     };
   } | null)?.teams;
   const effectiveRuleset = view?.effectiveRuleset as {
-    cards?: { forcedTradeHandSize?: number; tradeSets?: TradeSetsConfig };
+    cards?: {
+      forcedTradeHandSize?: number;
+      tradeSets?: TradeSetsConfig;
+      tradeValues?: number[];
+      tradeValueOverflow?: "repeatLast" | "continueByFive";
+    };
     fortify?: { maxFortifiesPerTurn?: number; fortifyMode?: "adjacent" | "connected" };
   } | null;
   const effectiveCards = effectiveRuleset?.cards;
   const effectiveFortify = effectiveRuleset?.fortify;
   const forcedTradeHandSize = effectiveCards?.forcedTradeHandSize ?? defaultRuleset.cards.forcedTradeHandSize;
   const tradeSets = effectiveCards?.tradeSets ?? defaultRuleset.cards.tradeSets;
+  const tradeValues = effectiveCards?.tradeValues ?? [...defaultRuleset.cards.tradeValues];
+  const tradeValueOverflow = effectiveCards?.tradeValueOverflow ?? defaultRuleset.cards.tradeValueOverflow;
   const maxFortifiesPerTurn = effectiveFortify?.maxFortifiesPerTurn ?? defaultRuleset.fortify.maxFortifiesPerTurn;
   const fortifyMode = effectiveFortify?.fortifyMode ?? defaultRuleset.fortify.fortifyMode;
   const fortifiesUsedThisTurn = state?.fortifiesUsedThisTurn ?? 0;
@@ -1373,6 +1380,9 @@ export default function GamePage() {
         onToggleCard={toggleCard}
         mustTradeNow={mustTradeNow}
         forcedTradeHandSize={forcedTradeHandSize}
+        tradeValues={tradeValues}
+        tradeValueOverflow={tradeValueOverflow}
+        tradesCompleted={state?.tradesCompleted ?? 0}
         onCloseCards={() => setCardsOpen(false)}
         controlsDisabled={controlsDisabled}
         phase={phase}

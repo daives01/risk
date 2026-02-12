@@ -15,6 +15,9 @@ interface GameModalsProps {
   onToggleCard: (cardId: string) => void;
   mustTradeNow: boolean;
   forcedTradeHandSize: number;
+  tradeValues: number[];
+  tradeValueOverflow: "repeatLast" | "continueByFive";
+  tradesCompleted: number;
   onCloseCards: () => void;
   controlsDisabled: boolean;
   phase: string;
@@ -37,6 +40,9 @@ export function GameModals({
   onToggleCard,
   mustTradeNow,
   forcedTradeHandSize,
+  tradeValues,
+  tradeValueOverflow,
+  tradesCompleted,
   onCloseCards,
   controlsDisabled,
   phase,
@@ -47,6 +53,22 @@ export function GameModals({
   endgameModal,
   onDismissEndgame,
 }: GameModalsProps) {
+  const tradeIndex = tradesCompleted;
+  const tradeValuesLabel =
+    tradeValues.length === 0
+      ? ""
+      : tradeValueOverflow === "continueByFive"
+        ? `${tradeValues.join(", ")}, +5`
+        : `${tradeValues.join(", ")}, repeat`;
+  const nextTradeValue =
+    tradeValues.length === 0
+      ? 0
+      : tradeIndex < tradeValues.length
+        ? tradeValues[tradeIndex]!
+        : tradeValueOverflow === "continueByFive"
+          ? tradeValues[tradeValues.length - 1]! + (tradeIndex - tradeValues.length + 1) * 5
+          : tradeValues[tradeValues.length - 1]!;
+
   return (
     <>
       <div className="fixed bottom-4 right-4 z-40">
@@ -112,6 +134,16 @@ export function GameModals({
                 <Button size="xs" variant="outline" type="button" onClick={onCloseCards}>
                   Close
                 </Button>
+              </div>
+
+              <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Card increment</span>
+                  <span className="font-semibold text-foreground">Next trade: {nextTradeValue}</span>
+                </div>
+                {tradeValuesLabel && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">{tradeValuesLabel}</p>
+                )}
               </div>
 
               <div className="flex flex-wrap gap-2">
