@@ -266,7 +266,7 @@ export function GameHeader({
                   variant="outline"
                   size="icon-sm"
                   type="button"
-                  className="relative"
+                  className="relative enabled:cursor-pointer"
                   aria-label="Open cards"
                   onClick={onOpenCards}
                 >
@@ -288,6 +288,7 @@ export function GameHeader({
                       size="icon-sm"
                       variant="outline"
                       aria-label="Open timeline scrubber"
+                      className="enabled:cursor-pointer"
                     >
                       <SlidersHorizontal className="size-4" aria-hidden="true" />
                     </Button>
@@ -311,6 +312,7 @@ export function GameHeader({
                 aria-label="Toggle history"
                 onClick={onToggleHistory}
                 disabled={historyToggleDisabled}
+                className="enabled:cursor-pointer"
               >
                 <History className="size-4" aria-hidden="true" />
               </Button>

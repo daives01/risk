@@ -73,7 +73,7 @@ export function GameSidePanels({
 }: GameSidePanelsProps) {
   return (
     <>
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         <GamePlayersCard
           playerStats={playerStats}
           displayState={resolvedDisplayState}
@@ -92,7 +92,7 @@ export function GameSidePanels({
           onResign={onResign}
         />
       </div>
-      <div className="xl:order-last">
+      <div className="min-w-0 xl:order-last">
         <GameChatCard
           messages={chatMessages}
           activeChannel={chatChannel}

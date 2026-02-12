@@ -1315,7 +1315,7 @@ export default function GamePage() {
           onSelectHistoryEvent={onSelectHistoryEvent}
         />
         <div
-          className="mx-auto grid w-full gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+          className="mx-auto grid w-full min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
           style={{
             maxWidth:
               mapImageWidth && mapPanelWidth

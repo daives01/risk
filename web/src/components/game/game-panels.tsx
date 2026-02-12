@@ -61,11 +61,11 @@ export function GamePlayersCard({
   const [resignOpen, setResignOpen] = useState(false);
   const columnsClass = showTurnTimer
     ? teamModeEnabled
-      ? "grid-cols-[minmax(6.75rem,1.45fr)_minmax(3.5rem,0.8fr)_repeat(4,minmax(2.75rem,0.65fr))_minmax(4rem,0.85fr)_minmax(3.75rem,0.8fr)] sm:grid-cols-[minmax(8rem,1.7fr)_minmax(4rem,0.9fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.5rem,0.9fr)_minmax(4.25rem,0.85fr)]"
-      : "grid-cols-[minmax(6.75rem,1.45fr)_repeat(4,minmax(2.75rem,0.65fr))_minmax(4rem,0.85fr)_minmax(3.75rem,0.8fr)] sm:grid-cols-[minmax(8rem,1.7fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.5rem,0.9fr)_minmax(4.25rem,0.85fr)]"
+      ? "grid-cols-[minmax(5.5rem,1.35fr)_minmax(3rem,0.75fr)_repeat(4,minmax(2.25rem,0.55fr))_minmax(3.5rem,0.8fr)_minmax(3.25rem,0.7fr)] sm:grid-cols-[minmax(8rem,1.7fr)_minmax(4rem,0.9fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.5rem,0.9fr)_minmax(4.25rem,0.85fr)]"
+      : "grid-cols-[minmax(5.5rem,1.35fr)_repeat(4,minmax(2.25rem,0.55fr))_minmax(3.5rem,0.8fr)_minmax(3.25rem,0.7fr)] sm:grid-cols-[minmax(8rem,1.7fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.5rem,0.9fr)_minmax(4.25rem,0.85fr)]"
     : teamModeEnabled
-      ? "grid-cols-[minmax(6.75rem,1.45fr)_minmax(3.5rem,0.8fr)_repeat(4,minmax(2.75rem,0.65fr))_minmax(3.75rem,0.8fr)] sm:grid-cols-[minmax(8rem,1.7fr)_minmax(4rem,0.9fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.25rem,0.85fr)]"
-      : "grid-cols-[minmax(6.75rem,1.45fr)_repeat(4,minmax(2.75rem,0.65fr))_minmax(3.75rem,0.8fr)] sm:grid-cols-[minmax(8rem,1.7fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.25rem,0.85fr)]";
+      ? "grid-cols-[minmax(5.5rem,1.35fr)_minmax(3rem,0.75fr)_repeat(4,minmax(2.25rem,0.55fr))_minmax(3.25rem,0.7fr)] sm:grid-cols-[minmax(8rem,1.7fr)_minmax(4rem,0.9fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.25rem,0.85fr)]"
+      : "grid-cols-[minmax(5.5rem,1.35fr)_repeat(4,minmax(2.25rem,0.55fr))_minmax(3.25rem,0.7fr)] sm:grid-cols-[minmax(8rem,1.7fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.25rem,0.85fr)]";
 
   const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>, playerId: string) => {
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -81,11 +81,11 @@ export function GamePlayersCard({
           Players
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2 pb-3">
-        <div className="overflow-x-auto">
-          <div className="min-w-[520px] space-y-2">
+      <CardContent className="min-w-0 space-y-2 pb-3">
+        <div className="min-w-0 overflow-x-auto game-scrollbar">
+          <div className="min-w-[320px] space-y-2 sm:min-w-[420px] lg:min-w-[520px]">
             <div
-              className={`grid items-center gap-2 rounded-md border border-border/70 bg-background/70 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground ${columnsClass}`}
+              className={`grid items-center gap-2 rounded-md border border-border/70 bg-background/70 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 [@media(max-width:420px)]:text-[9px] ${columnsClass}`}
             >
               <span>Player</span>
               {teamModeEnabled && <span>Team</span>}
@@ -128,11 +128,13 @@ export function GamePlayersCard({
                   tabIndex={0}
                   onClick={() => onTogglePlayerHighlight(player.playerId)}
                   onKeyDown={(event) => handleRowKeyDown(event, player.playerId)}
-                  className={`cursor-pointer rounded-lg border bg-background/80 px-2.5 py-1.5 transition hover:border-primary/50 ${
+                  className={`cursor-pointer rounded-lg border bg-background/80 px-2.5 py-1.5 transition hover:border-primary/50 [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 ${
                     isDefeated ? "opacity-55" : ""
                   } ${isPlayerHighlighted ? "border-primary/70 bg-primary/10" : ""}`}
                 >
-                  <div className={`grid items-center gap-2 text-sm ${columnsClass}`}>
+                  <div
+                    className={`grid items-center gap-2 text-sm [@media(max-width:420px)]:text-[0.72rem] ${columnsClass}`}
+                  >
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
                       <span className={`min-w-0 truncate font-semibold ${isDefeated ? "line-through" : ""}`}>
@@ -414,7 +416,7 @@ export function GameChatCard({
       <CardContent className="flex h-[calc(100%-3.25rem)] flex-col space-y-2 pb-4 pt-0">
         <div
           ref={messagesContainerRef}
-          className="flex-1 overflow-y-auto rounded-md border bg-background/45 p-2 pt-2.5 text-sm"
+          className="game-scrollbar flex-1 overflow-y-auto rounded-md border bg-background/45 p-2 pt-2.5 text-sm"
         >
           <div className="mt-auto space-y-2">
             {messages.length === 0 && <p className="text-muted-foreground">No messages yet.</p>}
