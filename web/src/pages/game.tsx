@@ -1670,7 +1670,11 @@ export default function GamePage() {
 
       <div className="page-container max-w-none flex flex-1 flex-col gap-4 game-body">
         <div className="flex min-w-0 flex-col gap-4" data-map-canvas-zone="true">
-          <div className="flex min-w-0 flex-col gap-3 [@media(orientation:landscape)]:flex-row [@media(orientation:landscape)]:items-start">
+          <div
+            className={`flex min-w-0 flex-col ${
+              historyOpen ? "gap-3" : "gap-0"
+            } [@media(orientation:landscape)]:flex-row [@media(orientation:landscape)]:items-start`}
+          >
             <div ref={mapPanelRef} className="min-w-0 flex-1">
               <MapCanvas
                 map={graphMap}
