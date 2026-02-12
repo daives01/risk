@@ -42,7 +42,6 @@ interface GameHeaderProps {
   onOpenCards: () => void;
   onToggleHistory: () => void;
   historyToggleDisabled: boolean;
-  onOpenScrubber: () => void;
   renderHistoryScrubber?: () => ReactNode;
   onConfirmPlacements: () => void;
   onEndAttackPhase: () => void;
@@ -84,7 +83,6 @@ export function GameHeader({
   onOpenCards,
   onToggleHistory,
   historyToggleDisabled,
-  onOpenScrubber,
   renderHistoryScrubber,
   onConfirmPlacements,
   onEndAttackPhase,
@@ -290,7 +288,6 @@ export function GameHeader({
                       size="icon-sm"
                       variant="outline"
                       aria-label="Open timeline scrubber"
-                      onClick={onOpenScrubber}
                     >
                       <SlidersHorizontal className="size-4" aria-hidden="true" />
                     </Button>

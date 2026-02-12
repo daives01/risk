@@ -24,6 +24,7 @@ import { formatTurnTimer } from "@/lib/game/turn-timer";
 import { useGameActions } from "@/lib/game/use-game-actions";
 import { useGameRuntimeQueries, useGameViewQueries } from "@/lib/game/use-game-queries";
 import { useGameShortcuts } from "@/lib/game/use-game-shortcuts";
+import { HistoryScrubber } from "@/components/game/history-scrubber";
 import { GameHeader } from "@/pages/game/components/GameHeader";
 import { GameMapSection } from "@/pages/game/components/GameMapSection";
 import { GameModals } from "@/pages/game/components/GameModals";
@@ -1255,18 +1256,15 @@ export default function GamePage() {
           setHistoryPlaying(false);
         }}
         historyToggleDisabled={historyCount === 0}
-        onOpenScrubber={() => undefined}
         renderHistoryScrubber={() => (
-          <input
-            type="range"
+          <HistoryScrubber
             min={0}
             max={historyMaxIndex}
             value={historyFrameIndex}
-            onChange={(event) => {
-              setHistoryFrameIndex(Number(event.target.value));
+            onChange={(value) => {
+              setHistoryFrameIndex(value);
               setHistoryPlaying(false);
             }}
-            className="w-full"
           />
         )}
         onConfirmPlacements={() => {
