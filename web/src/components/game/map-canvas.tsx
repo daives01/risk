@@ -37,6 +37,9 @@ interface MapCanvasProps {
   troopDeltaDurationMs?: number;
   showTroopDeltas?: boolean;
   maxHeight?: number | string;
+  infoOverlayEnabled?: boolean;
+  infoPinnedTerritoryId?: string | null;
+  onSetInfoPinnedTerritoryId?: (territoryId: string | null) => void;
   onClickTerritory: (territoryId: string) => void;
   onClearSelection?: () => void;
   onImageRectChange?: (rect: { width: number; height: number }) => void;
@@ -115,6 +118,9 @@ export function MapCanvas({
   troopDeltaDurationMs = 1000,
   showTroopDeltas = true,
   maxHeight,
+  infoOverlayEnabled = false,
+  infoPinnedTerritoryId = null,
+  onSetInfoPinnedTerritoryId = () => undefined,
   onClickTerritory,
   onClearSelection,
   onImageRectChange,
@@ -142,6 +148,8 @@ export function MapCanvas({
   const imageAspect = visual.imageWidth / visual.imageHeight;
   const highlightActive = highlightedTerritoryIds.size > 0;
   const explicitActionEdges = actionEdgeIds !== undefined && actionEdgeIds.size > 0;
+  const supportsHover =
+    typeof window !== "undefined" && window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
 
   const withAlpha = (color: string, alpha: number) => {
     if (color.startsWith("#") && color.length === 7) {
@@ -357,6 +365,9 @@ export function MapCanvas({
           className="relative h-full w-full"
           onClick={(event) => {
             if (event.target !== event.currentTarget) return;
+            if (infoOverlayEnabled) {
+              onSetInfoPinnedTerritoryId(null);
+            }
             if (interactive && onClearSelection) onClearSelection();
           }}
         >
@@ -447,6 +458,8 @@ export function MapCanvas({
             const outlineWidth = isFrom || isTo ? 2.5 : isActionable ? 1.5 : 0;
             const outlineColor = isFrom || isTo ? actionOutline : isActionable ? actionEdge : "transparent";
 
+            const showInfo = infoOverlayEnabled && infoPinnedTerritoryId === territoryId;
+
             return (
               <div
                 key={territoryId}
@@ -459,13 +472,26 @@ export function MapCanvas({
                 <button
                   type="button"
                   onClick={() => {
+                    if (infoOverlayEnabled && !supportsHover) {
+                      onSetInfoPinnedTerritoryId(infoPinnedTerritoryId === territoryId ? null : territoryId);
+                    }
                     onClickTerritory(territoryId);
                   }}
-                  disabled={!selectable}
+                  disabled={!selectable && !infoOverlayEnabled}
                   title={territory.name ?? territoryId}
+                  onMouseEnter={() => {
+                    if (infoOverlayEnabled && supportsHover) {
+                      onSetInfoPinnedTerritoryId(territoryId);
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    if (infoOverlayEnabled && supportsHover) {
+                      onSetInfoPinnedTerritoryId(infoPinnedTerritoryId === territoryId ? null : infoPinnedTerritoryId);
+                    }
+                  }}
                   className={cn(
                     "flex items-center justify-center rounded-full border-2 px-0 py-0 font-bold text-white shadow-sm transition-opacity",
-                    selectable ? "cursor-pointer" : "cursor-default opacity-80",
+                    selectable || infoOverlayEnabled ? "cursor-pointer" : "cursor-default opacity-80",
                     shouldDeEmphasize && "opacity-30 saturate-50",
                   )}
                   style={{
@@ -483,6 +509,16 @@ export function MapCanvas({
                 >
                   {territoryState.armies}
                 </button>
+                {showInfo && (
+                  <div
+                    className="pointer-events-none absolute left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-md border border-border/70 bg-background/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-foreground shadow-sm"
+                    style={{
+                      top: `calc(-100% - ${markerSize * 0.6}px)`,
+                    }}
+                  >
+                    {territory.name ?? territoryId}
+                  </div>
+                )}
               </div>
             );
           })}

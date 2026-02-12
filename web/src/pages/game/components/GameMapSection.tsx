@@ -32,6 +32,9 @@ interface GameMapSectionProps {
   historyAttackEdgeIds: Set<string> | null;
   recentAttackEdgeIds: Set<string> | null;
   fortifyConnectedEdgeIds: Set<string> | undefined;
+  infoOverlayEnabled: boolean;
+  infoPinnedTerritoryId: string | null;
+  onSetInfoPinnedTerritoryId: (territoryId: string | null) => void;
   troopDeltaDurationMs: number;
   suppressTroopDeltas: boolean;
   onTerritoryClick: (territoryId: string) => void;
@@ -66,6 +69,9 @@ export function GameMapSection({
   historyAttackEdgeIds,
   recentAttackEdgeIds,
   fortifyConnectedEdgeIds,
+  infoOverlayEnabled,
+  infoPinnedTerritoryId,
+  onSetInfoPinnedTerritoryId,
   troopDeltaDurationMs,
   suppressTroopDeltas,
   onTerritoryClick,
@@ -96,12 +102,21 @@ export function GameMapSection({
             validFromIds={!historyOpen && isMyTurn ? validFromIds : new Set()}
             validToIds={!historyOpen && isMyTurn ? validToIds : new Set()}
             highlightedTerritoryIds={highlightedTerritoryIds}
-            graphEdgeMode={showActionEdges || !!historyAttackEdgeIds || !!recentAttackEdgeIds ? "action" : "none"}
+            graphEdgeMode={
+              infoOverlayEnabled
+                ? "all"
+                : showActionEdges || !!historyAttackEdgeIds || !!recentAttackEdgeIds
+                  ? "action"
+                  : "none"
+            }
             actionEdgeIds={historyAttackEdgeIds ?? recentAttackEdgeIds ?? fortifyConnectedEdgeIds}
             interactive={!historyOpen && isMyTurn}
             troopDeltaDurationMs={troopDeltaDurationMs}
             showTroopDeltas={!suppressTroopDeltas}
             maxHeight={mapMaxHeight}
+            infoOverlayEnabled={infoOverlayEnabled}
+            infoPinnedTerritoryId={infoPinnedTerritoryId}
+            onSetInfoPinnedTerritoryId={onSetInfoPinnedTerritoryId}
             onClickTerritory={onTerritoryClick}
             onImageRectChange={onMapImageRectChange}
             onClearSelection={onClearSelection}

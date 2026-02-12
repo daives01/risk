@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ChevronRight, History, Layers, Pause, Play, SkipBack, SkipForward, SlidersHorizontal } from "lucide-react";
+import { ChevronRight, History, Info, Layers, Pause, Play, SkipBack, SkipForward, SlidersHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { HistoryScrubber } from "@/components/game/history-scrubber";
@@ -40,6 +40,8 @@ interface GameHeaderProps {
   cardsOpenDisabled: boolean;
   myCardCount: number;
   onOpenCards: () => void;
+  infoOpen: boolean;
+  onToggleInfo: () => void;
   onToggleHistory: () => void;
   historyToggleDisabled: boolean;
   renderHistoryScrubber?: () => ReactNode;
@@ -81,6 +83,8 @@ export function GameHeader({
   cardsOpenDisabled,
   myCardCount,
   onOpenCards,
+  infoOpen,
+  onToggleInfo,
   onToggleHistory,
   historyToggleDisabled,
   renderHistoryScrubber,
@@ -279,6 +283,22 @@ export function GameHeader({
               <TooltipContent>Open cards (C)</TooltipContent>
             </Tooltip>
           )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={infoOpen ? "default" : "outline"}
+                size="icon-sm"
+                type="button"
+                aria-label="Toggle map info"
+                onClick={onToggleInfo}
+                disabled={historyOpen}
+                className="enabled:cursor-pointer"
+              >
+                <Info className="size-4" aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Toggle map info (I)</TooltipContent>
+          </Tooltip>
           {historyOpen && (
             <Popover>
               <Tooltip>

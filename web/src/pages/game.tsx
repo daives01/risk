@@ -85,6 +85,8 @@ export default function GamePage() {
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
   const [cardsOpen, setCardsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [infoOverlayEnabled, setInfoOverlayEnabled] = useState(false);
+  const [infoPinnedTerritoryId, setInfoPinnedTerritoryId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [attackSubmitting, setAttackSubmitting] = useState(false);
   const [recentAttackEdgeIds, setRecentAttackEdgeIds] = useState<Set<string> | null>(null);
@@ -827,6 +829,8 @@ export default function GamePage() {
 
   useEffect(() => {
     if (!historyOpen) return;
+    setInfoOverlayEnabled(false);
+    setInfoPinnedTerritoryId(null);
     stopAutoAttack();
     setSelectedFrom(null);
     setSelectedTo(null);
@@ -935,6 +939,11 @@ export default function GamePage() {
       stopAutoAttack();
       setSelectedFrom(null);
       setSelectedTo(null);
+    },
+    onToggleInfoOverlay: () => {
+      if (!historyOpen) {
+        setInfoOverlayEnabled((prev) => !prev);
+      }
     },
     onUndoPlacement: handleUndoPlacement,
     onConfirmPlacements: () => {
@@ -1251,6 +1260,13 @@ export default function GamePage() {
         cardsOpenDisabled={isSpectator || historyOpen}
         myCardCount={myCardCount}
         onOpenCards={() => setCardsOpen(true)}
+        infoOpen={infoOverlayEnabled}
+        onToggleInfo={() => {
+          if (!historyOpen) {
+            setInfoOverlayEnabled((prev) => !prev);
+            setInfoPinnedTerritoryId(null);
+          }
+        }}
         onToggleHistory={() => {
           setHistoryOpen((prev) => !prev);
           setHistoryPlaying(false);
@@ -1297,6 +1313,9 @@ export default function GamePage() {
           historyAttackEdgeIds={historyAttackEdgeIds}
           recentAttackEdgeIds={recentAttackEdgeIds}
           fortifyConnectedEdgeIds={fortifyConnectedEdgeIds}
+          infoOverlayEnabled={infoOverlayEnabled}
+          infoPinnedTerritoryId={infoPinnedTerritoryId}
+          onSetInfoPinnedTerritoryId={setInfoPinnedTerritoryId}
           troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
           suppressTroopDeltas={suppressTroopDeltas}
           onTerritoryClick={handleTerritoryClick}
