@@ -2,7 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { authComponent } from "./auth.js";
 
-const DEFAULT_EMAIL_TURN_NOTIFICATIONS_ENABLED = false;
+const DEFAULT_EMAIL_TURN_NOTIFICATIONS_ENABLED = true;
 
 export const getMySettings = query({
   handler: async (ctx) => {
