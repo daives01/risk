@@ -1205,7 +1205,7 @@ export default function GamePage() {
           : null;
 
   return (
-    <div className="page-shell soft-grid game-shell overflow-x-hidden">
+    <div className="page-shell soft-grid game-shell overflow-x-hidden md:overflow-x-visible">
       <GameHeader
         phaseTitle={phaseCopy.title}
         actionHint={actionHint}
