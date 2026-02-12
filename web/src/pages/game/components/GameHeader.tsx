@@ -1,5 +1,16 @@
 import { Link } from "react-router-dom";
-import { ChevronRight, History, Info, Layers, Pause, Play, SkipBack, SkipForward, SlidersHorizontal } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  History,
+  Info,
+  Layers,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
+  SlidersHorizontal,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { HistoryScrubber } from "@/components/game/history-scrubber";
@@ -21,7 +32,8 @@ interface GameHeaderProps {
   showSignInCta: boolean;
   loginHref: string;
   currentHint: string | null;
-  onRotateHint: () => void;
+  onRotateHintForward: () => void;
+  onRotateHintBack: () => void;
   controlsDisabled: boolean;
   placeCount: number;
   reinforcementDraftCount: number;
@@ -64,7 +76,8 @@ export function GameHeader({
   showSignInCta,
   loginHref,
   currentHint,
-  onRotateHint,
+  onRotateHintForward,
+  onRotateHintBack,
   controlsDisabled,
   placeCount,
   reinforcementDraftCount,
@@ -128,6 +141,16 @@ export function GameHeader({
 
       {!historyOpen && !isMyTurn && currentHint && (
         <div className="absolute left-1/2 hidden w-[min(60vw,640px)] -translate-x-1/2 items-center justify-center gap-2 text-xs text-muted-foreground md:flex">
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            aria-label="Show previous hint"
+            className="hint-prev"
+            onClick={onRotateHintBack}
+          >
+            <ChevronLeft className="size-3.5" aria-hidden="true" />
+          </Button>
           <span className="hint-text truncate text-center">{currentHint}</span>
           <Button
             type="button"
@@ -135,7 +158,7 @@ export function GameHeader({
             variant="ghost"
             aria-label="Show another hint"
             className="hint-next"
-            onClick={onRotateHint}
+            onClick={onRotateHintForward}
           >
             <ChevronRight className="size-3.5" aria-hidden="true" />
           </Button>

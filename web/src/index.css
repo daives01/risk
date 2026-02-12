@@ -469,4 +469,8 @@
   .hint-next {
     color: color-mix(in oklab, var(--app-accent), var(--foreground) 20%);
   }
+
+  .hint-prev {
+    color: color-mix(in oklab, var(--app-accent), var(--foreground) 20%);
+  }
 }

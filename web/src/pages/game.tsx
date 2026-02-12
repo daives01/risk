@@ -134,7 +134,7 @@ export default function GamePage() {
     (phase === "Occupy" || (phase === "Attack" && !!state?.pending)) &&
     isMyTurn &&
     !historyOpen;
-  const { hintIndex, setHintIndex } = useRotatingHints({
+  const { hintIndex, rotateHintForward, rotateHintBack } = useRotatingHints({
     hints: ROTATING_HINTS,
     rotationMs: HINT_ROTATION_MS,
   });
@@ -1229,16 +1229,8 @@ export default function GamePage() {
         showSignInCta={showSignInCta}
         loginHref={loginHref}
         currentHint={currentHint}
-        onRotateHint={() => {
-          setHintIndex((prev) => {
-            if (ROTATING_HINTS.length <= 1) return prev;
-            let next = Math.floor(Math.random() * ROTATING_HINTS.length);
-            if (next === prev) {
-              next = (next + 1) % ROTATING_HINTS.length;
-            }
-            return next;
-          });
-        }}
+        onRotateHintForward={rotateHintForward}
+        onRotateHintBack={rotateHintBack}
         controlsDisabled={controlsDisabled}
         placeCount={placeCount}
         reinforcementDraftCount={reinforcementDrafts.length}

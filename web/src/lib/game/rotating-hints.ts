@@ -4,6 +4,7 @@ export const ROTATING_HINTS = [
   "Press H to open the game history",
   "Press C to open and close your cards",
   "Press ? to view available keyboard shortcuts",
+  "Press I to better explore the map",
   "Use the arrow keys to increase/decrease troop counts",
   "Use the number row to set troop count, dice count, etc",
   "Arrow keys adjust troop counts during attacks and fortifies",
