@@ -1,20 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
-import { ChevronRight, History, Layers, Pause, Play, SkipBack, SkipForward, SlidersHorizontal } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useLocation, useParams } from "react-router-dom";
 import type { Id } from "@backend/_generated/dataModel";
 import { defaultRuleset } from "risk-engine";
 import type { Action, CardId, TerritoryId } from "risk-engine";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ShortcutHint } from "@/components/ui/shortcut-hint";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { MapCanvas } from "@/components/game/map-canvas";
-import { HistoryScrubber } from "@/components/game/history-scrubber";
-import { GameChatCard, GameEventsCard, GamePlayersCard } from "@/components/game/game-panels";
 import { authClient } from "@/lib/auth-client";
 import { adaptMapDoc, adaptView } from "@/lib/game/adapters";
-import { formatEvent, getPlayerColor, getPlayerName } from "@/lib/game/display";
+import { getPlayerColor, getPlayerName } from "@/lib/game/display";
 import {
   resolveHighlightedTerritoryIds,
   togglePlayerHighlight,
@@ -23,94 +14,29 @@ import {
 } from "@/lib/game/highlighting";
 import { buildPlayerPanelStats } from "@/lib/game/player-stats";
 import { PHASE_COPY } from "@/lib/game/types";
-import { findLastTurnEndForPlayer } from "@/lib/game/history-navigation";
 import type { ChatMessage } from "@/lib/game/types";
 import type { ChatChannel } from "@/lib/game/types";
 import type { ReinforcementDraft } from "@/lib/game/types";
 import { ROTATING_HINTS } from "@/lib/game/rotating-hints";
+import { territorySignature } from "@/lib/game/history-debug";
+import { findAutoTradeSet, type TradeSetsConfig } from "@/lib/game/trade-cards";
+import { formatTurnTimer } from "@/lib/game/turn-timer";
 import { useGameActions } from "@/lib/game/use-game-actions";
 import { useGameRuntimeQueries, useGameViewQueries } from "@/lib/game/use-game-queries";
 import { useGameShortcuts } from "@/lib/game/use-game-shortcuts";
+import { GameHeader } from "@/pages/game/components/GameHeader";
+import { GameMapSection } from "@/pages/game/components/GameMapSection";
+import { GameModals } from "@/pages/game/components/GameModals";
+import { GameSidePanels } from "@/pages/game/components/GameSidePanels";
+import { useEndgameModal } from "@/pages/game/hooks/use-endgame-modal";
+import { useGameAutoAttack } from "@/pages/game/hooks/use-game-auto-attack";
+import { useGameHistory } from "@/pages/game/hooks/use-game-history";
+import { useGameOccupy } from "@/pages/game/hooks/use-game-occupy";
+import { useMapPanelSize } from "@/pages/game/hooks/use-map-panel-size";
+import { useRotatingHints } from "@/pages/game/hooks/use-rotating-hints";
 import { toast } from "sonner";
 
-type TradeSetsConfig = {
-  allowThreeOfAKind: boolean;
-  allowOneOfEach: boolean;
-  wildActsAsAny: boolean;
-};
-
 const HINT_ROTATION_MS = 18000;
-
-function isValidTradeSet(kinds: readonly string[], tradeSets: TradeSetsConfig): boolean {
-  if (kinds.length !== 3) return false;
-
-  const nonWildKinds = kinds.filter((kind) => kind !== "W");
-  const wildCount = kinds.length - nonWildKinds.length;
-
-  if (!tradeSets.wildActsAsAny && wildCount > 0) return false;
-
-  if (tradeSets.allowThreeOfAKind) {
-    const uniqueNonWild = new Set(nonWildKinds);
-    if (uniqueNonWild.size <= 1) return true;
-  }
-
-  if (tradeSets.allowOneOfEach) {
-    const uniqueNonWild = new Set(nonWildKinds);
-    if (uniqueNonWild.size + wildCount >= 3 && uniqueNonWild.size === nonWildKinds.length) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-function findAutoTradeSet(
-  hand: Array<{ cardId: string; kind: string }>,
-  tradeSets: TradeSetsConfig,
-): string[] | null {
-  let bestSelection: string[] | null = null;
-  let bestWildCount = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < hand.length; i++) {
-    for (let j = i + 1; j < hand.length; j++) {
-      for (let k = j + 1; k < hand.length; k++) {
-        const selected = [hand[i]!, hand[j]!, hand[k]!];
-        if (isValidTradeSet(selected.map((card) => card.kind), tradeSets)) {
-          const wildCount = selected.filter((card) => card.kind === "W").length;
-          if (wildCount < bestWildCount) {
-            bestSelection = selected.map((card) => card.cardId);
-            bestWildCount = wildCount;
-          }
-          if (bestWildCount === 0) {
-            return bestSelection;
-          }
-        }
-      }
-    }
-  }
-  return bestSelection;
-}
-
-function formatTurnTimer(ms: number): string {
-  const totalHours = Math.max(0, Math.round(ms / (60 * 60 * 1000)));
-  const days = Math.floor(totalHours / 24);
-  const hours = totalHours % 24;
-  if (days > 0 && hours > 0) return `${days}d ${hours}hr`;
-  if (days > 0) return `${days}d`;
-  return `${hours}hr`;
-}
-
-function territorySignature(territories: Record<string, { ownerId: string; armies: number }> | undefined) {
-  if (!territories) return "none";
-  let checksum = 0;
-  let count = 0;
-  for (const [territoryId, territory] of Object.entries(territories)) {
-    count += 1;
-    checksum = (checksum + territory.armies * 31) | 0;
-    checksum = (checksum + (territory.ownerId.codePointAt(0) ?? 0)) | 0;
-    checksum = (checksum + (territoryId.codePointAt(0) ?? 0)) | 0;
-  }
-  return `${count}:${checksum}`;
-}
 
 export default function GamePage() {
   const HISTORY_PLAYBACK_INTERVAL_MS = 840;
@@ -124,9 +50,7 @@ export default function GamePage() {
     return (window as { __RISK_HISTORY_DEBUG?: boolean }).__RISK_HISTORY_DEBUG === true;
   }, [location.search]);
   const { data: session, isPending: sessionPending } = authClient.useSession();
-  const mapPanelRef = useRef<HTMLDivElement | null>(null);
-  const [mapPanelHeight, setMapPanelHeight] = useState<number | null>(null);
-  const [mapPanelWidth, setMapPanelWidth] = useState<number | null>(null);
+  const { mapPanelRef, mapPanelHeight, mapPanelWidth } = useMapPanelSize();
   const [mapImageWidth, setMapImageWidth] = useState<number | null>(null);
 
   const typedGameId = gameId as Id<"games"> | undefined;
@@ -155,7 +79,6 @@ export default function GamePage() {
   const [selectedTo, setSelectedTo] = useState<string | null>(null);
   const [placeCount, setPlaceCount] = useState(1);
   const [attackDice, setAttackDice] = useState(3);
-  const [occupyMove, setOccupyMove] = useState(1);
   const [fortifyCount, setFortifyCount] = useState(1);
   const [reinforcementDrafts, setReinforcementDrafts] = useState<ReinforcementDraft[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
@@ -166,42 +89,52 @@ export default function GamePage() {
   const [recentAttackEdgeIds, setRecentAttackEdgeIds] = useState<Set<string> | null>(null);
   const recentAttackEventRef = useRef<string | null>(null);
   const recentAttackTimeoutRef = useRef<number | null>(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyPlaying, setHistoryPlaying] = useState(false);
-  const [historyFrameIndex, setHistoryFrameIndex] = useState(0);
   const [suppressTroopDeltas, setSuppressTroopDeltas] = useState(false);
   const [highlightFilter, setHighlightFilter] = useState<HighlightFilter>("none");
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const [autoAttacking, setAutoAttacking] = useState(false);
-  const autoAttackSubmittedVersionRef = useRef<number | null>(null);
   const autoEndFortifyVersionRef = useRef<number | null>(null);
   const optionalTradeAutoOpenRef = useRef<number | null>(null);
   const actionInFlightRef = useRef(false);
-  const [endgameModal, setEndgameModal] = useState<"won" | "lost" | null>(null);
-  const dismissedEndgameRef = useRef(false);
   const troopDeltaResumeTimeoutRef = useRef<number | null>(null);
-  const [hintIndex, setHintIndex] = useState(() => Math.floor(Math.random() * ROTATING_HINTS.length));
-  const hintIntervalRef = useRef<number | null>(null);
   const historyDebugRef = useRef<{ framePos: number; signature: string; staleRun: number } | null>(null);
+  const stopAutoAttackRef = useRef<() => void>(() => undefined);
+  const setOccupyMoveRef = useRef<Dispatch<SetStateAction<number>>>(() => undefined);
 
   const phase = state?.turn.phase ?? "GameOver";
   const isSpectator = !myEnginePlayerId;
   const isMyTurn = !!myEnginePlayerId && !!state && state.turn.currentPlayerId === myEnginePlayerId;
+  const {
+    historyOpen,
+    setHistoryOpen,
+    historyPlaying,
+    setHistoryPlaying,
+    historyFrameIndex,
+    setHistoryFrameIndex,
+    historyFrames,
+    historyEvents,
+    historyMaxIndex,
+    historyAtEnd,
+    historyAttackEdgeIds,
+    activeHistoryEventIndex,
+    historyCount,
+  } = useGameHistory({
+    historyTimeline,
+    timelineActions,
+    graphMap,
+    playerMap,
+    myEnginePlayerId: myEnginePlayerId ?? undefined,
+    playbackIntervalMs: HISTORY_PLAYBACK_INTERVAL_MS,
+  });
   const controlsDisabled = !isMyTurn || isSpectator || submitting || historyOpen;
   const canSetOccupyShortcut =
     !!state?.pending &&
     (phase === "Occupy" || (phase === "Attack" && !!state?.pending)) &&
     isMyTurn &&
     !historyOpen;
-  const historyFrames = useMemo(() => historyTimeline ?? [], [historyTimeline]);
-  const historyCount = historyFrames.length;
-  const historyMaxIndex = Math.max(0, historyCount - 1);
-  const historyAtEnd = historyFrameIndex >= historyMaxIndex;
-  const lastTurnEndIndex = useMemo(
-    () => findLastTurnEndForPlayer(historyFrames, myEnginePlayerId),
-    [historyFrames, myEnginePlayerId],
-  );
-
+  const { hintIndex, setHintIndex } = useRotatingHints({
+    hints: ROTATING_HINTS,
+    rotationMs: HINT_ROTATION_MS,
+  });
   const queuedReinforcementTotal = useMemo(
     () => reinforcementDrafts.reduce((sum, draft) => sum + draft.count, 0),
     [reinforcementDrafts],
@@ -267,7 +200,17 @@ export default function GamePage() {
     if (winningTeamId && myTeamId) return winningTeamId === myTeamId;
     return false;
   }, [myEnginePlayerId, myTeamId, winningPlayerId, winningTeamId]);
-  const isEliminated = !!myEnginePlayerId && state?.players[myEnginePlayerId]?.status === "defeated";
+  const {
+    endgameModal,
+    setEndgameModal,
+    dismissedEndgameRef,
+  } = useEndgameModal({
+    state,
+    historyOpen,
+    isSpectator,
+    isWinner,
+    myEnginePlayerId: myEnginePlayerId ?? undefined,
+  });
   const showTurnTimer = timingMode !== "realtime" && !!turnDeadlineAt;
   const turnTimerLabel = showTurnTimer
     ? remainingTurnMs === 0
@@ -516,7 +459,7 @@ export default function GamePage() {
         if (!options?.preserveAttackDice) {
           setAttackDice(3);
         }
-        setOccupyMove(1);
+        setOccupyMoveRef.current(1);
         setFortifyCount(1);
         setSelectedCardIds(new Set());
       };
@@ -537,8 +480,7 @@ export default function GamePage() {
           resetAfterAction();
         }
       } catch (error) {
-        autoAttackSubmittedVersionRef.current = null;
-        setAutoAttacking(false);
+        stopAutoAttackRef.current();
         toast.error(error instanceof Error ? error.message : "Action failed");
       } finally {
         actionInFlightRef.current = false;
@@ -551,10 +493,33 @@ export default function GamePage() {
     [state, submitActionMutation, typedGameId],
   );
 
-  const stopAutoAttack = useCallback(() => {
-    autoAttackSubmittedVersionRef.current = null;
-    setAutoAttacking(false);
-  }, []);
+  const {
+    autoAttacking,
+    setAutoAttacking,
+    stopAutoAttack,
+    autoAttackSubmittedVersionRef,
+  } = useGameAutoAttack({
+    state,
+    isMyTurn,
+    historyOpen,
+    phase,
+    selectedFrom,
+    selectedTo,
+    submitting,
+    validToIds,
+    submitAction,
+  });
+
+  const { occupyMove, setOccupyMove } = useGameOccupy({
+    pending: state?.pending,
+    isMyTurn,
+    historyOpen,
+    controlsDisabled,
+    phase,
+    submitAction,
+  });
+  stopAutoAttackRef.current = stopAutoAttack;
+  setOccupyMoveRef.current = setOccupyMove;
 
   const handleTerritoryClick = useCallback(
     (territoryId: string) => {
@@ -674,27 +639,6 @@ export default function GamePage() {
   }, [uncommittedReinforcements]);
 
   useEffect(() => {
-    const pending = state?.pending;
-    if (!pending) return;
-    setOccupyMove((prev) => Math.max(pending.minMove, Math.min(pending.maxMove, prev)));
-  }, [state?.pending]);
-
-  useEffect(() => {
-    const pending = state?.pending;
-    if (
-      !pending ||
-      !isMyTurn ||
-      historyOpen ||
-      controlsDisabled ||
-      phase === "GameOver" ||
-      pending.minMove !== pending.maxMove
-    ) {
-      return;
-    }
-    void submitAction({ type: "Occupy", moveArmies: pending.minMove });
-  }, [controlsDisabled, historyOpen, isMyTurn, phase, state?.pending, submitAction]);
-
-  useEffect(() => {
     if (!state || phase !== "Attack") {
       stopAutoAttack();
       return;
@@ -716,47 +660,6 @@ export default function GamePage() {
     const maxDice = Math.max(1, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1));
     setAttackDice((prev) => Math.max(1, Math.min(prev, maxDice)));
   }, [phase, selectedFrom, state]);
-
-  useEffect(() => {
-    if (!autoAttacking) return;
-    if (!state || !isMyTurn || historyOpen || phase !== "Attack" || state.pending) {
-      stopAutoAttack();
-      return;
-    }
-    if (!selectedFrom || !selectedTo || submitting) return;
-    const fromArmies = state.territories[selectedFrom]?.armies ?? 0;
-    if (fromArmies < 4) {
-      stopAutoAttack();
-      return;
-    }
-    if (!validToIds.has(selectedTo)) {
-      stopAutoAttack();
-      return;
-    }
-    if (autoAttackSubmittedVersionRef.current === state.stateVersion) return;
-    autoAttackSubmittedVersionRef.current = state.stateVersion;
-    void submitAction(
-      {
-        type: "Attack",
-        from: selectedFrom as TerritoryId,
-        to: selectedTo as TerritoryId,
-        attackerDice: 3,
-      },
-      { preserveSelection: true, preserveAttackDice: true },
-    );
-  }, [
-    autoAttacking,
-    historyOpen,
-    isMyTurn,
-    phase,
-    selectedFrom,
-    selectedTo,
-    state,
-    stopAutoAttack,
-    submitAction,
-    submitting,
-    validToIds,
-  ]);
 
   useEffect(() => {
     if (!state || !isMyTurn || historyOpen) return;
@@ -824,7 +727,7 @@ export default function GamePage() {
     }
     autoAttackSubmittedVersionRef.current = null;
     setAutoAttacking(true);
-  }, [autoAttacking, stopAutoAttack]);
+  }, [autoAttackSubmittedVersionRef, autoAttacking, setAutoAttacking, stopAutoAttack]);
 
   const handleEndAttackPhase = useCallback(() => {
     stopAutoAttack();
@@ -904,173 +807,15 @@ export default function GamePage() {
     [chatEditingMessageId, deleteGameChatMessageMutation],
   );
 
-  const historyEvents = useMemo(() => {
-    if (!timelineActions?.length) return [];
-    const events: Array<{ key: string; text: string; index: number }> = [];
-    let attackStreak: {
-      key: string;
-      fromId: string;
-      toId: string;
-      fromLabel: string;
-      toLabel: string;
-      count: number;
-      attackerLosses: number;
-      defenderLosses: number;
-      index: number;
-    } | null = null;
-    const flushAttackStreak = () => {
-      if (!attackStreak) return;
-      const lossLabel = `attacker -${attackStreak.attackerLosses}, defender -${attackStreak.defenderLosses}`;
-      const attackLabel = attackStreak.count > 1
-        ? `${attackStreak.fromLabel} attacked ${attackStreak.toLabel} x${attackStreak.count} (${lossLabel})`
-        : `${attackStreak.fromLabel} attacked ${attackStreak.toLabel} (${lossLabel})`;
-      events.push({ key: attackStreak.key, text: attackLabel, index: attackStreak.index });
-      attackStreak = null;
-    };
-
-    for (const action of timelineActions) {
-      for (const [eventIndex, event] of action.events.entries()) {
-        if (event.type === "AttackResolved") {
-          const from = String(event.from ?? "");
-          const to = String(event.to ?? "");
-          const fromLabel = graphMap?.territories[from]?.name ?? from;
-          const toLabel = graphMap?.territories[to]?.name ?? to;
-          const nextKey = `${action._id}-${eventIndex}`;
-          const attackerLosses = Number(event.attackerLosses ?? 0);
-          const defenderLosses = Number(event.defenderLosses ?? 0);
-          if (!attackStreak) {
-            attackStreak = {
-              key: nextKey,
-              fromId: from,
-              toId: to,
-              fromLabel,
-              toLabel,
-              count: 1,
-              attackerLosses,
-              defenderLosses,
-              index: action.index,
-            };
-          } else if (attackStreak.fromId === from && attackStreak.toId === to) {
-            attackStreak.count += 1;
-            attackStreak.attackerLosses += attackerLosses;
-            attackStreak.defenderLosses += defenderLosses;
-          } else {
-            flushAttackStreak();
-            attackStreak = {
-              key: nextKey,
-              fromId: from,
-              toId: to,
-              fromLabel,
-              toLabel,
-              count: 1,
-              attackerLosses,
-              defenderLosses,
-              index: action.index,
-            };
-          }
-          continue;
-        }
-        flushAttackStreak();
-        events.push({
-          key: `${action._id}-${eventIndex}`,
-          text: formatEvent(event, playerMap, graphMap),
-          index: action.index,
-        });
-      }
-    }
-    flushAttackStreak();
-    return events.slice(-80).reverse();
-  }, [graphMap, playerMap, timelineActions]);
-
-  const activeHistoryEventIndex = useMemo(() => {
-    if (!historyOpen) return null;
-    return historyFrames[historyFrameIndex]?.index ?? null;
-  }, [historyFrameIndex, historyFrames, historyOpen]);
-
-  const historyAttackEdgeIds = useMemo(() => {
-    if (!timelineActions?.length) return null;
-    const frame = historyFrames[historyFrameIndex];
-    if (!frame) return null;
-    const action = timelineActions.find((entry) => entry.index === frame.index);
-    if (!action) return null;
-
-    for (let i = action.events.length - 1; i >= 0; i -= 1) {
-      const event = action.events[i];
-      if (event?.type !== "AttackResolved") continue;
-      const from = typeof event.from === "string" ? event.from : null;
-      const to = typeof event.to === "string" ? event.to : null;
-      if (!from || !to) continue;
-      const edgeKey = from < to ? `${from}|${to}` : `${to}|${from}`;
-      return new Set([edgeKey]);
-    }
-
-    return null;
-  }, [historyFrameIndex, historyFrames, timelineActions]);
-
   const resolvePlayerColor = useCallback(
     (playerId: string, turnOrder: string[]) => getPlayerColor(playerId, playerMap, turnOrder),
     [playerMap],
   );
 
   useEffect(() => {
-    if (!historyOpen) {
-      setHistoryPlaying(false);
-      return;
-    }
-    const maxIndex = Math.max(0, historyCount - 1);
-    setHistoryFrameIndex((prev) => Math.min(prev, maxIndex));
-  }, [historyCount, historyOpen]);
-
-  useEffect(() => {
-    if (!historyOpen) return;
-    setHistoryFrameIndex((prev) => {
-      if (prev !== 0) return prev;
-      return Math.min(lastTurnEndIndex, historyMaxIndex);
-    });
-  }, [historyMaxIndex, historyOpen, lastTurnEndIndex]);
-
-  useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
-
-  useEffect(() => {
-    if (!ROTATING_HINTS.length) return undefined;
-    if (hintIntervalRef.current) {
-      window.clearInterval(hintIntervalRef.current);
-    }
-    hintIntervalRef.current = window.setInterval(() => {
-      setHintIndex((prev) => {
-        if (ROTATING_HINTS.length === 1) return prev;
-        let next = Math.floor(Math.random() * ROTATING_HINTS.length);
-        if (next === prev) {
-          next = (next + 1) % ROTATING_HINTS.length;
-        }
-        return next;
-      });
-    }, HINT_ROTATION_MS);
-    return () => {
-      if (hintIntervalRef.current) {
-        window.clearInterval(hintIntervalRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!historyOpen || !historyPlaying) return;
-    const maxIndex = historyCount - 1;
-    if (maxIndex <= 0) return;
-    const timer = setInterval(() => {
-      setHistoryFrameIndex((prev) => {
-        if (prev >= maxIndex) {
-          setHistoryPlaying(false);
-          return prev;
-        }
-        return prev + 1;
-      });
-    }, HISTORY_PLAYBACK_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [historyCount, historyOpen, historyPlaying, HISTORY_PLAYBACK_INTERVAL_MS]);
 
   useEffect(() => {
     if (!historyOpen) return;
@@ -1141,19 +886,6 @@ export default function GamePage() {
     state?.stateVersion,
   ]);
 
-  useEffect(() => {
-    if (historyOpen || isSpectator || !state) return;
-    if (state.turn.phase !== "GameOver") return;
-    if (endgameModal || dismissedEndgameRef.current) return;
-    if (isWinner) {
-      setEndgameModal("won");
-      return;
-    }
-    if (isEliminated) {
-      setEndgameModal("lost");
-    }
-  }, [endgameModal, historyOpen, isEliminated, isSpectator, isWinner, state]);
-
   useGameShortcuts({
     historyOpen,
     historyAtEnd,
@@ -1210,28 +942,6 @@ export default function GamePage() {
     [displayState, highlightFilter],
   );
   const playerStats = useMemo(() => (displayState ? buildPlayerPanelStats(displayState) : []), [displayState]);
-
-  useLayoutEffect(() => {
-    const node = mapPanelRef.current;
-    if (!node) return;
-    const updateSize = () => {
-      const rect = node.getBoundingClientRect();
-      const widthFallback = rect.width > 0 ? (rect.width * 3) / 4 : 0;
-      const nextHeight = rect.height > 0 ? rect.height : widthFallback;
-      setMapPanelHeight(nextHeight > 0 ? nextHeight : null);
-      setMapPanelWidth(rect.width > 0 ? rect.width : null);
-    };
-    updateSize();
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      const nextHeight = entry.contentRect.height;
-      setMapPanelHeight(nextHeight > 0 ? nextHeight : null);
-      setMapPanelWidth(entry.contentRect.width > 0 ? entry.contentRect.width : null);
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     setSuppressTroopDeltas(true);
@@ -1358,7 +1068,6 @@ export default function GamePage() {
   const resolvedDisplayState = displayState ?? state;
   const displayPhase = resolvedDisplayState.turn.phase;
   const phaseCopy = PHASE_COPY[displayPhase] ?? PHASE_COPY.GameOver;
-  const showPhaseTitle = historyOpen || !["Reinforcement", "Attack", "Fortify"].includes(displayPhase);
   const fortifiesUsedForDisplay = resolvedDisplayState.fortifiesUsedThisTurn ?? 0;
   const fortifiesRemainingForDisplay = Math.max(0, maxFortifiesPerTurn - fortifiesUsedForDisplay);
   const fortifyRemainingLabel =
@@ -1402,636 +1111,283 @@ export default function GamePage() {
     (phase === "Attack" || phase === "Fortify" || (phase === "Occupy" && !!state.pending));
   const showSignInCta = !sessionPending && !session;
   const loginHref = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`;
-  const renderHistoryControls = () => (
-    <>
-      <Button
-        size="xs"
-        type="button"
-        variant="outline"
-        title="Previous frame ([)"
-        disabled={historyFrameIndex <= 0}
-        onClick={() => setHistoryFrameIndex((prev) => Math.max(0, prev - 1))}
-      >
-        <SkipBack className="size-4" />
-      </Button>
-      <Button
-        size="xs"
-        type="button"
-        variant="outline"
-        title="Play/Pause (P)"
-        disabled={historyAtEnd}
-        onClick={() => setHistoryPlaying((prev) => !prev)}
-      >
-        {historyPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
-      </Button>
-      <Button
-        size="xs"
-        type="button"
-        variant="outline"
-        title="Next frame (])"
-        disabled={historyAtEnd}
-        onClick={() => setHistoryFrameIndex((prev) => Math.min(historyMaxIndex, prev + 1))}
-      >
-        <SkipForward className="size-4" />
-      </Button>
-      <Button
-        size="xs"
-        type="button"
-        variant="outline"
-        title="Reset history (R)"
-        onClick={() => {
-          setHistoryFrameIndex(0);
-          setHistoryPlaying(false);
-        }}
-      >
-        Reset
-      </Button>
-      <span className="rounded border bg-background/70 px-2 py-1 text-xs text-muted-foreground">
-        {historyFrameIndex + 1}/{historyCount}
-      </span>
-    </>
-  );
-  const renderHistoryScrubber = () => (
-    <HistoryScrubber
-      min={0}
-      max={historyMaxIndex}
-      value={historyFrameIndex}
-      onChange={(value) => {
-        setHistoryFrameIndex(value);
-        setHistoryPlaying(false);
-      }}
-    />
-  );
+  const winnerName = winnerId ? getPlayerName(winnerId, playerMap) : "Unknown";
+  const onSelectHistoryEvent = (index: number) => {
+    const frameIndex = historyFrames.findIndex((frame) => frame.index === index);
+    if (frameIndex < 0) return;
+    setHistoryFrameIndex(frameIndex);
+    setHistoryPlaying(false);
+  };
+  const battleOverlay =
+    !historyOpen && isMyTurn && (phase === "Occupy" || (phase === "Attack" && !!state.pending)) && state.pending
+      ? {
+        mode: "occupy" as const,
+        fromTerritoryId: state.pending.from,
+        toTerritoryId: state.pending.to,
+        fromLabel: graphMap.territories[state.pending.from]?.name ?? state.pending.from,
+        toLabel: graphMap.territories[state.pending.to]?.name ?? state.pending.to,
+        occupyMove,
+        minMove: state.pending.minMove,
+        maxMove: state.pending.maxMove,
+        disabled: controlsDisabled,
+        onSetOccupyMove: setOccupyMove,
+        onSubmitOccupy: () => {
+          void submitAction({ type: "Occupy", moveArmies: occupyMove });
+        },
+        onSubmitOccupyAll: () => {
+          void submitAction({ type: "Occupy", moveArmies: state.pending?.maxMove ?? occupyMove });
+        },
+      }
+      : !historyOpen && isMyTurn && phase === "Fortify" && selectedFrom && selectedTo
+        ? {
+          mode: "fortify" as const,
+          fromTerritoryId: selectedFrom,
+          toTerritoryId: selectedTo,
+          fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
+          toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
+          fortifyCount,
+          minCount: 1,
+          maxCount: Math.max(1, (state.territories[selectedFrom]?.armies ?? 2) - 1),
+          disabled: controlsDisabled,
+          onSetFortifyCount: setFortifyCount,
+          onSubmitFortify: () => {
+            void submitAction({
+              type: "Fortify",
+              from: selectedFrom as TerritoryId,
+              to: selectedTo as TerritoryId,
+              count: fortifyCount,
+            });
+          },
+          onSubmitFortifyAll: () => {
+            void submitAction({
+              type: "Fortify",
+              from: selectedFrom as TerritoryId,
+              to: selectedTo as TerritoryId,
+              count: Math.max(1, (state.territories[selectedFrom]?.armies ?? 2) - 1),
+            });
+          },
+          onCancelSelection: () => {
+            stopAutoAttack();
+            setSelectedFrom(null);
+            setSelectedTo(null);
+          },
+        }
+        : !historyOpen && isMyTurn && phase === "Attack" && !state.pending && selectedFrom && selectedTo
+          ? {
+            mode: "attack" as const,
+            fromTerritoryId: selectedFrom,
+            toTerritoryId: selectedTo,
+            fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
+            toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
+            attackDice,
+            maxDice: Math.max(0, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1)),
+            autoRunning: autoAttacking,
+            resolving: attackSubmitting,
+            disabled: controlsDisabled,
+            onSetAttackDice: setAttackDice,
+            onResolveAttack: handleResolveAttack,
+            onAutoAttack: handleAutoAttackToggle,
+            onStopAutoAttack: stopAutoAttack,
+            onCancelSelection: () => {
+              stopAutoAttack();
+              setSelectedFrom(null);
+              setSelectedTo(null);
+            },
+          }
+          : null;
 
   return (
     <div className="page-shell soft-grid game-shell overflow-x-hidden">
-      <div className="game-header glass-panel relative flex min-h-12 flex-wrap items-center gap-2 px-2 py-1.5">
-        <div className="flex min-w-0 flex-col">
-          {showPhaseTitle && (
-            <span className="shrink-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              {phaseCopy.title}
-            </span>
-          )}
-          {actionHint && (
-            <span className="turn-hint max-w-[min(52vw,260px)] truncate text-xs font-semibold uppercase tracking-wide">
-              {actionHint}
-            </span>
-          )}
-          {!historyOpen && isMyTurn && phase === "Reinforcement" && (
-            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              {uncommittedReinforcements} left
-            </span>
-          )}
-          {!historyOpen && isMyTurn && phase === "Fortify" && (
-            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{fortifyRemainingLabel}</span>
-          )}
-        </div>
-
-        {!historyOpen && !isMyTurn && displayPhase !== "GameOver" && (
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              It's {getPlayerName(resolvedDisplayState.turn.currentPlayerId, playerMap)}'s turn
-            </span>
-            {showSignInCta && (
-              <Button asChild size="xs" variant="outline">
-                <Link to={loginHref}>Sign in</Link>
-              </Button>
-            )}
-          </div>
+      <GameHeader
+        phaseTitle={phaseCopy.title}
+        actionHint={actionHint}
+        historyOpen={historyOpen}
+        isMyTurn={isMyTurn}
+        phase={phase}
+        hasPendingAttack={!!state.pending}
+        displayPhase={displayPhase}
+        uncommittedReinforcements={uncommittedReinforcements}
+        fortifyRemainingLabel={fortifyRemainingLabel}
+        currentTurnPlayerName={getPlayerName(resolvedDisplayState.turn.currentPlayerId, playerMap)}
+        showSignInCta={showSignInCta}
+        loginHref={loginHref}
+        currentHint={currentHint}
+        onRotateHint={() => {
+          setHintIndex((prev) => {
+            if (ROTATING_HINTS.length <= 1) return prev;
+            let next = Math.floor(Math.random() * ROTATING_HINTS.length);
+            if (next === prev) {
+              next = (next + 1) % ROTATING_HINTS.length;
+            }
+            return next;
+          });
+        }}
+        controlsDisabled={controlsDisabled}
+        placeCount={placeCount}
+        reinforcementDraftCount={reinforcementDrafts.length}
+        onDecreasePlaceCount={() => setPlaceCount((prev) => Math.max(1, prev - 1))}
+        onIncreasePlaceCount={() => setPlaceCount((prev) => Math.min(Math.max(1, uncommittedReinforcements), prev + 1))}
+        onUndoPlacement={handleUndoPlacement}
+        winnerName={winnerName}
+        historyFrameIndex={historyFrameIndex}
+        historyCount={historyCount}
+        historyMaxIndex={historyMaxIndex}
+        historyAtEnd={historyAtEnd}
+        historyPlaying={historyPlaying}
+        onHistoryFrameIndexChange={setHistoryFrameIndex}
+        onToggleHistoryPlaying={() => setHistoryPlaying((prev) => !prev)}
+        onResetHistory={() => {
+          setHistoryFrameIndex(0);
+          setHistoryPlaying(false);
+        }}
+        cardsOpenDisabled={isSpectator || historyOpen}
+        myCardCount={myCardCount}
+        onOpenCards={() => setCardsOpen(true)}
+        onToggleHistory={() => {
+          setHistoryOpen((prev) => !prev);
+          setHistoryPlaying(false);
+        }}
+        historyToggleDisabled={historyCount === 0}
+        onOpenScrubber={() => undefined}
+        renderHistoryScrubber={() => (
+          <input
+            type="range"
+            min={0}
+            max={historyMaxIndex}
+            value={historyFrameIndex}
+            onChange={(event) => {
+              setHistoryFrameIndex(Number(event.target.value));
+              setHistoryPlaying(false);
+            }}
+            className="w-full"
+          />
         )}
-
-        {!historyOpen && !isMyTurn && currentHint && (
-          <div className="absolute left-1/2 hidden w-[min(60vw,640px)] -translate-x-1/2 items-center justify-center gap-2 text-xs text-muted-foreground md:flex">
-            <span className="hint-text truncate text-center">{currentHint}</span>
-            <Button
-              type="button"
-              size="icon-xs"
-              variant="ghost"
-              aria-label="Show another hint"
-              className="hint-next"
-              onClick={() => {
-                setHintIndex((prev) => {
-                  if (ROTATING_HINTS.length <= 1) return prev;
-                  let next = Math.floor(Math.random() * ROTATING_HINTS.length);
-                  if (next === prev) {
-                    next = (next + 1) % ROTATING_HINTS.length;
-                  }
-                  return next;
-                });
-              }}
-            >
-              <ChevronRight className="size-3.5" aria-hidden="true" />
-            </Button>
-          </div>
-        )}
-
-        {!historyOpen && isMyTurn && phase === "Reinforcement" && (
-          <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-sm">
-            <Button
-              size="xs"
-              type="button"
-              variant="outline"
-              disabled={controlsDisabled || uncommittedReinforcements <= 0 || placeCount <= 1}
-              onClick={() => setPlaceCount((prev) => Math.max(1, prev - 1))}
-            >
-              -
-            </Button>
-            <span className="inline-flex min-w-8 items-center justify-center rounded border bg-background/80 px-2 py-1 font-semibold">
-              {placeCount}
-            </span>
-            <Button
-              size="xs"
-              type="button"
-              variant="outline"
-              disabled={controlsDisabled || uncommittedReinforcements <= 0 || placeCount >= uncommittedReinforcements}
-              onClick={() => setPlaceCount((prev) => Math.min(Math.max(1, uncommittedReinforcements), prev + 1))}
-            >
-              +
-            </Button>
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              disabled={controlsDisabled || reinforcementDrafts.length === 0}
-              onClick={handleUndoPlacement}
-            >
-              Undo
-            </Button>
-          </div>
-        )}
-
-        {displayPhase === "GameOver" && (
-          <span className="shrink-0 rounded border bg-background/70 px-2 py-1 text-sm">
-            {winnerId ? getPlayerName(winnerId, playerMap) : "Unknown"}
-          </span>
-        )}
-
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          {historyOpen && <div className="flex flex-wrap items-center gap-1.5">{renderHistoryControls()}</div>}
-          <TooltipProvider>
-            {!historyOpen && isMyTurn && phase === "Reinforcement" && (
-              <Button
-                type="button"
-                size="sm"
-                title="Confirm placements (Cmd/Ctrl+Enter)"
-                disabled={controlsDisabled || reinforcementDrafts.length === 0}
-                onClick={() => void handleConfirmPlacements()}
-                className="action-cta"
-              >
-                Confirm
-                <ShortcutHint shortcut="mod+enter" />
-              </Button>
-            )}
-            {!historyOpen && isMyTurn && phase === "Attack" && !state.pending && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                title="End attack phase (Cmd/Ctrl+Enter)"
-                disabled={controlsDisabled}
-                onClick={handleEndAttackPhase}
-                className="action-cta"
-              >
-                End Attack
-                <ShortcutHint shortcut="mod+enter" />
-              </Button>
-            )}
-            {!historyOpen && isMyTurn && phase === "Fortify" && (
-              <Button
-                size="sm"
-                variant="outline"
-                title="End turn (Cmd/Ctrl+Enter)"
-                disabled={controlsDisabled}
-                onClick={handleEndTurn}
-                className="action-cta"
-              >
-                End Turn
-                <ShortcutHint shortcut="mod+enter" />
-              </Button>
-            )}
-            {!isSpectator && !historyOpen && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon-sm"
-                    type="button"
-                    className="relative"
-                    aria-label="Open cards"
-                    onClick={() => setCardsOpen(true)}
-                  >
-                    <Layers className="size-4" aria-hidden="true" />
-                    <span className="absolute -right-1 -top-1 rounded-full border border-border/70 bg-background px-1 text-[10px] font-semibold">
-                      {myCardCount}
-                    </span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Open cards (C)</TooltipContent>
-              </Tooltip>
-            )}
-            {historyOpen && (
-              <Popover>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <PopoverTrigger asChild>
-                      <Button size="icon-sm" variant="outline" aria-label="Open timeline scrubber">
-                        <SlidersHorizontal className="size-4" aria-hidden="true" />
-                      </Button>
-                    </PopoverTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent>Timeline scrubber</TooltipContent>
-                </Tooltip>
-                <PopoverContent align="end" side="bottom" className="w-[min(90vw,420px)] p-3">
-                  {renderHistoryScrubber()}
-                </PopoverContent>
-              </Popover>
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant={historyOpen ? "default" : "outline"}
-                  size="icon-sm"
-                  type="button"
-                  aria-label="Toggle history"
-                  onClick={() => {
-                    setHistoryOpen((prev) => !prev);
-                    setHistoryPlaying(false);
-                  }}
-                  disabled={historyCount === 0}
-                >
-                  <History className="size-4" aria-hidden="true" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Toggle history (H)</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-      </div>
+        onConfirmPlacements={() => {
+          void handleConfirmPlacements();
+        }}
+        onEndAttackPhase={handleEndAttackPhase}
+        onEndTurn={handleEndTurn}
+      />
 
       <div className="page-container max-w-none flex flex-1 flex-col gap-4 game-body">
-        <div className="flex min-w-0 flex-col gap-4" data-map-canvas-zone="true">
-          <div
-            className={`flex min-w-0 flex-col ${
-              historyOpen ? "gap-3" : "gap-0"
-            } [@media(orientation:landscape)]:flex-row [@media(orientation:landscape)]:items-start`}
-          >
-            <div ref={mapPanelRef} className="min-w-0 flex-1">
-              <MapCanvas
-                map={graphMap}
-                visual={mapVisual}
-                imageUrl={mapImageUrl}
-                territories={playbackTerritories}
-                turnOrder={resolvedDisplayState.turnOrder}
-                selectedFrom={mapSelectedFrom}
-                selectedTo={mapSelectedTo}
-                validFromIds={!historyOpen && isMyTurn ? validFromIds : new Set()}
-                validToIds={!historyOpen && isMyTurn ? validToIds : new Set()}
-                highlightedTerritoryIds={highlightedTerritoryIds}
-                graphEdgeMode={showActionEdges || !!historyAttackEdgeIds || !!recentAttackEdgeIds ? "action" : "none"}
-                actionEdgeIds={historyAttackEdgeIds ?? recentAttackEdgeIds ?? fortifyConnectedEdgeIds}
-                interactive={!historyOpen && isMyTurn}
-                troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
-                showTroopDeltas={!suppressTroopDeltas}
-                maxHeight={MAP_MAX_HEIGHT}
-                onClickTerritory={handleTerritoryClick}
-                onImageRectChange={(rect) => {
-                  setMapImageWidth(rect.width > 0 ? rect.width : null);
-                }}
-                onClearSelection={() => {
-                  stopAutoAttack();
-                  setSelectedFrom(null);
-                  setSelectedTo(null);
-                }}
-                getPlayerColor={resolvePlayerColor}
-                battleOverlay={
-                  !historyOpen && isMyTurn && (phase === "Occupy" || (phase === "Attack" && !!state.pending)) && state.pending
-                    ? {
-                      mode: "occupy",
-                      fromTerritoryId: state.pending.from,
-                      toTerritoryId: state.pending.to,
-                      fromLabel: graphMap.territories[state.pending.from]?.name ?? state.pending.from,
-                      toLabel: graphMap.territories[state.pending.to]?.name ?? state.pending.to,
-                      occupyMove,
-                      minMove: state.pending.minMove,
-                      maxMove: state.pending.maxMove,
-                      disabled: controlsDisabled,
-                      onSetOccupyMove: setOccupyMove,
-                      onSubmitOccupy: () => {
-                        void submitAction({ type: "Occupy", moveArmies: occupyMove });
-                      },
-                      onSubmitOccupyAll: () => {
-                        void submitAction({ type: "Occupy", moveArmies: state.pending?.maxMove ?? occupyMove });
-                      },
-                    }
-                    : !historyOpen && isMyTurn && phase === "Fortify" && selectedFrom && selectedTo
-                      ? {
-                        mode: "fortify",
-                        fromTerritoryId: selectedFrom,
-                        toTerritoryId: selectedTo,
-                        fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
-                        toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
-                        fortifyCount,
-                        minCount: 1,
-                        maxCount: Math.max(1, (state.territories[selectedFrom]?.armies ?? 2) - 1),
-                        disabled: controlsDisabled,
-                        onSetFortifyCount: setFortifyCount,
-                        onSubmitFortify: () => {
-                          void submitAction({
-                            type: "Fortify",
-                            from: selectedFrom as TerritoryId,
-                            to: selectedTo as TerritoryId,
-                            count: fortifyCount,
-                          });
-                        },
-                        onSubmitFortifyAll: () => {
-                          void submitAction({
-                            type: "Fortify",
-                            from: selectedFrom as TerritoryId,
-                            to: selectedTo as TerritoryId,
-                            count: Math.max(1, (state.territories[selectedFrom]?.armies ?? 2) - 1),
-                          });
-                        },
-                        onCancelSelection: () => {
-                          stopAutoAttack();
-                          setSelectedFrom(null);
-                          setSelectedTo(null);
-                        },
-                      }
-                      : !historyOpen && isMyTurn && phase === "Attack" && !state.pending && selectedFrom && selectedTo
-                        ? {
-                          mode: "attack",
-                          fromTerritoryId: selectedFrom,
-                          toTerritoryId: selectedTo,
-                          fromLabel: graphMap.territories[selectedFrom]?.name ?? selectedFrom,
-                          toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
-                          attackDice,
-                          maxDice: Math.max(0, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1)),
-                          autoRunning: autoAttacking,
-                          resolving: attackSubmitting,
-                          disabled: controlsDisabled,
-                          onSetAttackDice: setAttackDice,
-                          onResolveAttack: handleResolveAttack,
-                          onAutoAttack: handleAutoAttackToggle,
-                          onStopAutoAttack: stopAutoAttack,
-                          onCancelSelection: () => {
-                            stopAutoAttack();
-                            setSelectedFrom(null);
-                            setSelectedTo(null);
-                          },
-                        }
-                        : null
-                }
-              />
-            </div>
-            <div
-              className={`hidden min-h-0 shrink-0 overflow-hidden transition-[width,transform,opacity] duration-220 ease-out [@media(orientation:landscape)]:flex ${historyOpen
-                ? "w-[min(34vw,300px)] translate-x-0 opacity-100"
-                : "pointer-events-none w-0 translate-x-10 opacity-0"
-                }`}
-              style={{
-                height: mapPanelHeight ?? MAP_MAX_HEIGHT,
-                maxHeight: MAP_MAX_HEIGHT,
-              }}
-              aria-hidden={!historyOpen}
-            >
-              <div className="h-full min-h-0 w-[min(34vw,300px)] overflow-hidden">
-                <GameEventsCard
-                  events={historyEvents}
-                  activeIndex={activeHistoryEventIndex}
-                  onSelectEvent={(index) => {
-                    const frameIndex = historyFrames.findIndex((frame) => frame.index === index);
-                    if (frameIndex < 0) return;
-                    setHistoryFrameIndex(frameIndex);
-                    setHistoryPlaying(false);
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div
-            className="mx-auto grid w-full gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
-            style={{
-              maxWidth:
-                mapImageWidth && mapPanelWidth
-                  ? `${Math.min(mapImageWidth, mapPanelWidth)}px`
-                  : mapImageWidth
-                    ? `${mapImageWidth}px`
-                    : mapPanelWidth
-                      ? `${mapPanelWidth}px`
-                      : undefined,
+        <GameMapSection
+          mapPanelRef={mapPanelRef}
+          mapPanelHeight={mapPanelHeight}
+          mapPanelWidth={mapPanelWidth}
+          mapImageWidth={mapImageWidth}
+          mapMaxHeight={MAP_MAX_HEIGHT}
+          graphMap={graphMap}
+          mapVisual={mapVisual}
+          mapImageUrl={mapImageUrl}
+          playbackTerritories={playbackTerritories}
+          resolvedDisplayState={resolvedDisplayState}
+          mapSelectedFrom={mapSelectedFrom}
+          mapSelectedTo={mapSelectedTo}
+          historyOpen={historyOpen}
+          isMyTurn={isMyTurn}
+          validFromIds={validFromIds}
+          validToIds={validToIds}
+          highlightedTerritoryIds={highlightedTerritoryIds}
+          showActionEdges={showActionEdges}
+          historyAttackEdgeIds={historyAttackEdgeIds}
+          recentAttackEdgeIds={recentAttackEdgeIds}
+          fortifyConnectedEdgeIds={fortifyConnectedEdgeIds}
+          troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
+          suppressTroopDeltas={suppressTroopDeltas}
+          onTerritoryClick={handleTerritoryClick}
+          onMapImageRectChange={(rect) => {
+            setMapImageWidth(rect.width > 0 ? rect.width : null);
+          }}
+          onClearSelection={() => {
+            stopAutoAttack();
+            setSelectedFrom(null);
+            setSelectedTo(null);
+          }}
+          getPlayerColor={resolvePlayerColor}
+          battleOverlay={battleOverlay}
+          historyEvents={historyEvents}
+          activeHistoryEventIndex={activeHistoryEventIndex}
+          onSelectHistoryEvent={onSelectHistoryEvent}
+        />
+        <div
+          className="mx-auto grid w-full gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+          style={{
+            maxWidth:
+              mapImageWidth && mapPanelWidth
+                ? `${Math.min(mapImageWidth, mapPanelWidth)}px`
+                : mapImageWidth
+                  ? `${mapImageWidth}px`
+                  : mapPanelWidth
+                    ? `${mapPanelWidth}px`
+                    : undefined,
+          }}
+        >
+          <GameSidePanels
+            playerStats={playerStats}
+            resolvedDisplayState={resolvedDisplayState}
+            playerMap={playerMap}
+            teamModeEnabled={!!view.teamModeEnabled}
+            teamNames={teamNames}
+            showTurnTimer={showTurnTimer}
+            turnTimerLabel={turnTimerLabel}
+            highlightFilter={highlightFilter}
+            onTogglePlayerHighlight={handleTogglePlayerHighlight}
+            onToggleTeamHighlight={handleToggleTeamHighlight}
+            getPlayerColor={resolvePlayerColor}
+            getPlayerName={getPlayerName}
+            myEnginePlayerId={myEnginePlayerId ?? undefined}
+            canResign={!isSpectator && !historyOpen}
+            onResign={handleResign}
+            chatMessages={chatMessages ?? []}
+            chatChannel={chatChannel}
+            canUseTeamChat={canUseTeamChat}
+            myTeamName={myTeamName}
+            canSendChat={canSendChat}
+            chatDraft={chatDraft}
+            chatEditingMessageId={chatEditingMessageId}
+            onSetChatDraft={setChatDraft}
+            onSelectChannel={(nextChannel) => {
+              setChatChannel(nextChannel);
+              setChatEditingMessageId(null);
+              setChatDraft("");
             }}
-          >
-            {historyOpen && (
-              <div className="h-[25vh] min-h-0 overflow-hidden [@media(orientation:landscape)]:hidden">
-                <GameEventsCard
-                  events={historyEvents}
-                  activeIndex={activeHistoryEventIndex}
-                  onSelectEvent={(index) => {
-                    const frameIndex = historyFrames.findIndex((frame) => frame.index === index);
-                    if (frameIndex < 0) return;
-                    setHistoryFrameIndex(frameIndex);
-                    setHistoryPlaying(false);
-                  }}
-                />
-              </div>
-            )}
-            <div className="space-y-4">
-              <GamePlayersCard
-                playerStats={playerStats}
-                displayState={resolvedDisplayState}
-                playerMap={playerMap}
-                teamModeEnabled={!!view.teamModeEnabled}
-                teamNames={teamNames}
-                showTurnTimer={showTurnTimer}
-                turnTimerLabel={turnTimerLabel}
-                activeHighlight={highlightFilter}
-                onTogglePlayerHighlight={handleTogglePlayerHighlight}
-                onToggleTeamHighlight={handleToggleTeamHighlight}
-                getPlayerColor={resolvePlayerColor}
-                getPlayerName={getPlayerName}
-                myPlayerId={myEnginePlayerId}
-                canResign={!isSpectator && !historyOpen}
-                onResign={handleResign}
-              />
-            </div>
-            <div className="xl:order-last">
-              <GameChatCard
-                messages={chatMessages ?? []}
-                activeChannel={chatChannel}
-                teamGameEnabled={!!view.teamModeEnabled}
-                teamAvailable={canUseTeamChat}
-                activeTeamName={myTeamName}
-                canSend={canSendChat}
-                draftText={chatDraft}
-                editingMessageId={chatEditingMessageId}
-                onSetDraftText={setChatDraft}
-                onSelectChannel={(nextChannel) => {
-                  setChatChannel(nextChannel);
-                  setChatEditingMessageId(null);
-                  setChatDraft("");
-                }}
-                onStartEditMessage={handleStartEditChatMessage}
-                onCancelEditMessage={handleCancelEditChatMessage}
-                onDeleteMessage={(messageId) => {
-                  void handleDeleteChatMessage(messageId);
-                }}
-                onSend={() => {
-                  void handleSendChatMessage();
-                }}
-              />
-            </div>
-          </div>
+            onStartEditMessage={handleStartEditChatMessage}
+            onCancelEditMessage={handleCancelEditChatMessage}
+            onDeleteMessage={(messageId) => {
+              void handleDeleteChatMessage(messageId);
+            }}
+            onSendMessage={() => {
+              void handleSendChatMessage();
+            }}
+          />
         </div>
       </div>
-
-      <div className="fixed bottom-4 right-4 z-40">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={shortcutsOpen ? "default" : "outline"}
-                size="icon-sm"
-                type="button"
-                aria-label="Toggle keyboard shortcuts"
-                onClick={() => setShortcutsOpen((prev) => !prev)}
-              >
-                ?
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Keyboard shortcuts (?)</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
-      {shortcutsOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/65 p-4 backdrop-blur-[1px]">
-          <Card className="glass-panel w-full max-w-md border border-border/70 py-0 shadow-xl">
-            <CardContent className="space-y-4 p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <p className="text-base font-semibold">Keyboard Shortcuts</p>
-                  <p className="text-sm text-muted-foreground">Quick controls for your turn.</p>
-                </div>
-                <Button size="xs" variant="outline" type="button" onClick={() => setShortcutsOpen(false)}>
-                  Close
-                </Button>
-              </div>
-              <div className="space-y-1.5 text-sm">
-                <p><span className="font-semibold">1-9</span>: Set active troop/dice count</p>
-                <p><span className="font-semibold">↑/↓</span>: Increase or decrease troop/dice counts</p>
-                <p><span className="font-semibold">U</span>: Undo last placement</p>
-                <p><span className="font-semibold">C</span>: Open cards</p>
-                <p><span className="font-semibold">?</span>: Toggle this help</p>
-                <p><span className="font-semibold">H</span>: Toggle history</p>
-                <p><span className="font-semibold">Cmd/Ctrl + Enter</span>: Confirm or end phase</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {cardsOpen && myHand && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/65 p-4 backdrop-blur-[1px]">
-          <Card className="glass-panel w-full max-w-lg border border-border/70 py-0 shadow-xl">
-            <CardContent className="space-y-4 p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <p className="text-base font-semibold">Cards ({myCardCount})</p>
-                  <p className="text-sm text-muted-foreground">Select 3 to trade.</p>
-                  {mustTradeNow && (
-                    <p className="text-xs uppercase tracking-wide text-destructive">
-                      Trade required at {forcedTradeHandSize}+ cards
-                    </p>
-                  )}
-                </div>
-                <Button size="xs" variant="outline" type="button" onClick={() => setCardsOpen(false)}>
-                  Close
-                </Button>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {myHand.map((card) => {
-                  const selected = selectedCardIds.has(card.cardId);
-                  return (
-                    <button
-                      key={card.cardId}
-                      type="button"
-                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${selected
-                        ? "border-primary bg-primary/15 text-primary"
-                        : "border-border bg-background/80 hover:border-primary/50"
-                        }`}
-                      onClick={() => toggleCard(card.cardId)}
-                    >
-                      {card.kind}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  size="xs"
-                  disabled={controlsDisabled || phase !== "Reinforcement" || selectedCardIds.size !== 3}
-                  onClick={handleTrade}
-                >
-                  Trade 3
-                </Button>
-                {autoTradeCardIds && (
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    disabled={controlsDisabled || submitting}
-                    onClick={() => {
-                      void submitAction({
-                        type: "TradeCards",
-                        cardIds: autoTradeCardIds as CardId[],
-                      });
-                    }}
-                  >
-                    Auto Trade
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {endgameModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/70 p-4 backdrop-blur-[2px]">
-          <Card className="glass-panel w-full max-w-sm border border-border/70 py-0 shadow-xl">
-            <CardContent className="space-y-4 p-5">
-              <div className="space-y-1">
-                <p className="text-base font-semibold">
-                  {endgameModal === "won" ? "You won!" : "You have been eliminated"}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {endgameModal === "won" ? "Victory is yours." : "You are out of the match."}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {endgameModal === "won" ? (
-                  <Button asChild size="sm">
-                    <Link to="/">Go Home</Link>
-                  </Button>
-                ) : null}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  type="button"
-                  onClick={() => {
-                    dismissedEndgameRef.current = true;
-                    setEndgameModal(null);
-                  }}
-                >
-                  Close
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      <GameModals
+        shortcutsOpen={shortcutsOpen}
+        onToggleShortcuts={() => setShortcutsOpen((prev) => !prev)}
+        onCloseShortcuts={() => setShortcutsOpen(false)}
+        cardsOpen={cardsOpen}
+        myHand={myHand}
+        myCardCount={myCardCount}
+        selectedCardIds={selectedCardIds}
+        onToggleCard={toggleCard}
+        mustTradeNow={mustTradeNow}
+        forcedTradeHandSize={forcedTradeHandSize}
+        onCloseCards={() => setCardsOpen(false)}
+        controlsDisabled={controlsDisabled}
+        phase={phase}
+        submitting={submitting}
+        autoTradeCardIds={autoTradeCardIds}
+        onTrade={handleTrade}
+        onAutoTrade={(cardIds) => {
+          void submitAction({ type: "TradeCards", cardIds });
+        }}
+        endgameModal={endgameModal}
+        onDismissEndgame={() => {
+          dismissedEndgameRef.current = true;
+          setEndgameModal(null);
+        }}
+      />
     </div>
   );
 }
