@@ -39,6 +39,7 @@ interface MapCanvasProps {
   maxHeight?: number | string;
   onClickTerritory: (territoryId: string) => void;
   onClearSelection?: () => void;
+  onImageRectChange?: (rect: { width: number; height: number }) => void;
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
   battleOverlay?:
   | {
@@ -116,6 +117,7 @@ export function MapCanvas({
   maxHeight,
   onClickTerritory,
   onClearSelection,
+  onImageRectChange,
   getPlayerColor,
   battleOverlay,
 }: MapCanvasProps) {
@@ -279,6 +281,12 @@ export function MapCanvas({
     observer.observe(node);
     return () => observer.disconnect();
   }, [containerRef]);
+
+  useEffect(() => {
+    if (!onImageRectChange) return;
+    if (!imagePixelSize.width || !imagePixelSize.height) return;
+    onImageRectChange({ width: imagePixelSize.width, height: imagePixelSize.height });
+  }, [imagePixelSize.height, imagePixelSize.width, onImageRectChange]);
 
   useEffect(() => {
     if (!showTroopDeltas) {

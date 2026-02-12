@@ -126,6 +126,8 @@ export default function GamePage() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
   const mapPanelRef = useRef<HTMLDivElement | null>(null);
   const [mapPanelHeight, setMapPanelHeight] = useState<number | null>(null);
+  const [mapPanelWidth, setMapPanelWidth] = useState<number | null>(null);
+  const [mapImageWidth, setMapImageWidth] = useState<number | null>(null);
 
   const typedGameId = gameId as Id<"games"> | undefined;
   const { playerView, publicView } = useGameViewQueries(session, typedGameId);
@@ -1212,18 +1214,20 @@ export default function GamePage() {
   useLayoutEffect(() => {
     const node = mapPanelRef.current;
     if (!node) return;
-    const updateHeight = () => {
+    const updateSize = () => {
       const rect = node.getBoundingClientRect();
       const widthFallback = rect.width > 0 ? (rect.width * 3) / 4 : 0;
       const nextHeight = rect.height > 0 ? rect.height : widthFallback;
       setMapPanelHeight(nextHeight > 0 ? nextHeight : null);
+      setMapPanelWidth(rect.width > 0 ? rect.width : null);
     };
-    updateHeight();
+    updateSize();
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
       const nextHeight = entry.contentRect.height;
       setMapPanelHeight(nextHeight > 0 ? nextHeight : null);
+      setMapPanelWidth(entry.contentRect.width > 0 ? entry.contentRect.width : null);
     });
     observer.observe(node);
     return () => observer.disconnect();
@@ -1686,6 +1690,9 @@ export default function GamePage() {
                 showTroopDeltas={!suppressTroopDeltas}
                 maxHeight={MAP_MAX_HEIGHT}
                 onClickTerritory={handleTerritoryClick}
+                onImageRectChange={(rect) => {
+                  setMapImageWidth(rect.width > 0 ? rect.width : null);
+                }}
                 onClearSelection={() => {
                   stopAutoAttack();
                   setSelectedFrom(null);
@@ -1798,7 +1805,19 @@ export default function GamePage() {
             </div>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div
+            className="mx-auto grid w-full gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+            style={{
+              maxWidth:
+                mapImageWidth && mapPanelWidth
+                  ? `${Math.min(mapImageWidth, mapPanelWidth)}px`
+                  : mapImageWidth
+                    ? `${mapImageWidth}px`
+                    : mapPanelWidth
+                      ? `${mapPanelWidth}px`
+                      : undefined,
+            }}
+          >
             {historyOpen && (
               <div className="h-[25vh] min-h-0 overflow-hidden [@media(orientation:landscape)]:hidden">
                 <GameEventsCard
