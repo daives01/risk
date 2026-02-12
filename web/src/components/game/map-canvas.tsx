@@ -344,6 +344,161 @@ export function MapCanvas({
     };
   }, [getPlayerColor, showTroopDeltas, territories, troopDeltaDurationMs, turnOrder]);
 
+  const battleOverlayContent = battleOverlay ? (
+    <>
+      <div className="flex items-center justify-between gap-2 rounded-md px-1 py-0.5">
+        <p
+          className="cursor-grab text-xs font-medium text-muted-foreground active:cursor-grabbing"
+          onPointerDown={onStartOverlayDrag}
+          onPointerMove={onOverlayDragMove}
+          onPointerUp={onEndOverlayDrag}
+          onPointerCancel={onEndOverlayDrag}
+        >
+          {battleOverlay.mode === "occupy" ? "Move" : battleOverlay.mode === "fortify" ? "Fortify" : "Attack"}
+        </p>
+        {battleOverlay.mode === "attack" && (
+          <span
+            className={cn(
+              "flex min-w-[96px] items-center justify-end gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-opacity",
+              battleOverlay.resolving ? "opacity-100" : "opacity-0",
+            )}
+          >
+            <Loader2 className="size-3 animate-spin" />
+            Attacking...
+          </span>
+        )}
+        {(battleOverlay.mode === "attack" || battleOverlay.mode === "fortify") && (
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            aria-label="Close"
+            onClick={battleOverlay.onCancelSelection}
+            disabled={battleOverlay.disabled}
+            className="size-6"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <X className="size-3.5" />
+          </Button>
+        )}
+      </div>
+      <p className="mt-0.5 text-sm">
+        {battleOverlay.fromLabel ?? "Source"}
+        {battleOverlay.toLabel ? ` -> ${battleOverlay.toLabel}` : " -> select target"}
+      </p>
+      {battleOverlay.mode === "attack" ? (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {[1, 2, 3].map((dice) => (
+            <Button
+              key={dice}
+              type="button"
+              size="xs"
+              variant={battleOverlay.attackDice === dice ? "default" : "outline"}
+              disabled={dice > battleOverlay.maxDice || battleOverlay.resolving}
+              onClick={() => battleOverlay.onSetAttackDice(dice)}
+            >
+              {dice}
+            </Button>
+          ))}
+          <Button
+            type="button"
+            size="xs"
+            onClick={battleOverlay.onResolveAttack}
+            disabled={
+              battleOverlay.disabled ||
+              battleOverlay.resolving ||
+              !battleOverlay.toLabel ||
+              battleOverlay.maxDice < 1
+            }
+          >
+            Attack
+          </Button>
+          <Button
+            type="button"
+            size="xs"
+            className="min-w-16"
+            variant={battleOverlay.autoRunning ? "default" : "outline"}
+            onClick={battleOverlay.onAutoAttack}
+            disabled={
+              battleOverlay.disabled ||
+              battleOverlay.resolving ||
+              !battleOverlay.toLabel ||
+              (!battleOverlay.autoRunning && battleOverlay.maxDice < 3)
+            }
+          >
+            Auto
+          </Button>
+          {battleOverlay.autoRunning && (
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={battleOverlay.onStopAutoAttack}
+            >
+              Stop
+            </Button>
+          )}
+        </div>
+      ) : battleOverlay.mode === "occupy" ? (
+        <div className="mt-2 flex items-center gap-1.5">
+          <NumberStepper
+            value={battleOverlay.occupyMove}
+            min={battleOverlay.minMove}
+            max={battleOverlay.maxMove}
+            onChange={battleOverlay.onSetOccupyMove}
+            disabled={battleOverlay.disabled}
+            size="xs"
+          />
+          <Button
+            type="button"
+            size="xs"
+            onClick={battleOverlay.onSubmitOccupy}
+            disabled={battleOverlay.disabled}
+          >
+            Move
+          </Button>
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            onClick={battleOverlay.onSubmitOccupyAll}
+            disabled={battleOverlay.disabled || battleOverlay.maxMove <= battleOverlay.minMove}
+          >
+            All
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-2 flex items-center gap-1.5">
+          <NumberStepper
+            value={battleOverlay.fortifyCount}
+            min={battleOverlay.minCount}
+            max={battleOverlay.maxCount}
+            onChange={battleOverlay.onSetFortifyCount}
+            disabled={battleOverlay.disabled}
+            size="xs"
+          />
+          <Button
+            type="button"
+            size="xs"
+            onClick={battleOverlay.onSubmitFortify}
+            disabled={battleOverlay.disabled}
+          >
+            Fortify
+          </Button>
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            onClick={battleOverlay.onSubmitFortifyAll}
+            disabled={battleOverlay.disabled || battleOverlay.maxCount < battleOverlay.minCount}
+          >
+            All
+          </Button>
+        </div>
+      )}
+    </>
+  ) : null;
+
   if (!imageUrl) {
     return (
       <div className="flex min-h-[320px] items-center justify-center rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
@@ -546,9 +701,9 @@ export function MapCanvas({
             );
           })}
 
-          {battleOverlay && attackOverlayAnchor && (
+          {battleOverlay && attackOverlayAnchor && battleOverlayContent && (
             <div
-              className="absolute z-20 w-[min(320px,92vw)] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm"
+              className="absolute z-20 hidden w-[min(320px,92vw)] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm sm:block"
               style={{
                 left: `${attackOverlayAnchor.x * 100}%`,
                 top: `${attackOverlayAnchor.y * 100}%`,
@@ -556,161 +711,19 @@ export function MapCanvas({
               }}
               onPointerDown={(event) => event.stopPropagation()}
             >
-              <div className="flex items-center justify-between gap-2 rounded-md px-1 py-0.5">
-                <p
-                  className="cursor-grab text-xs font-medium text-muted-foreground active:cursor-grabbing"
-                  onPointerDown={onStartOverlayDrag}
-                  onPointerMove={onOverlayDragMove}
-                  onPointerUp={onEndOverlayDrag}
-                  onPointerCancel={onEndOverlayDrag}
-                >
-                  {battleOverlay.mode === "occupy" ? "Move" : battleOverlay.mode === "fortify" ? "Fortify" : "Attack"}
-                </p>
-                {battleOverlay.mode === "attack" && (
-                  <span
-                    className={cn(
-                      "flex min-w-[96px] items-center justify-end gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-opacity",
-                      battleOverlay.resolving ? "opacity-100" : "opacity-0",
-                    )}
-                  >
-                    <Loader2 className="size-3 animate-spin" />
-                    Attacking...
-                  </span>
-                )}
-                {(battleOverlay.mode === "attack" || battleOverlay.mode === "fortify") && (
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost"
-                    aria-label="Close"
-                    onClick={battleOverlay.onCancelSelection}
-                    disabled={battleOverlay.disabled}
-                    className="size-6"
-                    onPointerDown={(event) => event.stopPropagation()}
-                  >
-                    <X className="size-3.5" />
-                  </Button>
-                )}
-              </div>
-              <p className="mt-0.5 text-sm">
-                {battleOverlay.fromLabel ?? "Source"}
-                {battleOverlay.toLabel ? ` -> ${battleOverlay.toLabel}` : " -> select target"}
-              </p>
-              {battleOverlay.mode === "attack" ? (
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  {[1, 2, 3].map((dice) => (
-                    <Button
-                      key={dice}
-                      type="button"
-                      size="xs"
-                      variant={battleOverlay.attackDice === dice ? "default" : "outline"}
-                      disabled={dice > battleOverlay.maxDice || battleOverlay.resolving}
-                      onClick={() => battleOverlay.onSetAttackDice(dice)}
-                    >
-                      {dice}
-                    </Button>
-                  ))}
-                  <Button
-                    type="button"
-                    size="xs"
-                    onClick={battleOverlay.onResolveAttack}
-                    disabled={
-                      battleOverlay.disabled ||
-                      battleOverlay.resolving ||
-                      !battleOverlay.toLabel ||
-                      battleOverlay.maxDice < 1
-                    }
-                  >
-                    Attack
-                  </Button>
-                  <Button
-                    type="button"
-                    size="xs"
-                    className="min-w-16"
-                    variant={battleOverlay.autoRunning ? "default" : "outline"}
-                    onClick={battleOverlay.onAutoAttack}
-                    disabled={
-                      battleOverlay.disabled ||
-                      battleOverlay.resolving ||
-                      !battleOverlay.toLabel ||
-                      (!battleOverlay.autoRunning && battleOverlay.maxDice < 3)
-                    }
-                  >
-                    Auto
-                  </Button>
-                  {battleOverlay.autoRunning && (
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="outline"
-                      onClick={battleOverlay.onStopAutoAttack}
-                    >
-                      Stop
-                    </Button>
-                  )}
-                </div>
-              ) : battleOverlay.mode === "occupy" ? (
-                <div className="mt-2 flex items-center gap-1.5">
-                  <NumberStepper
-                    value={battleOverlay.occupyMove}
-                    min={battleOverlay.minMove}
-                    max={battleOverlay.maxMove}
-                    onChange={battleOverlay.onSetOccupyMove}
-                    disabled={battleOverlay.disabled}
-                    size="xs"
-                  />
-                  <Button
-                    type="button"
-                    size="xs"
-                    onClick={battleOverlay.onSubmitOccupy}
-                    disabled={battleOverlay.disabled}
-                  >
-                    Move
-                  </Button>
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="outline"
-                    onClick={battleOverlay.onSubmitOccupyAll}
-                    disabled={battleOverlay.disabled || battleOverlay.maxMove <= battleOverlay.minMove}
-                  >
-                    All
-                  </Button>
-                </div>
-              ) : (
-                <div className="mt-2 flex items-center gap-1.5">
-                  <NumberStepper
-                    value={battleOverlay.fortifyCount}
-                    min={battleOverlay.minCount}
-                    max={battleOverlay.maxCount}
-                    onChange={battleOverlay.onSetFortifyCount}
-                    disabled={battleOverlay.disabled}
-                    size="xs"
-                  />
-                  <Button
-                    type="button"
-                    size="xs"
-                    onClick={battleOverlay.onSubmitFortify}
-                    disabled={battleOverlay.disabled}
-                  >
-                    Fortify
-                  </Button>
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="outline"
-                    onClick={battleOverlay.onSubmitFortifyAll}
-                    disabled={battleOverlay.disabled || battleOverlay.maxCount < battleOverlay.minCount}
-                  >
-                    All
-                  </Button>
-                </div>
-              )}
+              {battleOverlayContent}
             </div>
           )}
         </div>
 
       </div>
+      {battleOverlay && battleOverlayContent && (
+        <div className="mt-2 flex justify-center sm:hidden">
+          <div className="w-[min(320px,92vw)] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm">
+            {battleOverlayContent}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
