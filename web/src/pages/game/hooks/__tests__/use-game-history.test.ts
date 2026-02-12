@@ -36,7 +36,35 @@ describe("useGameHistory helpers", () => {
 
     expect(events[0]?.text).toContain("South America attacked North America");
     expect(events[1]?.text).toContain("North America attacked Europe x2");
-    expect(events[1]?.text).toContain("attacker -1, defender -3");
+    expect(events[1]?.text).toContain("(-1/-3)");
+  });
+
+  test("summarizes multiple reinforcement placements in one action", () => {
+    const timelineActions: GameAction[] = [
+      {
+        _id: "a2",
+        index: 3,
+        events: [
+          { type: "ReinforcementsPlaced", playerId: "p1", territoryId: "na", count: 2 },
+          { type: "ReinforcementsPlaced", playerId: "p1", territoryId: "na", count: 1 },
+          { type: "ReinforcementsPlaced", playerId: "p1", territoryId: "sa", count: 3 },
+        ],
+      },
+    ];
+
+    const events = buildHistoryEvents({
+      timelineActions,
+      graphMap: {
+        territories: {
+          na: { name: "North America" },
+          sa: { name: "South America" },
+        },
+        adjacency: {},
+      },
+      playerMap: [{ displayName: "Alex", enginePlayerId: "p1" }],
+    });
+
+    expect(events[0]?.text).toBe("Alex placed 6 armies: North America +3, South America +3");
   });
 
   test("clamps frame index and chooses latest turn frame when opening history", () => {

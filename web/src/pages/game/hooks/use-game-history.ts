@@ -33,6 +33,12 @@ export function resolveHistoryOpenFrameIndex(
 export function buildHistoryEvents({ timelineActions, graphMap, playerMap }: BuildHistoryEventsOptions) {
   if (!timelineActions?.length) return [];
   const events: Array<{ key: string; text: string; index: number }> = [];
+  const ignoredEventTypes = new Set(["CardDrawn", "TurnEnded", "TurnAdvanced"]);
+  const territoryLabel = (id: string) => graphMap?.territories[id]?.name ?? id;
+  const playerLabel = (id: string | null) =>
+    playerMap.find((player) => player.enginePlayerId === id)?.displayName ?? id ?? "Unknown";
+  const attackLossLabel = (attackerLosses: number, defenderLosses: number) =>
+    `(-${attackerLosses}/-${defenderLosses})`;
   let attackStreak: {
     key: string;
     fromId: string;
@@ -47,21 +53,68 @@ export function buildHistoryEvents({ timelineActions, graphMap, playerMap }: Bui
 
   const flushAttackStreak = () => {
     if (!attackStreak) return;
-    const lossLabel = `attacker -${attackStreak.attackerLosses}, defender -${attackStreak.defenderLosses}`;
+    const lossLabel = attackLossLabel(attackStreak.attackerLosses, attackStreak.defenderLosses);
     const attackLabel = attackStreak.count > 1
-      ? `${attackStreak.fromLabel} attacked ${attackStreak.toLabel} x${attackStreak.count} (${lossLabel})`
-      : `${attackStreak.fromLabel} attacked ${attackStreak.toLabel} (${lossLabel})`;
+      ? `${attackStreak.fromLabel} attacked ${attackStreak.toLabel} x${attackStreak.count} ${lossLabel}`
+      : `${attackStreak.fromLabel} attacked ${attackStreak.toLabel} ${lossLabel}`;
     events.push({ key: attackStreak.key, text: attackLabel, index: attackStreak.index });
     attackStreak = null;
   };
 
   for (const action of timelineActions) {
+    flushAttackStreak();
+    let reinforcementSummary: {
+      key: string;
+      playerId: string | null;
+      total: number;
+      byTerritory: Map<string, number>;
+    } | null = null;
+
+    const flushReinforcements = () => {
+      if (!reinforcementSummary) return;
+      const entries = Array.from(reinforcementSummary.byTerritory.entries()).map(([id, count]) => {
+        return `${territoryLabel(id)} +${count}`;
+      });
+      const summaryText = entries.length > 1
+        ? `${playerLabel(reinforcementSummary.playerId)} placed ${reinforcementSummary.total} armies: ${entries.join(", ")}`
+        : `${playerLabel(reinforcementSummary.playerId)} placed ${reinforcementSummary.total} armies on ${entries[0] ?? "Unknown"}`;
+      events.push({ key: reinforcementSummary.key, text: summaryText, index: action.index });
+      reinforcementSummary = null;
+    };
+
     for (const [eventIndex, event] of action.events.entries()) {
+      if (event.type === "ReinforcementsPlaced") {
+        const territoryId = typeof event.territoryId === "string" ? event.territoryId : "Unknown";
+        const count = Number(event.count ?? 0);
+        const playerId = typeof event.playerId === "string" ? event.playerId : null;
+        if (!reinforcementSummary) {
+          reinforcementSummary = {
+            key: `${action._id}-${eventIndex}`,
+            playerId,
+            total: 0,
+            byTerritory: new Map(),
+          };
+        }
+        reinforcementSummary.total += count;
+        reinforcementSummary.byTerritory.set(
+          territoryId,
+          (reinforcementSummary.byTerritory.get(territoryId) ?? 0) + count,
+        );
+        if (!reinforcementSummary.playerId && playerId) {
+          reinforcementSummary.playerId = playerId;
+        }
+        continue;
+      }
+
+      flushReinforcements();
+      if (ignoredEventTypes.has(String(event.type ?? ""))) {
+        continue;
+      }
       if (event.type === "AttackResolved") {
         const from = String(event.from ?? "");
         const to = String(event.to ?? "");
-        const fromLabel = graphMap?.territories[from]?.name ?? from;
-        const toLabel = graphMap?.territories[to]?.name ?? to;
+        const fromLabel = territoryLabel(from);
+        const toLabel = territoryLabel(to);
         const nextKey = `${action._id}-${eventIndex}`;
         const attackerLosses = Number(event.attackerLosses ?? 0);
         const defenderLosses = Number(event.defenderLosses ?? 0);
@@ -104,6 +157,7 @@ export function buildHistoryEvents({ timelineActions, graphMap, playerMap }: Bui
         index: action.index,
       });
     }
+    flushReinforcements();
   }
 
   flushAttackStreak();
