@@ -19,6 +19,7 @@ export function calculateReinforcements(
   playerId: PlayerId,
   map: GraphMap,
   teamsConfig?: TeamsConfig,
+  turnOrder?: readonly PlayerId[],
 ): ReinforcementResult {
   // Count territories owned by this player
   const ownedTerritories: TerritoryId[] = [];
@@ -38,7 +39,9 @@ export function calculateReinforcements(
   if (map.continents) {
     const ownedSet = new Set<string>(ownedTerritories);
     const playerTeamId = state.players[playerId]?.teamId;
-    const teamBonusMode = teamsConfig?.teamsEnabled && teamsConfig.continentBonusRecipient === "majorityHolderOnTeam";
+    const teamBonusMode =
+      teamsConfig?.teamsEnabled &&
+      teamsConfig.continentBonusRecipient === "majorityHolderOnTeam";
 
     for (const [cid, continent] of Object.entries(map.continents)) {
       if (continent.territoryIds.length === 0) continue;
@@ -54,6 +57,7 @@ export function calculateReinforcements(
       const majorityHolder = findTeamContinentBonusRecipient(
         state,
         continent.territoryIds,
+        turnOrder ?? state.turnOrder,
       );
       if (majorityHolder.teamId === playerTeamId && majorityHolder.playerId === playerId) {
         sources[cid] = continent.bonus;
@@ -68,6 +72,7 @@ export function calculateReinforcements(
 function findTeamContinentBonusRecipient(
   state: GameState,
   territoryIds: readonly TerritoryId[],
+  turnOrder: readonly PlayerId[],
 ): { teamId?: TeamId; playerId?: PlayerId } {
   let owningTeamId: TeamId | undefined;
   const playerCounts = new Map<PlayerId, number>();
@@ -95,7 +100,20 @@ function findTeamContinentBonusRecipient(
 
   let winnerPlayerId: PlayerId | undefined;
   let winnerCount = -1;
-  const sortedPlayers = [...playerCounts.keys()].sort();
+  const turnOrderIndex = new Map<PlayerId, number>(
+    turnOrder.map((pid, index) => [pid, index]),
+  );
+  const sortedPlayers = [...playerCounts.keys()].sort((a, b) => {
+    const aIndex = turnOrderIndex.get(a);
+    const bIndex = turnOrderIndex.get(b);
+    if (aIndex !== undefined && bIndex !== undefined) {
+      if (aIndex !== bIndex) return aIndex - bIndex;
+      return a.localeCompare(b);
+    }
+    if (aIndex !== undefined) return -1;
+    if (bIndex !== undefined) return 1;
+    return a.localeCompare(b);
+  });
   for (const playerId of sortedPlayers) {
     const count = playerCounts.get(playerId) ?? 0;
     if (count > winnerCount) {

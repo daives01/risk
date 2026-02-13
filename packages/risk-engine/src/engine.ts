@@ -908,6 +908,7 @@ function handleEndTurn(
     nextPlayerId,
     map,
     teamsConfig,
+    state.turnOrder,
   );
 
   const reinforcementsGrantedEvent: ReinforcementsGranted = {

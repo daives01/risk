@@ -22,4 +22,5 @@ export const ROTATING_HINTS = [
   "Plan your turn around your best attack lane, not scattered small attacks",
   "Pay attention to who benefits from your attacks. Don’t do someone else’s work",
   "Keep an eye on your opponent's territories. Don't let them hold entire continents",
+  "You get 1 extra troop per 3 territories each turn"
 ];

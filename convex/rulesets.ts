@@ -31,6 +31,9 @@ export const rulesetOverridesValidator = v.object({
       allowPlaceOnTeammate: v.optional(v.boolean()),
       allowFortifyWithTeammate: v.optional(v.boolean()),
       allowFortifyThroughTeammates: v.optional(v.boolean()),
+      continentBonusRecipient: v.optional(
+        v.union(v.literal("majorityHolderOnTeam"), v.literal("individual")),
+      ),
     }),
   ),
 });
@@ -82,7 +85,10 @@ export const effectiveRulesetValidator = v.object({
     allowFortifyWithTeammate: v.boolean(),
     allowFortifyThroughTeammates: v.boolean(),
     winCondition: v.literal("lastTeamStanding"),
-    continentBonusRecipient: v.literal("majorityHolderOnTeam"),
+    continentBonusRecipient: v.union(
+      v.literal("majorityHolderOnTeam"),
+      v.literal("individual"),
+    ),
   }),
 });
 
@@ -105,6 +111,7 @@ export type RulesetOverrides = {
     allowPlaceOnTeammate?: boolean;
     allowFortifyWithTeammate?: boolean;
     allowFortifyThroughTeammates?: boolean;
+    continentBonusRecipient?: "majorityHolderOnTeam" | "individual";
   };
 };
 
@@ -130,7 +137,7 @@ function resolveTeams(teamModeEnabled: boolean, overrides?: RulesetOverrides["te
     allowFortifyWithTeammate: overrides?.allowFortifyWithTeammate ?? true,
     allowFortifyThroughTeammates: overrides?.allowFortifyThroughTeammates ?? true,
     winCondition: "lastTeamStanding",
-    continentBonusRecipient: "majorityHolderOnTeam",
+    continentBonusRecipient: overrides?.continentBonusRecipient ?? "majorityHolderOnTeam",
   };
 }
 
@@ -209,6 +216,9 @@ export function sanitizeRulesetOverrides(overrides?: RulesetOverrides): RulesetO
           : {}),
         ...(overrides.teams.allowFortifyThroughTeammates !== undefined
           ? { allowFortifyThroughTeammates: overrides.teams.allowFortifyThroughTeammates }
+          : {}),
+        ...(overrides.teams.continentBonusRecipient !== undefined
+          ? { continentBonusRecipient: overrides.teams.continentBonusRecipient }
           : {}),
       }
     : undefined;

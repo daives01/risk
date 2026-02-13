@@ -89,7 +89,7 @@ export interface TeamsConfig {
   readonly allowFortifyWithTeammate: boolean;
   readonly allowFortifyThroughTeammates: boolean;
   readonly winCondition: "lastTeamStanding";
-  readonly continentBonusRecipient: "majorityHolderOnTeam";
+  readonly continentBonusRecipient: "majorityHolderOnTeam" | "individual";
 }
 
 // ── Full Config ───────────────────────────────────────────────────────

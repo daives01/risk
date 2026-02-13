@@ -29,6 +29,7 @@ import type * as playerColors from "../playerColors.js";
 import type * as rulesets from "../rulesets.js";
 import type * as seed from "../seed.js";
 import type * as sendEmail from "../sendEmail.js";
+import type * as teamTurnOrder from "../teamTurnOrder.js";
 import type * as typeAdapters from "../typeAdapters.js";
 import type * as userSettings from "../userSettings.js";
 
@@ -60,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   rulesets: typeof rulesets;
   seed: typeof seed;
   sendEmail: typeof sendEmail;
+  teamTurnOrder: typeof teamTurnOrder;
   typeAdapters: typeof typeAdapters;
   userSettings: typeof userSettings;
 }>;

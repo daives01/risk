@@ -31,6 +31,14 @@ describe("rulesets", () => {
     expect(ruleset.teams.allowPlaceOnTeammate).toBe(true);
     expect(ruleset.teams.allowFortifyWithTeammate).toBe(true);
     expect(ruleset.teams.allowFortifyThroughTeammates).toBe(true);
+    expect(ruleset.teams.continentBonusRecipient).toBe("majorityHolderOnTeam");
+  });
+
+  test("allows individual continent bonus recipient override in team mode", () => {
+    const ruleset = resolveRulesetFromOverrides(true, {
+      teams: { continentBonusRecipient: "individual" },
+    });
+    expect(ruleset.teams.continentBonusRecipient).toBe("individual");
   });
 
   test("throws for invalid override bounds", () => {

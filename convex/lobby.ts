@@ -46,6 +46,7 @@ import { distributeInitialArmiesCappedRandom } from "./initialPlacement";
 import { computeTurnDeadlineAt, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
 import { readGraphMap } from "./typeAdapters";
 import { generateUniqueInviteCode } from "./inviteCodes";
+import { createTeamAwareTurnOrder } from "./teamTurnOrder";
 
 function toStoredRuleset(ruleset: RulesetConfig) {
   return JSON.parse(JSON.stringify(ruleset));
@@ -640,8 +641,17 @@ export const startGame = mutation({
     const seed = `${gameId}-${Date.now()}`;
     const rng = createRng({ seed, index: 0 });
 
-    // Shuffle turn order
-    const turnOrder = rng.shuffle(playerIds);
+    // Shuffle turn order (team-aware interleaving in team mode)
+    const playerTeamIdsByPlayerId: Record<string, string | undefined> = {};
+    for (let i = 0; i < playerIds.length; i += 1) {
+      const playerDoc = playerDocs[i]!;
+      playerTeamIdsByPlayerId[playerIds[i]!] = teamMode.enabled
+        ? teamAssignmentsByUserId[playerDoc.userId]
+        : undefined;
+    }
+    const turnOrder = teamMode.enabled
+      ? createTeamAwareTurnOrder(playerIds, playerTeamIdsByPlayerId, rng)
+      : rng.shuffle(playerIds);
 
     // Shuffle territories for assignment
     const shuffledTerritories = rng.shuffle(territoryIds);
@@ -723,6 +733,7 @@ export const startGame = mutation({
       firstPlayer,
       graphMap,
       teamsConfig,
+      turnOrder,
     );
 
     const engineState: GameState = {

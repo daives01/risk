@@ -6,6 +6,7 @@ import { api } from "@backend/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { HelpPopover } from "@/components/ui/help-popover";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,6 +19,7 @@ type RulesetOverridesInput = {
     allowPlaceOnTeammate: boolean;
     allowFortifyWithTeammate: boolean;
     allowFortifyThroughTeammates: boolean;
+    continentBonusRecipient: "majorityHolderOnTeam" | "individual";
   };
 };
 
@@ -65,6 +67,11 @@ const TEAM_ASSIGNMENT_OPTIONS = [
   { value: "balancedRandom", label: "Balanced random" },
 ] as const;
 
+const TEAM_CONTINENT_REWARD_OPTIONS = [
+  { value: "majorityHolderOnTeam", label: "Team majority holder" },
+  { value: "individual", label: "Individual only" },
+] as const;
+
 function RulesSwitch({
   label,
   checked,
@@ -96,16 +103,17 @@ export default function CreateGamePage() {
   const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
   const [maxPlayers, setMaxPlayers] = useState(6);
   const [teamModeEnabled, setTeamModeEnabled] = useState(false);
-  const [teamAssignmentStrategy, setTeamAssignmentStrategy] = useState<"manual" | "balancedRandom">("manual");
+  const [teamAssignmentStrategy, setTeamAssignmentStrategy] = useState<"manual" | "balancedRandom">("balancedRandom");
   const [timingMode, setTimingMode] = useState<GameTimingMode>("realtime");
   const [excludeWeekends, setExcludeWeekends] = useState(false);
   const [fortifyMode, setFortifyMode] = useState<"adjacent" | "connected">("connected");
-  const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | "unlimited">(3);
+  const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | "unlimited">(1);
   const [forcedTradeHandSize, setForcedTradeHandSize] = useState(5);
   const [cardIncrementPreset, setCardIncrementPreset] = useState<keyof typeof CARD_INCREMENT_PRESETS>("classic");
   const [allowPlaceOnTeammate, setAllowPlaceOnTeammate] = useState(true);
   const [allowFortifyWithTeammate, setAllowFortifyWithTeammate] = useState(true);
   const [allowFortifyThroughTeammates, setAllowFortifyThroughTeammates] = useState(true);
+  const [continentBonusRecipient, setContinentBonusRecipient] = useState<"majorityHolderOnTeam" | "individual">("majorityHolderOnTeam");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const sessionUsername =
@@ -178,6 +186,7 @@ export default function CreateGamePage() {
           allowPlaceOnTeammate,
           allowFortifyWithTeammate,
           allowFortifyThroughTeammates,
+          continentBonusRecipient,
         },
       };
       const { gameId } = await createGame({
@@ -409,6 +418,44 @@ export default function CreateGamePage() {
                         ))}
                       </SelectContent>
                     </Select>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="continentBonusRecipient">Team Continent Reward</Label>
+                        <HelpPopover
+                          ariaLabel="Explain team continent reward options"
+                          className="w-80 space-y-2 p-3"
+                          content={(
+                            <>
+                              <p className="font-medium text-foreground">Continent reward options</p>
+                              <p className="text-muted-foreground">
+                                <strong className="text-foreground">Team majority holder:</strong> If your team fully controls a continent, only one teammate gets the full bonus. The teammate with the most territories in that continent wins; ties go to the teammate earlier in turn order.
+                              </p>
+                              <p className="text-muted-foreground">
+                                <strong className="text-foreground">Individual only:</strong> Continent bonuses are personal, you have to hold every territory in a continent to get the bonus.
+                              </p>
+                            </>
+                          )}
+                        />
+                      </div>
+                      <Select
+                        value={continentBonusRecipient}
+                        onValueChange={(value) =>
+                          setContinentBonusRecipient(value as "majorityHolderOnTeam" | "individual")
+                        }
+                      >
+                        <SelectTrigger id="continentBonusRecipient">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TEAM_CONTINENT_REWARD_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
                     <RulesSwitch
                       checked={allowPlaceOnTeammate}

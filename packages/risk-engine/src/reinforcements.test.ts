@@ -20,6 +20,10 @@ const teamsEnabled: TeamsConfig = {
   winCondition: "lastTeamStanding",
   continentBonusRecipient: "majorityHolderOnTeam",
 };
+const teamsEnabledIndividual: TeamsConfig = {
+  ...teamsEnabled,
+  continentBonusRecipient: "individual",
+};
 
 function tid(id: string): TerritoryId {
   return id as TerritoryId;
@@ -241,7 +245,7 @@ describe("calculateReinforcements", () => {
     expect(p2Result.sources.alpha).toBeUndefined();
   });
 
-  test("team-owned continent tie uses deterministic playerId tie-break", () => {
+  test("team-owned continent tie uses turn-order tie-break", () => {
     const state = makeState({
       t1: P1,
       t2: P2,
@@ -257,10 +261,36 @@ describe("calculateReinforcements", () => {
       alpha: { territoryIds: ["t1", "t2"], bonus: 5 },
     });
 
-    const p1Result = calculateReinforcements({ ...state, players }, P1, map, teamsEnabled);
-    const p2Result = calculateReinforcements({ ...state, players }, P2, map, teamsEnabled);
+    const tiedState = { ...state, players, turnOrder: [P2, P1, P3] as const };
+    const p1Result = calculateReinforcements(tiedState, P1, map, teamsEnabled);
+    const p2Result = calculateReinforcements(tiedState, P2, map, teamsEnabled);
 
-    expect(p1Result.sources.alpha).toBe(5);
+    expect(p1Result.sources.alpha).toBeUndefined();
+    expect(p2Result.sources.alpha).toBe(5);
+  });
+
+  test("team mode with individual continent bonus only rewards personal full control", () => {
+    const state = makeState({
+      t1: P1,
+      t2: P2,
+      t3: P1,
+    });
+    const players = {
+      ...state.players,
+      p1: { status: "alive" as const, teamId: TEAM_A },
+      p2: { status: "alive" as const, teamId: TEAM_A },
+      p3: { status: "alive" as const, teamId: TEAM_B },
+    };
+    const map = makeMap(["t1", "t2", "t3"], {
+      alpha: { territoryIds: ["t1", "t2"], bonus: 5 },
+      beta: { territoryIds: ["t3"], bonus: 2 },
+    });
+
+    const p1Result = calculateReinforcements({ ...state, players }, P1, map, teamsEnabledIndividual);
+    const p2Result = calculateReinforcements({ ...state, players }, P2, map, teamsEnabledIndividual);
+
+    expect(p1Result.sources.alpha).toBeUndefined();
     expect(p2Result.sources.alpha).toBeUndefined();
+    expect(p1Result.sources.beta).toBe(2);
   });
 });

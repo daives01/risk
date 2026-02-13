@@ -16,6 +16,7 @@ import { resolveEffectiveRuleset, type RulesetOverrides } from "./rulesets";
 import { computeTurnDeadlineAt, didTurnAdvance, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
 import { readGameState, readGraphMap } from "./typeAdapters";
 import { distributeInitialArmiesCappedRandom } from "./initialPlacement";
+import { createTeamAwareTurnOrder } from "./teamTurnOrder";
 
 const actionValidator = v.union(
   v.object({
@@ -536,6 +537,7 @@ export const resign = mutation({
         nextPlayerId,
         graphMap,
         ruleset.teams,
+        state.turnOrder,
       );
 
       newTurn = {
@@ -764,7 +766,13 @@ function createInitialStateFromSeed(
   const territoryIds = Object.keys(graphMap.territories) as TerritoryId[];
   const setup = ruleset.setup;
   const rng = createRng({ seed: currentState.rng.seed, index: 0 });
-  const turnOrder = rng.shuffle(playerIds);
+  const playerTeamIdsByPlayerId: Record<string, string | undefined> = {};
+  for (const playerId of playerIds) {
+    playerTeamIdsByPlayerId[playerId] = currentState.players[playerId]?.teamId;
+  }
+  const turnOrder = ruleset.teams.teamsEnabled
+    ? createTeamAwareTurnOrder(playerIds, playerTeamIdsByPlayerId, rng)
+    : rng.shuffle(playerIds);
 
   const shuffledTerritories = rng.shuffle(territoryIds);
   const initialArmies = resolveInitialArmies(
@@ -819,6 +827,7 @@ function createInitialStateFromSeed(
     firstPlayer,
     graphMap,
     ruleset.teams,
+    turnOrder,
   );
 
   return {
@@ -902,6 +911,7 @@ function applyResignForTimeline(
       nextPlayerId,
       graphMap,
       ruleset.teams,
+      state.turnOrder,
     );
 
     newTurn = {
