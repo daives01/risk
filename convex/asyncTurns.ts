@@ -70,6 +70,18 @@ function applyTimeoutTurnResolution(args: {
   ruleset: RulesetConfig;
 }) {
   let workingState = args.state;
+  const pickRandomOwnedReinforcementTargets = (remaining: number) => {
+    const ownedTerritoryIds = Object.keys(workingState.territories)
+      .sort()
+      .filter((territoryId) => workingState.territories[territoryId]?.ownerId === args.playerId);
+    if (ownedTerritoryIds.length === 0) return null;
+    const allocations = new Map<TerritoryId, number>();
+    for (let count = 0; count < remaining; count += 1) {
+      const territoryId = ownedTerritoryIds[Math.floor(Math.random() * ownedTerritoryIds.length)] as TerritoryId;
+      allocations.set(territoryId, (allocations.get(territoryId) ?? 0) + 1);
+    }
+    return allocations;
+  };
   const actionLogs: Array<{
     action: Action;
     events: unknown[];
@@ -97,30 +109,36 @@ function applyTimeoutTurnResolution(args: {
     workingState = result.state;
   };
 
+  const endTurnIfPossible = () => {
+    if (workingState.turn.currentPlayerId !== args.playerId) return;
+    if (workingState.turn.phase === "Attack") {
+      apply({ type: "EndAttackPhase" });
+    }
+    if (workingState.turn.phase === "Fortify") {
+      apply({ type: "EndTurn" });
+    }
+  };
+
   switch (workingState.turn.phase) {
     case "Reinforcement": {
       const remaining = workingState.reinforcements?.remaining ?? 0;
       if (remaining > 0) {
-        const ownedTerritoryId = Object.keys(workingState.territories)
-          .sort()
-          .find((territoryId) => workingState.territories[territoryId]?.ownerId === args.playerId);
-        if (!ownedTerritoryId) {
-          return null;
+        const allocations = pickRandomOwnedReinforcementTargets(remaining);
+        if (!allocations) return null;
+        for (const [territoryId, count] of allocations) {
+          apply({
+            type: "PlaceReinforcements",
+            territoryId,
+            count,
+          });
         }
-        apply({
-          type: "PlaceReinforcements",
-          territoryId: ownedTerritoryId as TerritoryId,
-          count: remaining,
-        });
       }
-      if (workingState.turn.currentPlayerId === args.playerId) {
-        apply({ type: "EndTurn" });
-      }
+      endTurnIfPossible();
       break;
     }
     case "Attack":
     case "Fortify": {
-      apply({ type: "EndTurn" });
+      endTurnIfPossible();
       break;
     }
     case "Occupy": {
