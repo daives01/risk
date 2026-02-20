@@ -855,7 +855,7 @@ function createInitialStateFromSeed(
   };
 }
 
-function applyResignForTimeline(
+export function applyResignForTimeline(
   state: GameState,
   playerId: PlayerId,
   graphMap: GraphMap,

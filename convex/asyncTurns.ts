@@ -63,7 +63,7 @@ function resolveTurnRolloverPatch(args: {
   };
 }
 
-function applyTimeoutTurnResolution(args: {
+export function applyTimeoutTurnResolution(args: {
   state: GameState;
   playerId: PlayerId;
   graphMap: GraphMap;
