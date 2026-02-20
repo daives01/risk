@@ -109,7 +109,7 @@ export function GameMapSection({
                   ? "action"
                   : "none"
             }
-            actionEdgeIds={historyAttackEdgeIds ?? recentAttackEdgeIds ?? fortifyConnectedEdgeIds}
+            actionEdgeIds={historyAttackEdgeIds ?? fortifyConnectedEdgeIds ?? recentAttackEdgeIds ?? undefined}
             interactive={!historyOpen && isMyTurn}
             troopDeltaDurationMs={troopDeltaDurationMs}
             showTroopDeltas={!suppressTroopDeltas}

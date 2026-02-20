@@ -980,11 +980,11 @@ export default function GamePage() {
   }, []);
 
   useEffect(() => {
-    if (recentAttackTimeoutRef.current !== null) {
-      window.clearTimeout(recentAttackTimeoutRef.current);
-      recentAttackTimeoutRef.current = null;
-    }
     if (historyOpen) {
+      if (recentAttackTimeoutRef.current !== null) {
+        window.clearTimeout(recentAttackTimeoutRef.current);
+        recentAttackTimeoutRef.current = null;
+      }
       setRecentAttackEdgeIds(null);
       return;
     }
@@ -1002,6 +1002,9 @@ export default function GamePage() {
       if (recentAttackEventRef.current === eventKey) return;
       recentAttackEventRef.current = eventKey;
       const edgeKey = from < to ? `${from}|${to}` : `${to}|${from}`;
+      if (recentAttackTimeoutRef.current !== null) {
+        window.clearTimeout(recentAttackTimeoutRef.current);
+      }
       setRecentAttackEdgeIds(new Set([edgeKey]));
       recentAttackTimeoutRef.current = window.setTimeout(() => {
         setRecentAttackEdgeIds(null);
