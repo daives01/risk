@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
-import { ArrowLeft, Copy, Play, Shuffle, UserRoundPlus, Users, X } from "lucide-react";
+import { ArrowLeft, Copy, Play, Shuffle, Trash2, UserRoundPlus, Users, X } from "lucide-react";
 import { PLAYER_COLOR_NAME_BY_HEX } from "risk-engine";
 import { api } from "@backend/_generated/api";
 import type { Id } from "@backend/_generated/dataModel";
@@ -154,9 +154,11 @@ export default function LobbyPage() {
   const setRulesetOverrides = useMutation(api.lobby.setRulesetOverrides);
   const setPlayerColor = useMutation(api.lobby.setPlayerColor);
   const joinGameByInvite = useMutation(api.lobby.joinGameByInvite);
+  const deleteGame = useMutation(api.lobby.deleteGame);
 
   const [copied, setCopied] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [deletingGame, setDeletingGame] = useState(false);
   const [joining, setJoining] = useState(false);
   const [rebalancing, setRebalancing] = useState(false);
   const [savingRules, setSavingRules] = useState(false);
@@ -296,6 +298,23 @@ export default function LobbyPage() {
       setError(err instanceof Error ? err.message : "Failed to join lobby");
     } finally {
       setJoining(false);
+    }
+  }
+
+  async function handleDeleteGame() {
+    if (!gameId || !isHost || deletingGame) return;
+    const confirmed = window.confirm("Delete this game lobby? This cannot be undone.");
+    if (!confirmed) return;
+
+    setError(null);
+    setDeletingGame(true);
+    try {
+      await deleteGame({ gameId: gameId as Id<"games"> });
+      navigate("/", { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete game");
+    } finally {
+      setDeletingGame(false);
     }
   }
 
@@ -750,6 +769,17 @@ export default function LobbyPage() {
                       : !teamSetupValid
                         ? "Fix Team Setup"
                         : "Start Game"}
+                </Button>
+              )}
+              {isHost && (
+                <Button
+                  variant="destructive"
+                  className="flex-1"
+                  disabled={deletingGame}
+                  onClick={handleDeleteGame}
+                >
+                  <Trash2 className="size-4" />
+                  {deletingGame ? "Deleting..." : "Delete Game"}
                 </Button>
               )}
               {!isInGame && (

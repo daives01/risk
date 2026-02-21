@@ -32,19 +32,6 @@ const TIMING_MODE_OPTIONS: Array<{ value: GameTimingMode; label: string }> = [
   { value: "async_3d", label: "Async (3 days / turn)" },
 ];
 
-const VISIBILITY_OPTIONS: Array<{ value: GameVisibility; label: string; description: string }> = [
-  {
-    value: "unlisted",
-    label: "Invite only",
-    description: "Only players with the invite code can find and join this lobby.",
-  },
-  {
-    value: "public",
-    label: "Public lobby",
-    description: "Anyone will be able to discover this lobby in the public lobbies list.",
-  },
-];
-
 const CARD_INCREMENT_PRESETS = {
   classic: {
     label: "Classic (4,6,8,10,12,15 then +5)",
@@ -117,7 +104,7 @@ export default function CreateGamePage() {
   const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
   const [maxPlayers, setMaxPlayers] = useState(6);
   const [teamModeEnabled, setTeamModeEnabled] = useState(false);
-  const [visibility, setVisibility] = useState<GameVisibility>("unlisted");
+  const [visibility, setVisibility] = useState<GameVisibility>("public");
   const [teamAssignmentStrategy, setTeamAssignmentStrategy] = useState<"manual" | "balancedRandom">("balancedRandom");
   const [timingMode, setTimingMode] = useState<GameTimingMode>("realtime");
   const [excludeWeekends, setExcludeWeekends] = useState(false);
@@ -305,24 +292,16 @@ export default function CreateGamePage() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="visibility">Lobby Visibility</Label>
-                <Select value={visibility} onValueChange={(value) => setVisibility(value as GameVisibility)}>
-                  <SelectTrigger id="visibility">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {VISIBILITY_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {VISIBILITY_OPTIONS.find((option) => option.value === visibility)?.description}
-                </p>
-              </div>
+              <RulesSwitch
+                checked={visibility === "unlisted"}
+                onCheckedChange={(checked) => setVisibility(checked ? "unlisted" : "public")}
+                label="Require invite code to join"
+              />
+              <p className="text-xs text-muted-foreground">
+                {visibility === "public"
+                  ? "Anyone can see and join this game."
+                  : "Only people you send the code to can join this game."}
+              </p>
 
               <div className="space-y-3 rounded-lg border bg-background/70 p-3">
                 <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Turn Timing</p>

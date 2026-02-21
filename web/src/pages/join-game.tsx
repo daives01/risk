@@ -5,6 +5,17 @@ import { api } from "@backend/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { isValidInviteCode, normalizeInviteCode } from "@/lib/invite-codes";
+
+function resolveJoinErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return "Unable to join this game right now.";
+  if (error.message.includes("Invalid invite code")) return "This invite code was not found.";
+  if (error.message.includes("Invite code has expired")) return "This invite code has expired.";
+  if (error.message.includes("Game is not in lobby")) return "This game is no longer accepting joins.";
+  if (error.message.includes("Game not found")) return "This invite is no longer valid.";
+  if (error.message.includes("Game is full")) return "This lobby is full.";
+  return "Unable to join this game right now.";
+}
 
 export default function JoinGamePage() {
   const { code } = useParams<{ code: string }>();
@@ -13,24 +24,32 @@ export default function JoinGamePage() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
 
   const joinGame = useMutation(api.lobby.joinGameByInvite);
+  const normalizedCode = normalizeInviteCode(code ?? "");
+  const hasValidCode = isValidInviteCode(normalizedCode);
 
-  const [error, setError] = useState<string | null>(null);
-  const [joining, setJoining] = useState(true);
-  const attemptedRef = useRef(false);
+  const [joinFailure, setJoinFailure] = useState<{ code: string; message: string } | null>(null);
+  const attemptedCodesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!session || !code || attemptedRef.current) return;
-    attemptedRef.current = true;
+    if (!session || !hasValidCode) return;
+    if (attemptedCodesRef.current.has(normalizedCode)) return;
+    attemptedCodesRef.current.add(normalizedCode);
 
-    joinGame({ code })
+    joinGame({ code: normalizedCode })
       .then(({ gameId }) => {
         navigate(`/g/${gameId}`, { replace: true });
       })
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Failed to join game");
-      })
-      .finally(() => setJoining(false));
-  }, [code, joinGame, navigate, session]);
+        setJoinFailure({ code: normalizedCode, message: resolveJoinErrorMessage(err) });
+      });
+  }, [hasValidCode, joinGame, navigate, normalizedCode, session]);
+
+  const error = !hasValidCode
+    ? "That invite code format is invalid."
+    : joinFailure?.code === normalizedCode
+      ? joinFailure.message
+      : null;
+  const joining = hasValidCode && !error;
 
   if (sessionPending) {
     return <div className="page-shell flex items-center justify-center">Loading...</div>;

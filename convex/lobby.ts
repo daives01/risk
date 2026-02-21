@@ -257,6 +257,57 @@ export const kickPlayer = mutation({
   },
 });
 
+export const deleteGame = mutation({
+  args: {
+    gameId: v.id("games"),
+  },
+  handler: async (ctx, { gameId }) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+
+    const game = await ctx.db.get(gameId);
+    if (!game) throw new Error("Game not found");
+    if (game.status !== "lobby") throw new Error("Only lobby games can be deleted");
+    if (game.createdBy !== String(user._id)) {
+      throw new Error("Only the host can delete this game");
+    }
+
+    const [players, invites, actions, chatMessages] = await Promise.all([
+      ctx.db
+        .query("gamePlayers")
+        .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
+        .collect(),
+      ctx.db
+        .query("gameInvites")
+        .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
+        .collect(),
+      ctx.db
+        .query("gameActions")
+        .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
+        .collect(),
+      ctx.db
+        .query("gameChatMessages")
+        .withIndex("by_gameId_createdAt", (q) => q.eq("gameId", gameId))
+        .collect(),
+    ]);
+
+    for (const player of players) {
+      await ctx.db.delete(player._id);
+    }
+    for (const invite of invites) {
+      await ctx.db.delete(invite._id);
+    }
+    for (const action of actions) {
+      await ctx.db.delete(action._id);
+    }
+    for (const message of chatMessages) {
+      await ctx.db.delete(message._id);
+    }
+
+    await ctx.db.delete(gameId);
+  },
+});
+
 export const getLobby = query({
   args: { gameId: v.id("games") },
   handler: async (ctx, { gameId }) => {

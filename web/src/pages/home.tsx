@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ShortcutHint } from "@/components/ui/shortcut-hint";
 import { Switch } from "@/components/ui/switch";
+import { isValidInviteCode, normalizeInviteCode } from "@/lib/invite-codes";
 import { hasModifierKey, isTypingTarget } from "@/lib/keyboard-shortcuts";
 
 type HomeTab = "home" | "archive" | "account";
@@ -60,6 +61,7 @@ export default function HomePage() {
   const [tab, setTab] = useState<HomeTab>("home");
   const [gamesFilter, setGamesFilter] = useState<GamesFilter>("active");
   const [joinCode, setJoinCode] = useState("");
+  const [joinCodeError, setJoinCodeError] = useState<string | null>(null);
   const [archiveFilter, setArchiveFilter] = useState("");
   const [gamesPage, setGamesPage] = useState(0);
   const [archivePage, setArchivePage] = useState(0);
@@ -246,8 +248,13 @@ export default function HomePage() {
 
   function submitJoinCode(event: React.FormEvent) {
     event.preventDefault();
-    const code = joinCode.trim().toUpperCase();
+    const code = normalizeInviteCode(joinCode);
     if (!code) return;
+    if (!isValidInviteCode(code)) {
+      setJoinCodeError("Enter a valid 6-character invite code.");
+      return;
+    }
+    setJoinCodeError(null);
     navigate(`/join/${code}`);
   }
 
@@ -404,18 +411,24 @@ export default function HomePage() {
                       <Input
                         ref={joinRef}
                         value={joinCode}
-                        onChange={(event) => setJoinCode(event.target.value)}
+                        onChange={(event) => {
+                          setJoinCode(normalizeInviteCode(event.target.value));
+                          if (joinCodeError) setJoinCodeError(null);
+                        }}
                         placeholder="Join code"
                         maxLength={6}
                         className="font-mono uppercase"
                       />
-                      <Button type="submit" variant="outline" disabled={!joinCode.trim()}>
+                      <Button type="submit" variant="outline" disabled={!isValidInviteCode(joinCode)}>
                         Join code
                       </Button>
                       <Button type="button" variant="ghost" onClick={browsePublicLobbies}>
                         Browse lobbies
                       </Button>
                     </form>
+                    {joinCodeError && (
+                      <p className="text-sm text-destructive">{joinCodeError}</p>
+                    )}
                   </section>
 
                   <section ref={gamesListSectionRef} tabIndex={-1} className="space-y-2 rounded-lg border bg-background/75 p-3">
@@ -681,7 +694,7 @@ export default function HomePage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label htmlFor="account-email" className="text-xs text-muted-foreground">Email (read-only)</label>
+                    <label htmlFor="account-email" className="text-xs text-muted-foreground">Email</label>
                     <Input id="account-email" value={session.user.email} disabled />
                   </div>
                   {profileError && <p className="text-sm text-red-400">{profileError}</p>}
