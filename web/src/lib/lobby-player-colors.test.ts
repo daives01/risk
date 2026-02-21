@@ -4,6 +4,25 @@ import { PLAYER_COLOR_PALETTE } from "risk-engine";
 import { canEditLobbyPlayerColor, getLobbyColorOptions } from "./lobby-player-colors";
 
 describe("lobby player color UI helpers", () => {
+  test("orders options from cool to warm for lobby scanning", () => {
+    const options = getLobbyColorOptions([], "u1", {});
+
+    expect(options.map((option) => option.color)).toEqual([
+      "#08008a",
+      "#556dff",
+      "#00bec2",
+      "#005d59",
+      "#209600",
+      "#aafb00",
+      "#ffa210",
+      "#ca0424",
+      "#ff41ff",
+      "#710079",
+      "#593500",
+      "#9a8286",
+    ]);
+  });
+
   test("host can edit every player and non-host can only edit self", () => {
     expect(canEditLobbyPlayerColor(true, "u1", "u2")).toBe(true);
     expect(canEditLobbyPlayerColor(false, "u1", "u1")).toBe(true);

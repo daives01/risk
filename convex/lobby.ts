@@ -41,6 +41,7 @@ import {
   firstAvailablePlayerColor,
   isPlayerColor,
   resolvePlayerColors,
+  resolveTeamAwarePlayerColors,
 } from "./playerColors";
 import { distributeInitialArmiesCappedRandom } from "./initialPlacement";
 import { computeTurnDeadlineAt, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
@@ -479,6 +480,41 @@ export const rebalanceTeams = mutation({
     for (const playerDoc of playerDocs) {
       await ctx.db.patch(playerDoc._id, {
         teamId: assignments[playerDoc.userId]!,
+      });
+    }
+  },
+});
+
+export const reassignPlayerColors = mutation({
+  args: {
+    gameId: v.id("games"),
+  },
+  handler: async (ctx, { gameId }) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+
+    const game = await ctx.db.get(gameId);
+    if (!game) throw new Error("Game not found");
+    if (game.status !== "lobby") throw new Error("Game is not in lobby");
+    if (game.createdBy !== String(user._id)) {
+      throw new Error("Only the host can reassign player colors");
+    }
+
+    const playerDocs = await ctx.db
+      .query("gamePlayers")
+      .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
+      .collect();
+
+    const teamIdByUserId: Record<string, string | undefined> = Object.fromEntries(
+      playerDocs.map((playerDoc) => [playerDoc.userId, playerDoc.teamId]),
+    );
+    const nextColors = game.teamModeEnabled
+      ? resolveTeamAwarePlayerColors(playerDocs, teamIdByUserId)
+      : resolvePlayerColors(playerDocs);
+
+    for (const playerDoc of playerDocs) {
+      await ctx.db.patch(playerDoc._id, {
+        color: nextColors[playerDoc.userId]!,
       });
     }
   },

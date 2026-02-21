@@ -4,6 +4,7 @@ import {
   canEditPlayerColor,
   firstAvailablePlayerColor,
   resolvePlayerColors,
+  resolveTeamAwarePlayerColors,
 } from "./playerColors";
 
 describe("player colors", () => {
@@ -40,5 +41,46 @@ describe("player colors", () => {
       { userId: "u2", joinedAt: 2, color: PLAYER_COLOR_PALETTE[1] },
     ]);
     expect(next).toBe(PLAYER_COLOR_PALETTE[PLAYER_COLOR_PALETTE.length - 1]);
+  });
+
+  test("resolves deterministic unique colors for assigned teams", () => {
+    const players = [
+      { userId: "u1", joinedAt: 1, color: null },
+      { userId: "u2", joinedAt: 2, color: null },
+      { userId: "u3", joinedAt: 3, color: null },
+      { userId: "u4", joinedAt: 4, color: null },
+      { userId: "u5", joinedAt: 5, color: null },
+      { userId: "u6", joinedAt: 6, color: null },
+    ];
+    const teams = {
+      u1: "team-1",
+      u2: "team-1",
+      u3: "team-1",
+      u4: "team-2",
+      u5: "team-2",
+      u6: "team-2",
+    };
+
+    const first = resolveTeamAwarePlayerColors(players, teams);
+    const second = resolveTeamAwarePlayerColors(players, teams);
+
+    expect(first).toEqual(second);
+    expect(new Set(Object.values(first)).size).toBe(players.length);
+  });
+
+  test("falls back to standard resolution when team assignments are missing", () => {
+    const players = [
+      { userId: "u1", joinedAt: 1, color: null },
+      { userId: "u2", joinedAt: 2, color: null },
+      { userId: "u3", joinedAt: 3, color: null },
+    ];
+    const teamAware = resolveTeamAwarePlayerColors(players, {
+      u1: "team-1",
+      u2: undefined,
+      u3: undefined,
+    });
+    const standard = resolvePlayerColors(players);
+
+    expect(teamAware).toEqual(standard);
   });
 });

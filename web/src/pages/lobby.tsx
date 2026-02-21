@@ -123,12 +123,17 @@ function PlayerColorPicker({
                 title={option.name}
                 disabled={option.disabled}
                 onClick={() => onChange(option.color)}
-                className={`size-7 border transition ${
+                className={`relative size-7 overflow-hidden border transition ${
                   selected ? "border-primary ring-2 ring-primary/35" : "border-white/35"
-                } ${option.disabled ? "cursor-not-allowed opacity-30" : ""}`}
+                } ${option.disabled ? "cursor-not-allowed" : ""}`}
                 style={{ backgroundColor: option.color }}
               >
                 <span className="sr-only">{option.name}</span>
+                {option.disabled ? (
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/35" aria-hidden="true">
+                    <X className="size-4 text-white" />
+                  </span>
+                ) : null}
               </button>
             );
           })}
@@ -149,6 +154,7 @@ export default function LobbyPage() {
   const startGame = useMutation(api.lobby.startGame);
   const setPlayerTeam = useMutation(api.lobby.setPlayerTeam);
   const rebalanceTeams = useMutation(api.lobby.rebalanceTeams);
+  const reassignPlayerColors = useMutation(api.lobby.reassignPlayerColors);
   const setTeamCountMutation = useMutation(api.lobby.setTeamCount);
   const setTeamNameMutation = useMutation(api.lobby.setTeamName);
   const setRulesetOverrides = useMutation(api.lobby.setRulesetOverrides);
@@ -161,6 +167,7 @@ export default function LobbyPage() {
   const [deletingGame, setDeletingGame] = useState(false);
   const [joining, setJoining] = useState(false);
   const [rebalancing, setRebalancing] = useState(false);
+  const [reassigningColors, setReassigningColors] = useState(false);
   const [savingRules, setSavingRules] = useState(false);
   const [savingTeams, setSavingTeams] = useState(false);
   const [fortifyMode, setFortifyMode] = useState<"adjacent" | "connected">("connected");
@@ -380,6 +387,19 @@ export default function LobbyPage() {
     }
   }
 
+  async function handleReassignColors() {
+    if (!gameId) return;
+    setError(null);
+    setReassigningColors(true);
+    try {
+      await reassignPlayerColors({ gameId: gameId as Id<"games"> });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reassign colors");
+    } finally {
+      setReassigningColors(false);
+    }
+  }
+
   async function handleColorChange(targetUserId: string, color: string) {
     if (!gameId) return;
     setError(null);
@@ -582,10 +602,15 @@ export default function LobbyPage() {
                     Teams
                   </p>
                   {isHost && (
-                    <Button variant="outline" size="sm" onClick={handleRebalance} disabled={rebalancing}>
-                      <Shuffle className="size-4" />
-                      {rebalancing ? "Rebalancing..." : "Auto rebalance"}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={handleReassignColors} disabled={reassigningColors}>
+                        {reassigningColors ? "Reassigning..." : "Reassign colors"}
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={handleRebalance} disabled={rebalancing}>
+                        <Shuffle className="size-4" />
+                        {rebalancing ? "Rebalancing..." : "Auto rebalance"}
+                      </Button>
+                    </div>
                   )}
                 </div>
                 <div className="flex flex-wrap items-end gap-3">
