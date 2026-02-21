@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
-import { Copy, Play, Shuffle, UserRoundPlus, Users, X } from "lucide-react";
+import { ArrowLeft, Copy, Play, Shuffle, UserRoundPlus, Users, X } from "lucide-react";
 import { PLAYER_COLOR_NAME_BY_HEX } from "risk-engine";
 import { api } from "@backend/_generated/api";
 import type { Id } from "@backend/_generated/dataModel";
@@ -153,9 +153,11 @@ export default function LobbyPage() {
   const setTeamNameMutation = useMutation(api.lobby.setTeamName);
   const setRulesetOverrides = useMutation(api.lobby.setRulesetOverrides);
   const setPlayerColor = useMutation(api.lobby.setPlayerColor);
+  const joinGameByInvite = useMutation(api.lobby.joinGameByInvite);
 
   const [copied, setCopied] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [joining, setJoining] = useState(false);
   const [rebalancing, setRebalancing] = useState(false);
   const [savingRules, setSavingRules] = useState(false);
   const [savingTeams, setSavingTeams] = useState(false);
@@ -223,6 +225,7 @@ export default function LobbyPage() {
   }
 
   const userId = session.user.id;
+  const isInGame = lobby.players.some((player) => player.userId === userId);
   const isHost = lobby.game.createdBy === userId;
   const teamModeEnabled = lobby.game.teamModeEnabled;
   const timingMode = (lobby.game as { timingMode?: "realtime" | "async_1d" | "async_3d" }).timingMode ?? "realtime";
@@ -251,6 +254,7 @@ export default function LobbyPage() {
     teamIds.every((teamId) => (teamSizes[teamId] ?? 0) > 0) &&
     maxTeamSize - minTeamSize <= 1
   );
+  const lobbyIsFull = lobby.players.length >= lobby.game.maxPlayers;
 
   async function copyInvite() {
     if (!inviteUrl) return;
@@ -278,6 +282,20 @@ export default function LobbyPage() {
       await kickPlayer({ gameId: gameId as Id<"games">, userId: targetUserId });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to kick player");
+    }
+  }
+
+  async function handleJoinLobby() {
+    const inviteCode = lobby?.inviteCode;
+    if (!inviteCode || isInGame) return;
+    setError(null);
+    setJoining(true);
+    try {
+      await joinGameByInvite({ code: inviteCode });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to join lobby");
+    } finally {
+      setJoining(false);
     }
   }
 
@@ -403,8 +421,21 @@ export default function LobbyPage() {
       <div className="page-container mx-auto max-w-3xl">
         <Card className="glass-panel border-0 py-0">
           <CardHeader className="py-6">
-            <CardTitle className="hero-title">{lobby.game.name}</CardTitle>
-            <p className="text-sm text-muted-foreground">Waiting for players ({lobby.players.length}/{lobby.game.maxPlayers})</p>
+            <div className="flex items-start gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                title="Back to home"
+                aria-label="Back to home"
+                onClick={() => navigate("/")}
+              >
+                <ArrowLeft className="size-4" />
+              </Button>
+              <div className="min-w-0">
+                <CardTitle className="hero-title">{lobby.game.name}</CardTitle>
+                <p className="text-sm text-muted-foreground">Waiting for players ({lobby.players.length}/{lobby.game.maxPlayers})</p>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-5 pb-6">
             {error && <p className="rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
@@ -721,7 +752,16 @@ export default function LobbyPage() {
                         : "Start Game"}
                 </Button>
               )}
-              <Button variant="outline" onClick={() => navigate("/")}>Leave</Button>
+              {!isInGame && (
+                <Button
+                  className="flex-1"
+                  disabled={joining || lobbyIsFull || !lobby.inviteCode}
+                  onClick={handleJoinLobby}
+                >
+                  <UserRoundPlus className="size-4" />
+                  {joining ? "Joining..." : lobbyIsFull ? "Lobby Full" : "Join Lobby"}
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

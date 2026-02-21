@@ -228,13 +228,18 @@ export default function CreateGamePage() {
       <div className="page-container mx-auto max-w-3xl">
         <Card className="glass-panel border-0 py-0">
           <CardHeader className="py-6">
-            <div className="mb-2">
-              <Button variant="outline" size="sm" onClick={() => navigate("/")}>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                title="Back to home"
+                aria-label="Back to home"
+                onClick={() => navigate("/")}
+              >
                 <ArrowLeft className="size-4" />
-                Back
               </Button>
+              <CardTitle className="hero-title">Create a game</CardTitle>
             </div>
-            <CardTitle className="hero-title">Create a game</CardTitle>
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-5">

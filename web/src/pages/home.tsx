@@ -421,9 +421,6 @@ export default function HomePage() {
                   <section ref={gamesListSectionRef} tabIndex={-1} className="space-y-2 rounded-lg border bg-background/75 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Games</p>
-                      <div className="flex items-center gap-2">
-                        <ShortcutHint shortcut="g" />
-                      </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2">
@@ -581,7 +578,7 @@ export default function HomePage() {
                         </Button>
                       </>
                     ) : (
-                      <p className="text-sm text-muted-foreground">Nothing in progress. Use Create game on the left to start one.</p>
+                      <p className="text-sm text-muted-foreground">Nothing in progress</p>
                     )}
                   </section>
                 </div>
