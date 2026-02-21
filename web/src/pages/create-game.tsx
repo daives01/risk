@@ -187,7 +187,7 @@ export default function CreateGamePage() {
         teams: {
           allowPlaceOnTeammate,
           allowFortifyWithTeammate,
-          allowFortifyThroughTeammates,
+          allowFortifyThroughTeammates: fortifyMode === "connected" && allowFortifyThroughTeammates,
           continentBonusRecipient,
         },
       };
@@ -342,7 +342,13 @@ export default function CreateGamePage() {
                   <Label htmlFor="fortifyMode">Fortify Mode</Label>
                   <Select
                     value={fortifyMode}
-                    onValueChange={(value) => setFortifyMode(value as "adjacent" | "connected")}
+                    onValueChange={(value) => {
+                      const nextMode = value as "adjacent" | "connected";
+                      setFortifyMode(nextMode);
+                      if (nextMode === "adjacent") {
+                        setAllowFortifyThroughTeammates(false);
+                      }
+                    }}
                   >
                     <SelectTrigger id="fortifyMode">
                       <SelectValue />
@@ -484,10 +490,11 @@ export default function CreateGamePage() {
                     <RulesSwitch
                       checked={allowFortifyWithTeammate}
                       onCheckedChange={setAllowFortifyWithTeammate}
-                      label="Allow fortify with teammate"
+                      label="Allow fortifying teammates"
                     />
                     <RulesSwitch
                       checked={allowFortifyThroughTeammates}
+                      disabled={fortifyMode === "adjacent"}
                       onCheckedChange={setAllowFortifyThroughTeammates}
                       label="Allow fortify through teammate chain"
                     />

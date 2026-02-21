@@ -100,6 +100,7 @@ export default function GamePage() {
   const actionInFlightRef = useRef(false);
   const troopDeltaResumeTimeoutRef = useRef<number | null>(null);
   const historyDebugRef = useRef<{ framePos: number; signature: string; staleRun: number } | null>(null);
+  const teamChatDefaultAppliedRef = useRef(false);
   const stopAutoAttackRef = useRef<() => void>(() => undefined);
   const setOccupyMoveRef = useRef<Dispatch<SetStateAction<number>>>(() => undefined);
 
@@ -276,13 +277,7 @@ export default function GamePage() {
 
     if (state.turn.phase === "Fortify") {
       for (const [territoryId, territory] of Object.entries(state.territories)) {
-        if (
-          (
-            territory.ownerId === myEnginePlayerId ||
-            (allowFortifyWithTeammate && isTeammateOwner(territory.ownerId))
-          ) &&
-          territory.armies >= 2
-        ) {
+        if (territory.ownerId === myEnginePlayerId && territory.armies >= 2) {
           ids.add(territoryId);
         }
       }
@@ -290,7 +285,6 @@ export default function GamePage() {
 
     return ids;
   }, [
-    allowFortifyWithTeammate,
     allowPlaceOnTeammate,
     graphMap,
     isTeammateOwner,
@@ -836,6 +830,17 @@ export default function GamePage() {
     setSelectedFrom(null);
     setSelectedTo(null);
   }, [historyOpen, stopAutoAttack]);
+
+  useEffect(() => {
+    if (canUseTeamChat && !teamChatDefaultAppliedRef.current) {
+      setChatChannel("team");
+      teamChatDefaultAppliedRef.current = true;
+      return;
+    }
+    if (!canUseTeamChat) {
+      teamChatDefaultAppliedRef.current = false;
+    }
+  }, [canUseTeamChat]);
 
   useEffect(() => {
     if (chatChannel === "team" && !canUseTeamChat) {

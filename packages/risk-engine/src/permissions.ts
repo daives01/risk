@@ -50,14 +50,10 @@ export function canAttack(
 export function canFortifyFrom(
   actorId: PlayerId,
   territoryOwnerId: PlayerId | "neutral",
-  players: Record<string, PlayerState>,
-  teams?: TeamsConfig,
+  _players: Record<string, PlayerState>,
+  _teams?: TeamsConfig,
 ): boolean {
-  if (territoryOwnerId === actorId) return true;
-  if (!teams?.teamsEnabled) return false;
-  if (territoryOwnerId === "neutral") return false;
-  if (!teams.allowFortifyWithTeammate) return false;
-  return sameTeam(players[actorId]?.teamId, players[territoryOwnerId]?.teamId);
+  return territoryOwnerId === actorId;
 }
 
 /** Can the actor fortify TO this territory? */

@@ -531,7 +531,6 @@ export const resign = mutation({
         .unique();
       const graphMap = readGraphMap(mapDoc!.graphMap);
 
-      const { calculateReinforcements } = await import("risk-engine");
       const reinforcementResult = calculateReinforcements(
         { territories: newTerritories, players: newPlayers } as GameState,
         nextPlayerId,

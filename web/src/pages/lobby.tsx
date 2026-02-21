@@ -179,7 +179,8 @@ export default function LobbyPage() {
   useEffect(() => {
     if (!lobby) return;
     const overrides = lobby.game.rulesetOverrides as Partial<RulesetOverridesInput> | null;
-    setFortifyMode(overrides?.fortify?.fortifyMode ?? "connected");
+    const nextFortifyMode = overrides?.fortify?.fortifyMode ?? "connected";
+    setFortifyMode(nextFortifyMode);
     setMaxFortifiesPerTurn(
       overrides?.fortify?.maxFortifiesPerTurn === undefined
         ? 3
@@ -191,7 +192,9 @@ export default function LobbyPage() {
     );
     setAllowPlaceOnTeammate(overrides?.teams?.allowPlaceOnTeammate ?? true);
     setAllowFortifyWithTeammate(overrides?.teams?.allowFortifyWithTeammate ?? true);
-    setAllowFortifyThroughTeammates(overrides?.teams?.allowFortifyThroughTeammates ?? true);
+    setAllowFortifyThroughTeammates(
+      nextFortifyMode === "connected" && (overrides?.teams?.allowFortifyThroughTeammates ?? true),
+    );
     setTeamCountDraft(lobby.game.teamCount ?? 2);
     setTeamNameDrafts((lobby.game.teamNames as Record<string, string> | null) ?? {});
   }, [lobby]);
@@ -657,7 +660,13 @@ export default function LobbyPage() {
                   <p className="text-xs text-muted-foreground">Fortify mode</p>
                   <Select
                     value={fortifyMode}
-                    onValueChange={(value) => setFortifyMode(value as "adjacent" | "connected")}
+                    onValueChange={(value) => {
+                      const nextMode = value as "adjacent" | "connected";
+                      setFortifyMode(nextMode);
+                      if (nextMode === "adjacent") {
+                        setAllowFortifyThroughTeammates(false);
+                      }
+                    }}
                     disabled={!isHost}
                   >
                     <SelectTrigger className="h-8 text-xs">
@@ -739,13 +748,13 @@ export default function LobbyPage() {
                     checked={allowFortifyWithTeammate}
                     disabled={!isHost}
                     onCheckedChange={setAllowFortifyWithTeammate}
-                    label="Allow fortify with teammate"
+                    label="Allow fortifying teammates"
                   />
                   <RulesSwitch
                     checked={allowFortifyThroughTeammates}
-                    disabled={!isHost}
+                    disabled={!isHost || fortifyMode === "adjacent"}
                     onCheckedChange={setAllowFortifyThroughTeammates}
-                    label="Allow fortify through teammates"
+                    label="Allow fortify through teammate chain"
                   />
                 </div>
               )}

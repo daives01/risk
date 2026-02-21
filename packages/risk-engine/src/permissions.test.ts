@@ -116,8 +116,8 @@ describe("canFortifyFrom", () => {
     expect(canFortifyFrom(P1, P2, noTeamPlayers)).toBe(false);
   });
 
-  test("allows teammate territory when enabled", () => {
-    expect(canFortifyFrom(P1, P2, teamPlayers, teamsEnabled)).toBe(true);
+  test("rejects teammate territory even when enabled", () => {
+    expect(canFortifyFrom(P1, P2, teamPlayers, teamsEnabled)).toBe(false);
   });
 
   test("rejects teammate territory when disabled", () => {
