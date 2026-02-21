@@ -11,30 +11,58 @@ import { ShortcutHint } from "@/components/ui/shortcut-hint";
 import { Switch } from "@/components/ui/switch";
 import { hasModifierKey, isTypingTarget } from "@/lib/keyboard-shortcuts";
 
-type HomeTab = "overview" | "history" | "account";
+type HomeTab = "home" | "archive" | "account";
+type GamesFilter = "active" | "lobby" | "public";
 
 type MyGame = {
   _id: string;
   name: string;
   status: "lobby" | "active" | "finished";
   result: "won" | "lost" | null;
+  createdAt: number;
+  startedAt: number | null;
+  finishedAt: number | null;
 };
+
+type PublicGame = {
+  _id: string;
+  name: string;
+  status: "lobby" | "active" | "finished";
+  createdAt: number;
+};
+
+const PAGE_SIZE = 5;
+
+function gameRecency(game: MyGame): number {
+  return game.startedAt ?? game.finishedAt ?? game.createdAt;
+}
+
+function gameStatusLabel(status: "active" | "lobby" | "public"): string {
+  if (status === "active") return "Active";
+  if (status === "lobby") return "Lobby";
+  return "Public";
+}
 
 export default function HomePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { data: session, isPending } = authClient.useSession();
   const isAuthenticated = Boolean(session);
+
   const games = useQuery(api.games.listMyGames, isAuthenticated ? {} : "skip") as MyGame[] | undefined;
+  const publicGames = useQuery(api.games.listPublicGames, isAuthenticated ? { limit: 24 } : "skip") as PublicGame[] | undefined;
   const isAdmin = useQuery(api.adminMaps.isCurrentUserAdmin, isAuthenticated ? {} : "skip");
   const settings = useQuery(api.userSettings.getMySettings, isAuthenticated ? {} : "skip");
   const setTurnEmailSetting = useMutation(api.userSettings.setEmailTurnNotificationsEnabled);
 
   const isGamesLoading = games === undefined;
 
-  const [tab, setTab] = useState<HomeTab>("overview");
+  const [tab, setTab] = useState<HomeTab>("home");
+  const [gamesFilter, setGamesFilter] = useState<GamesFilter>("active");
   const [joinCode, setJoinCode] = useState("");
-  const [filter, setFilter] = useState("");
+  const [archiveFilter, setArchiveFilter] = useState("");
+  const [gamesPage, setGamesPage] = useState(0);
+  const [archivePage, setArchivePage] = useState(0);
 
   const [profileUsername, setProfileUsername] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
@@ -51,8 +79,8 @@ export default function HomePage() {
   const [emailSettingError, setEmailSettingError] = useState<string | null>(null);
 
   const joinRef = useRef<HTMLInputElement>(null);
-  const filterRef = useRef<HTMLInputElement>(null);
-  const currentGamesSectionRef = useRef<HTMLElement>(null);
+  const archiveFilterRef = useRef<HTMLInputElement>(null);
+  const gamesListSectionRef = useRef<HTMLElement>(null);
   const currentGameButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const sessionUsername = (session?.user as { username?: string | null } | undefined)?.username ?? "";
@@ -62,39 +90,59 @@ export default function HomePage() {
     setProfileUsername(sessionUsername || session.user.name || "");
   }, [session, sessionUsername]);
 
-  const filteredGames = useMemo(() => {
-    const all = games ?? [];
-    const q = filter.trim().toLowerCase();
-    if (!q) return all;
-    return all.filter((game) => game.name.toLowerCase().includes(q) || game.status.includes(q));
-  }, [games, filter]);
-
-  const currentGames = useMemo(
-    () => (games ?? []).filter((game) => game.status === "active" || game.status === "lobby"),
-    [games],
-  );
-
-  const filteredCurrentGames = useMemo(
-    () => filteredGames.filter((game) => game.status === "active" || game.status === "lobby"),
-    [filteredGames],
-  );
-
-  const filteredPreviousGames = useMemo(
-    () => filteredGames.filter((game) => game.status === "finished"),
-    [filteredGames],
-  );
-
-  const counts = useMemo(() => {
-    const all = games ?? [];
-    return {
-      total: all.length,
-      active: all.filter((game) => game.status === "active").length,
-      lobby: all.filter((game) => game.status === "lobby").length,
-      finished: all.filter((game) => game.status === "finished").length,
-    };
+  const sortedGames = useMemo(() => {
+    return [...(games ?? [])].sort((a, b) => gameRecency(b) - gameRecency(a));
   }, [games]);
 
-  const openGame = useCallback(
+  const myPublicLobbyGames = useMemo(() => {
+    const mine = new Set((games ?? []).map((game) => game._id));
+    return (publicGames ?? []).filter((game) => game.status === "lobby" && !mine.has(game._id));
+  }, [games, publicGames]);
+
+  const continueGame = useMemo(() => {
+    return sortedGames.find((game) => game.status === "active") ?? null;
+  }, [sortedGames]);
+
+  const filteredHomeGames = useMemo(() => {
+    if (gamesFilter === "public") {
+      return myPublicLobbyGames.map((game) => ({
+        _id: game._id,
+        name: game.name,
+        status: "public" as const,
+      }));
+    }
+
+    return sortedGames
+      .filter((game) => game.status === gamesFilter)
+      .map((game) => ({
+        _id: game._id,
+        name: game.name,
+        status: game.status as "active" | "lobby",
+      }));
+  }, [gamesFilter, myPublicLobbyGames, sortedGames]);
+
+  const archiveGames = useMemo(() => {
+    const q = archiveFilter.trim().toLowerCase();
+    const finished = sortedGames.filter((game) => game.status === "finished");
+    if (!q) return finished;
+    return finished.filter((game) => game.name.toLowerCase().includes(q));
+  }, [archiveFilter, sortedGames]);
+
+  const pagedHomeGames = useMemo(() => {
+    const start = gamesPage * PAGE_SIZE;
+    return filteredHomeGames.slice(start, start + PAGE_SIZE);
+  }, [filteredHomeGames, gamesPage]);
+
+  const homePageCount = Math.max(1, Math.ceil(filteredHomeGames.length / PAGE_SIZE));
+
+  const pagedArchiveGames = useMemo(() => {
+    const start = archivePage * PAGE_SIZE;
+    return archiveGames.slice(start, start + PAGE_SIZE);
+  }, [archiveGames, archivePage]);
+
+  const archivePageCount = Math.max(1, Math.ceil(archiveGames.length / PAGE_SIZE));
+
+  const openMyGame = useCallback(
     (game: MyGame) => {
       navigate(game.status === "lobby" ? `/g/${game._id}` : `/play/${game._id}`);
     },
@@ -102,21 +150,45 @@ export default function HomePage() {
   );
 
   const focusCurrentGames = useCallback(() => {
-    setTab("overview");
+    setTab("home");
     requestAnimationFrame(() => {
       const firstButton = currentGameButtonRefs.current[0];
       if (firstButton) {
         firstButton.focus();
         return;
       }
-      currentGamesSectionRef.current?.focus();
+      gamesListSectionRef.current?.focus();
     });
   }, []);
 
   const focusJoin = useCallback(() => {
-    setTab("overview");
+    setTab("home");
     requestAnimationFrame(() => joinRef.current?.focus());
   }, []);
+
+  const browsePublicLobbies = useCallback(() => {
+    setTab("home");
+    setGamesFilter("public");
+    requestAnimationFrame(() => {
+      gamesListSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
+
+  useEffect(() => {
+    setGamesPage(0);
+  }, [gamesFilter]);
+
+  useEffect(() => {
+    setArchivePage(0);
+  }, [archiveFilter]);
+
+  useEffect(() => {
+    if (gamesPage >= homePageCount) setGamesPage(Math.max(0, homePageCount - 1));
+  }, [gamesPage, homePageCount]);
+
+  useEffect(() => {
+    if (archivePage >= archivePageCount) setArchivePage(Math.max(0, archivePageCount - 1));
+  }, [archivePage, archivePageCount]);
 
   useEffect(() => {
     if (!session) return;
@@ -130,8 +202,8 @@ export default function HomePage() {
         if (hasModifierKey(event)) return;
         const key = event.key.toLowerCase();
 
-        if (key === "1") setTab("overview");
-        if (key === "2") setTab("history");
+        if (key === "1") setTab("home");
+        if (key === "2") setTab("archive");
         if (key === "3") setTab("account");
         if (key === "n") navigate("/games/new");
         if (key === "g") {
@@ -142,10 +214,28 @@ export default function HomePage() {
           event.preventDefault();
           focusJoin();
         }
+        if (key === "a") {
+          event.preventDefault();
+          setTab("home");
+          setGamesFilter("active");
+          focusCurrentGames();
+        }
+        if (key === "l") {
+          event.preventDefault();
+          setTab("home");
+          setGamesFilter("lobby");
+          focusCurrentGames();
+        }
+        if (key === "p") {
+          event.preventDefault();
+          setTab("home");
+          setGamesFilter("public");
+          focusCurrentGames();
+        }
         if (key === "/") {
           event.preventDefault();
-          setTab("history");
-          filterRef.current?.focus();
+          setTab("archive");
+          archiveFilterRef.current?.focus();
         }
       }
     };
@@ -248,46 +338,36 @@ export default function HomePage() {
 
   return (
     <div className="page-shell soft-grid">
-      <div className="page-container mx-auto max-w-5xl">
+      <div className="page-container mx-auto max-w-6xl">
         <Card className="glass-panel border-0 py-0">
           <CardHeader className="space-y-4 py-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <CardTitle className="hero-title">
-                  <span className="text-primary">Legally Distinct Global Domination</span>
-                </CardTitle>
-              </div>
-              <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-                <Button className="justify-between sm:min-w-40" onClick={() => navigate("/games/new")}>
-                  <span className="inline-flex items-center gap-2">
-                    <Plus className="size-4" /> New Game
-                  </span>
-                  <ShortcutHint shortcut="n" />
-                </Button>
-              </div>
+            <div>
+              <CardTitle className="hero-title">
+                <span className="text-primary">Legally Distinct Global Domination</span>
+              </CardTitle>
             </div>
 
             <div className="grid gap-2 sm:grid-cols-3">
               <button
                 type="button"
-                onClick={() => setTab("overview")}
-                className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${tab === "overview"
+                onClick={() => setTab("home")}
+                className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${tab === "home"
                   ? "border-primary bg-primary/12 text-primary"
                   : "border-border/75 bg-background/70 hover:border-primary/45"
                   }`}
               >
-                <span>Overview</span>
+                <span>Home</span>
                 <ShortcutHint shortcut="1" />
               </button>
               <button
                 type="button"
-                onClick={() => setTab("history")}
-                className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${tab === "history"
+                onClick={() => setTab("archive")}
+                className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${tab === "archive"
                   ? "border-primary bg-primary/12 text-primary"
                   : "border-border/75 bg-background/70 hover:border-primary/45"
                   }`}
               >
-                <span>History</span>
+                <span>Archive</span>
                 <ShortcutHint shortcut="2" />
               </button>
               <button
@@ -305,22 +385,89 @@ export default function HomePage() {
           </CardHeader>
 
           <CardContent className="space-y-4 pb-6">
-            {tab === "overview" && (
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.45fr)_minmax(280px,1fr)]">
-                <div className="space-y-3">
-                  <section ref={currentGamesSectionRef} tabIndex={-1} className="space-y-2 rounded-lg border bg-background/75 p-3">
+            {tab === "home" && (
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.45fr)_minmax(320px,1fr)]">
+                <div className="order-2 space-y-3 lg:order-1">
+                  <section className="space-y-3 rounded-lg border bg-background/75 p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Active + Lobby</p>
+                      <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Quick Actions</p>
+                    </div>
+
+                    <Button className="w-full justify-between" onClick={() => navigate("/games/new")}>
+                      <span className="inline-flex items-center gap-2">
+                        <Plus className="size-4" /> Create game
+                      </span>
+                      <ShortcutHint shortcut="n" />
+                    </Button>
+
+                    <form onSubmit={submitJoinCode} className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                      <Input
+                        ref={joinRef}
+                        value={joinCode}
+                        onChange={(event) => setJoinCode(event.target.value)}
+                        placeholder="Join code"
+                        maxLength={6}
+                        className="font-mono uppercase"
+                      />
+                      <Button type="submit" variant="outline" disabled={!joinCode.trim()}>
+                        Join code
+                      </Button>
+                      <Button type="button" variant="ghost" onClick={browsePublicLobbies}>
+                        Browse lobbies
+                      </Button>
+                    </form>
+                  </section>
+
+                  <section ref={gamesListSectionRef} tabIndex={-1} className="space-y-2 rounded-lg border bg-background/75 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Games</p>
                       <div className="flex items-center gap-2">
                         <ShortcutHint shortcut="g" />
                       </div>
                     </div>
-                    <div className="overflow-hidden rounded-md border border-border/75 bg-background/70">
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setGamesFilter("active")}
+                        className={`flex items-center justify-between rounded-md border px-2 py-1 text-xs uppercase tracking-[0.08em] transition ${gamesFilter === "active"
+                          ? "border-primary bg-primary/12 text-primary"
+                          : "border-border/70 bg-background/60 text-muted-foreground hover:border-primary/45"
+                          }`}
+                      >
+                        <span>Active</span>
+                        <ShortcutHint shortcut="a" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGamesFilter("lobby")}
+                        className={`flex items-center justify-between rounded-md border px-2 py-1 text-xs uppercase tracking-[0.08em] transition ${gamesFilter === "lobby"
+                          ? "border-primary bg-primary/12 text-primary"
+                          : "border-border/70 bg-background/60 text-muted-foreground hover:border-primary/45"
+                          }`}
+                      >
+                        <span>Lobby</span>
+                        <ShortcutHint shortcut="l" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGamesFilter("public")}
+                        className={`flex items-center justify-between rounded-md border px-2 py-1 text-xs uppercase tracking-[0.08em] transition ${gamesFilter === "public"
+                          ? "border-primary bg-primary/12 text-primary"
+                          : "border-border/70 bg-background/60 text-muted-foreground hover:border-primary/45"
+                          }`}
+                      >
+                        <span>Public</span>
+                        <ShortcutHint shortcut="p" />
+                      </button>
+                    </div>
+
+                    <div className="min-h-72 overflow-hidden rounded-md border border-border/75 bg-background/70">
                       {isGamesLoading && (
                         <div className="space-y-2 px-3 py-2">
                           {Array.from({ length: 3 }).map((_, index) => (
                             <div
-                              key={`current-game-skeleton-${index}`}
+                              key={`game-skeleton-${index}`}
                               className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-md border border-transparent bg-muted/20 px-2 py-2 animate-pulse"
                             >
                               <div className="h-3 w-2/3 rounded bg-muted/60" />
@@ -329,152 +476,153 @@ export default function HomePage() {
                           ))}
                         </div>
                       )}
-                      {!isGamesLoading && currentGames.length === 0 && (
-                        <p className="px-3 py-3 text-sm text-muted-foreground">No active or lobby games right now.</p>
+
+                      {!isGamesLoading && sortedGames.length === 0 && (
+                        <div className="px-3 py-3">
+                          <p className="text-sm text-muted-foreground">No games yet. Use Create game above to start one.</p>
+                        </div>
                       )}
-                      {!isGamesLoading && currentGames.map((game, idx) => (
+
+                      {!isGamesLoading && sortedGames.length > 0 && filteredHomeGames.length === 0 && (
+                        <div className="px-3 py-3">
+                          <p className="text-sm text-muted-foreground">
+                            {gamesFilter === "active"
+                              ? "Nothing in progress. Create a game to get one going."
+                              : gamesFilter === "lobby"
+                                ? "No lobby games to rejoin yet."
+                                : "No public lobbies available right now."}
+                          </p>
+                        </div>
+                      )}
+
+                      {!isGamesLoading && pagedHomeGames.map((game, idx) => (
                         <button
                           key={game._id}
                           ref={(element) => {
                             currentGameButtonRefs.current[idx] = element;
                           }}
                           type="button"
-                          onClick={() => openGame(game)}
-                          className="grid w-full grid-cols-[1fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-left text-sm transition last:border-b-0 hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none"
+                          onClick={() => {
+                            if (game.status === "public") {
+                              navigate(`/g/${game._id}`);
+                              return;
+                            }
+                            navigate(game.status === "lobby" ? `/g/${game._id}` : `/play/${game._id}`);
+                          }}
+                          className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-2 border-b border-border/60 px-3 py-2 text-left text-sm transition last:border-b-0 hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none"
                         >
                           <span className="truncate">{game.name}</span>
                           <span
                             className={`inline-flex min-w-16 items-center justify-center rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] ${game.status === "active"
                               ? "border-emerald-400/45 bg-emerald-500/10 text-emerald-300"
-                              : "border-blue-400/45 bg-blue-500/10 text-blue-300"
+                              : game.status === "lobby"
+                                ? "border-blue-400/45 bg-blue-500/10 text-blue-300"
+                                : "border-amber-400/45 bg-amber-500/10 text-amber-300"
                               }`}
                           >
-                            {game.status}
+                            {gameStatusLabel(game.status)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            View
                           </span>
                         </button>
                       ))}
                     </div>
-                  </section>
 
-                  <form onSubmit={submitJoinCode} className="space-y-2 rounded-lg border bg-background/75 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Join Game</p>
-                      <ShortcutHint shortcut="j" />
-                    </div>
-                    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                      <Input
-                        ref={joinRef}
-                        value={joinCode}
-                        onChange={(event) => setJoinCode(event.target.value)}
-                        placeholder="JOIN WITH CODE (ABC123)"
-                        maxLength={6}
-                        className="font-mono uppercase"
-                      />
-                      <Button type="submit" variant="outline" disabled={!joinCode.trim()}>
-                        Join
-                      </Button>
-                    </div>
-                  </form>
+                    {!isGamesLoading && filteredHomeGames.length > PAGE_SIZE && (
+                      <div className="flex items-center justify-between pt-2">
+                        <p className="text-xs text-muted-foreground">
+                          Page {gamesPage + 1} of {homePageCount}
+                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={gamesPage === 0}
+                            onClick={() => setGamesPage((page) => Math.max(0, page - 1))}
+                          >
+                            Previous
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={gamesPage >= homePageCount - 1}
+                            onClick={() => setGamesPage((page) => Math.min(homePageCount - 1, page + 1))}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </section>
                 </div>
 
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                  <div className="rounded-lg border bg-background/75 p-3">
-                    <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Total</p>
+                <div className="order-1 space-y-3 lg:order-2">
+                  <section className={`space-y-3 rounded-lg border p-4 ${continueGame ? "border-primary/55 bg-primary/10" : "bg-background/75"}`}>
+                    <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Continue</p>
                     {isGamesLoading ? (
-                      <div className="mt-3 h-8 w-16 rounded bg-muted/50 animate-pulse" />
+                      <div className="space-y-3 animate-pulse">
+                        <div className="space-y-2">
+                          <div className="h-3 w-36 rounded bg-muted/60" />
+                          <div className="h-6 w-52 rounded bg-muted/60" />
+                        </div>
+                        <div className="h-9 w-full rounded bg-muted/60" />
+                      </div>
+                    ) : continueGame ? (
+                      <>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Current active game</p>
+                          <p className="mt-1 text-xl font-semibold">{continueGame.name}</p>
+                        </div>
+                        <Button className="w-full" onClick={() => openMyGame(continueGame)}>
+                          View game
+                        </Button>
+                      </>
                     ) : (
-                      <p className="mt-1 text-3xl">{counts.total}</p>
+                      <p className="text-sm text-muted-foreground">Nothing in progress. Use Create game on the left to start one.</p>
                     )}
-                  </div>
-                  <div className="rounded-lg border bg-background/75 p-3">
-                    <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Active</p>
-                    {isGamesLoading ? (
-                      <div className="mt-3 h-8 w-12 rounded bg-muted/50 animate-pulse" />
-                    ) : (
-                      <p className="mt-1 text-3xl">{counts.active}</p>
-                    )}
-                  </div>
-                  <div className="rounded-lg border bg-background/75 p-3">
-                    <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Lobby</p>
-                    {isGamesLoading ? (
-                      <div className="mt-3 h-8 w-12 rounded bg-muted/50 animate-pulse" />
-                    ) : (
-                      <p className="mt-1 text-3xl">{counts.lobby}</p>
-                    )}
-                  </div>
-                  <div className="rounded-lg border bg-background/75 p-3">
-                    <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Finished</p>
-                    {isGamesLoading ? (
-                      <div className="mt-3 h-8 w-14 rounded bg-muted/50 animate-pulse" />
-                    ) : (
-                      <p className="mt-1 text-3xl">{counts.finished}</p>
-                    )}
-                  </div>
+                  </section>
                 </div>
               </div>
             )}
 
-            {tab === "history" && (
+            {tab === "archive" && (
               <div className="space-y-3">
                 <div className="space-y-2 rounded-lg border bg-background/75 p-3">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Search</p>
+                    <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Search Archive</p>
                     <ShortcutHint shortcut="/" />
                   </div>
                   <Input
-                    ref={filterRef}
-                    value={filter}
-                    onChange={(event) => setFilter(event.target.value)}
-                    placeholder="FILTER ALL GAMES"
+                    ref={archiveFilterRef}
+                    value={archiveFilter}
+                    onChange={(event) => setArchiveFilter(event.target.value)}
+                    placeholder="FILTER FINISHED GAMES"
                     className="font-mono"
                   />
                 </div>
 
                 <section className="space-y-2 rounded-lg border bg-background/75 p-3">
-                  <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Active + Lobby</p>
+                  <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Finished Games</p>
                   <div className="overflow-hidden rounded-md border border-border/75 bg-background/70">
-                    {filteredCurrentGames.length === 0 && (
-                      <p className="px-3 py-3 text-sm text-muted-foreground">No active or lobby games found.</p>
+                    {archiveGames.length === 0 && (
+                      <div className="space-y-2 px-3 py-3">
+                        <p className="text-sm text-muted-foreground">No archived games found.</p>
+                        <p className="text-xs text-muted-foreground">Create a game from the Home tab when you are ready.</p>
+                      </div>
                     )}
-                    {filteredCurrentGames.map((game) => (
+                    {pagedArchiveGames.map((game) => (
                       <button
                         key={game._id}
                         type="button"
-                        onClick={() => openGame(game)}
-                        className="grid w-full grid-cols-[1fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-left text-sm transition last:border-b-0 hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none"
-                      >
-                        <span className="truncate">{game.name}</span>
-                        <span
-                          className={`inline-flex min-w-16 items-center justify-center rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] ${game.status === "active"
-                            ? "border-emerald-400/45 bg-emerald-500/10 text-emerald-300"
-                            : "border-blue-400/45 bg-blue-500/10 text-blue-300"
-                            }`}
-                        >
-                          {game.status}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="space-y-2 rounded-lg border bg-background/75 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Previous Games</p>
-                  </div>
-                  <div className="overflow-hidden rounded-md border border-border/75 bg-background/70">
-                    {filteredPreviousGames.length === 0 && (
-                      <p className="px-3 py-3 text-sm text-muted-foreground">No previous games found.</p>
-                    )}
-                    {filteredPreviousGames.map((game) => (
-                      <button
-                        key={game._id}
-                        type="button"
-                        onClick={() => openGame(game)}
+                        onClick={() => openMyGame(game)}
                         className="grid w-full grid-cols-[1fr_auto_auto] gap-2 border-b border-border/60 px-3 py-2 text-left text-sm transition last:border-b-0 hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none"
                       >
                         <span className="truncate">{game.name}</span>
                         <span className="inline-flex min-w-16 items-center justify-center rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                          {game.status}
+                          Archive
                         </span>
                         <span
                           className={`inline-flex min-w-12 items-center justify-center rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] ${game.result === "won"
@@ -489,6 +637,33 @@ export default function HomePage() {
                       </button>
                     ))}
                   </div>
+                  {archiveGames.length > PAGE_SIZE && (
+                    <div className="flex items-center justify-between pt-2">
+                      <p className="text-xs text-muted-foreground">
+                        Page {archivePage + 1} of {archivePageCount}
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={archivePage === 0}
+                          onClick={() => setArchivePage((page) => Math.max(0, page - 1))}
+                        >
+                          Previous
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={archivePage >= archivePageCount - 1}
+                          onClick={() => setArchivePage((page) => Math.min(archivePageCount - 1, page + 1))}
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </section>
               </div>
             )}

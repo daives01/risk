@@ -24,11 +24,25 @@ type RulesetOverridesInput = {
 };
 
 type GameTimingMode = "realtime" | "async_1d" | "async_3d";
+type GameVisibility = "public" | "unlisted";
 
 const TIMING_MODE_OPTIONS: Array<{ value: GameTimingMode; label: string }> = [
   { value: "realtime", label: "Realtime" },
   { value: "async_1d", label: "Async (1 day / turn)" },
   { value: "async_3d", label: "Async (3 days / turn)" },
+];
+
+const VISIBILITY_OPTIONS: Array<{ value: GameVisibility; label: string; description: string }> = [
+  {
+    value: "unlisted",
+    label: "Invite only",
+    description: "Only players with the invite code can find and join this lobby.",
+  },
+  {
+    value: "public",
+    label: "Public lobby",
+    description: "Anyone will be able to discover this lobby in the public lobbies list.",
+  },
 ];
 
 const CARD_INCREMENT_PRESETS = {
@@ -103,6 +117,7 @@ export default function CreateGamePage() {
   const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
   const [maxPlayers, setMaxPlayers] = useState(6);
   const [teamModeEnabled, setTeamModeEnabled] = useState(false);
+  const [visibility, setVisibility] = useState<GameVisibility>("unlisted");
   const [teamAssignmentStrategy, setTeamAssignmentStrategy] = useState<"manual" | "balancedRandom">("balancedRandom");
   const [timingMode, setTimingMode] = useState<GameTimingMode>("realtime");
   const [excludeWeekends, setExcludeWeekends] = useState(false);
@@ -192,6 +207,7 @@ export default function CreateGamePage() {
       const { gameId } = await createGame({
         name: trimmedName,
         mapId: selectedMapId,
+        visibility,
         maxPlayers,
         teamModeEnabled,
         teamAssignmentStrategy,
@@ -282,6 +298,25 @@ export default function CreateGamePage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="visibility">Lobby Visibility</Label>
+                <Select value={visibility} onValueChange={(value) => setVisibility(value as GameVisibility)}>
+                  <SelectTrigger id="visibility">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VISIBILITY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {VISIBILITY_OPTIONS.find((option) => option.value === visibility)?.description}
+                </p>
               </div>
 
               <div className="space-y-3 rounded-lg border bg-background/70 p-3">

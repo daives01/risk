@@ -48,6 +48,8 @@ import { readGraphMap } from "./typeAdapters";
 import { generateUniqueInviteCode } from "./inviteCodes";
 import { createTeamAwareTurnOrder } from "./teamTurnOrder";
 
+const DEFAULT_GAME_VISIBILITY = "unlisted" as const;
+
 function toStoredRuleset(ruleset: RulesetConfig) {
   return JSON.parse(JSON.stringify(ruleset));
 }
@@ -126,7 +128,7 @@ export const createGame = mutation({
       name: args.name,
       mapId: args.mapId,
       status: "lobby",
-      visibility: args.visibility ?? "unlisted",
+      visibility: args.visibility ?? DEFAULT_GAME_VISIBILITY,
       timingMode,
       excludeWeekends,
       maxPlayers,
