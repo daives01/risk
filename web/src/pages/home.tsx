@@ -168,21 +168,23 @@ export default function HomePage() {
     requestAnimationFrame(() => joinRef.current?.focus());
   }, []);
 
+  const setGamesFilterAndResetPage = useCallback((nextFilter: GamesFilter) => {
+    setGamesFilter(nextFilter);
+    setGamesPage(0);
+  }, []);
+
+  const setArchiveFilterAndResetPage = useCallback((nextFilter: string) => {
+    setArchiveFilter(nextFilter);
+    setArchivePage(0);
+  }, []);
+
   const browsePublicLobbies = useCallback(() => {
     setTab("home");
-    setGamesFilter("public");
+    setGamesFilterAndResetPage("public");
     requestAnimationFrame(() => {
       gamesListSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-  }, []);
-
-  useEffect(() => {
-    setGamesPage(0);
-  }, [gamesFilter]);
-
-  useEffect(() => {
-    setArchivePage(0);
-  }, [archiveFilter]);
+  }, [setGamesFilterAndResetPage]);
 
   useEffect(() => {
     if (gamesPage >= homePageCount) setGamesPage(Math.max(0, homePageCount - 1));
@@ -219,19 +221,19 @@ export default function HomePage() {
         if (key === "a") {
           event.preventDefault();
           setTab("home");
-          setGamesFilter("active");
+          setGamesFilterAndResetPage("active");
           focusCurrentGames();
         }
         if (key === "l") {
           event.preventDefault();
           setTab("home");
-          setGamesFilter("lobby");
+          setGamesFilterAndResetPage("lobby");
           focusCurrentGames();
         }
         if (key === "p") {
           event.preventDefault();
           setTab("home");
-          setGamesFilter("public");
+          setGamesFilterAndResetPage("public");
           focusCurrentGames();
         }
         if (key === "/") {
@@ -244,7 +246,7 @@ export default function HomePage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focusCurrentGames, focusJoin, navigate, session]);
+  }, [focusCurrentGames, focusJoin, navigate, session, setGamesFilterAndResetPage]);
 
   function submitJoinCode(event: React.FormEvent) {
     event.preventDefault();
@@ -439,7 +441,7 @@ export default function HomePage() {
                     <div className="grid grid-cols-3 gap-2">
                       <button
                         type="button"
-                        onClick={() => setGamesFilter("active")}
+                        onClick={() => setGamesFilterAndResetPage("active")}
                         className={`flex items-center justify-between rounded-md border px-2 py-1 text-xs uppercase tracking-[0.08em] transition ${gamesFilter === "active"
                           ? "border-primary bg-primary/12 text-primary"
                           : "border-border/70 bg-background/60 text-muted-foreground hover:border-primary/45"
@@ -450,7 +452,7 @@ export default function HomePage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setGamesFilter("lobby")}
+                        onClick={() => setGamesFilterAndResetPage("lobby")}
                         className={`flex items-center justify-between rounded-md border px-2 py-1 text-xs uppercase tracking-[0.08em] transition ${gamesFilter === "lobby"
                           ? "border-primary bg-primary/12 text-primary"
                           : "border-border/70 bg-background/60 text-muted-foreground hover:border-primary/45"
@@ -461,7 +463,7 @@ export default function HomePage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setGamesFilter("public")}
+                        onClick={() => setGamesFilterAndResetPage("public")}
                         className={`flex items-center justify-between rounded-md border px-2 py-1 text-xs uppercase tracking-[0.08em] transition ${gamesFilter === "public"
                           ? "border-primary bg-primary/12 text-primary"
                           : "border-border/70 bg-background/60 text-muted-foreground hover:border-primary/45"
@@ -608,7 +610,7 @@ export default function HomePage() {
                   <Input
                     ref={archiveFilterRef}
                     value={archiveFilter}
-                    onChange={(event) => setArchiveFilter(event.target.value)}
+                    onChange={(event) => setArchiveFilterAndResetPage(event.target.value)}
                     placeholder="FILTER FINISHED GAMES"
                     className="font-mono"
                   />
