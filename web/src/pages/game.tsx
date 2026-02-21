@@ -214,6 +214,7 @@ export default function GamePage() {
     endgameModal,
     setEndgameModal,
     dismissedEndgameRef,
+    isEliminated,
   } = useEndgameModal({
     state,
     historyOpen,
@@ -1267,6 +1268,7 @@ export default function GamePage() {
           setHistoryPlaying(false);
         }}
         historyToggleDisabled={historyCount === 0}
+        showBackHome={isEliminated || phase === "GameOver"}
         renderHistoryScrubber={() => (
           <HistoryScrubber
             min={0}

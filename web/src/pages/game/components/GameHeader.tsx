@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import {
+  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   History,
@@ -56,6 +57,7 @@ interface GameHeaderProps {
   onToggleInfo: () => void;
   onToggleHistory: () => void;
   historyToggleDisabled: boolean;
+  showBackHome: boolean;
   renderHistoryScrubber?: () => ReactNode;
   onConfirmPlacements: () => void;
   onEndAttackPhase: () => void;
@@ -100,6 +102,7 @@ export function GameHeader({
   onToggleInfo,
   onToggleHistory,
   historyToggleDisabled,
+  showBackHome,
   renderHistoryScrubber,
   onConfirmPlacements,
   onEndAttackPhase,
@@ -109,6 +112,13 @@ export function GameHeader({
 
   return (
     <div className="game-header glass-panel relative flex min-h-12 flex-wrap items-center gap-2 px-2 py-1.5">
+      {showBackHome && (
+        <Button asChild size="sm" type="button" variant="outline" title="Back to home">
+          <Link to="/" aria-label="Back to home">
+            <ArrowLeft className="size-4" />
+          </Link>
+        </Button>
+      )}
       <div className="flex min-w-0 flex-col">
         {showPhaseTitle && (
           <span className="shrink-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
