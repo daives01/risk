@@ -10,7 +10,7 @@ export const PLAYER_COLOR_PALETTE = [
   "#593500",
   "#08008a",
   "#005d59",
-  "#9a8286",
+  "#000000",
 ] as const;
 
 export type PlayerColor = (typeof PLAYER_COLOR_PALETTE)[number];
@@ -27,7 +27,7 @@ export const PLAYER_COLOR_NAME_BY_HEX: Record<PlayerColor, string> = {
   "#593500": "Brown",
   "#08008a": "Navy",
   "#005d59": "Teal",
-  "#9a8286": "Taupe",
+  "#000000": "Black",
 };
 
 export const NEUTRAL_PLAYER_COLOR = "#64748b";

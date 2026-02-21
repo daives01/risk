@@ -18,7 +18,7 @@ const LOBBY_COLOR_DISPLAY_ORDER = [
   "#ff41ff", // Magenta
   "#710079", // Purple
   "#593500", // Brown
-  "#9a8286", // Taupe (neutral)
+  "#000000", // Black
 ] as const;
 
 const DISPLAY_ORDER_INDEX = new Map<string, number>(

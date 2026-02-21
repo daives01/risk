@@ -19,7 +19,7 @@ describe("lobby player color UI helpers", () => {
       "#ff41ff",
       "#710079",
       "#593500",
-      "#9a8286",
+      "#000000",
     ]);
   });
 
