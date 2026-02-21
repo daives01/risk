@@ -23,12 +23,14 @@ function toVisualInput(
   imageStorageId: Id<"_storage"> | null,
   imageWidth: number,
   imageHeight: number,
+  nodeScale: number,
   territoryAnchors: Record<string, Anchor>,
 ): MapVisual {
   return {
     imageStorageId: imageStorageId ?? "missing",
     imageWidth,
     imageHeight,
+    nodeScale,
     territoryAnchors,
   };
 }
@@ -85,6 +87,7 @@ interface BuildValidationOptions {
   imageStorageId: Id<"_storage"> | null;
   imageWidth: number;
   imageHeight: number;
+  nodeScale: number;
   anchors: Record<string, Anchor>;
   territories: Record<string, TerritoryInfo>;
   continents: Record<string, EditorContinent>;
@@ -96,13 +99,14 @@ export function buildMapEditorValidation({
   imageStorageId,
   imageWidth,
   imageHeight,
+  nodeScale,
   anchors,
   territories,
   continents,
   territoryToContinents,
 }: BuildValidationOptions) {
   const graphInput = toGraphMapInput(graphForPersist);
-  const visualInput = toVisualInput(imageStorageId, imageWidth, imageHeight, anchors);
+  const visualInput = toVisualInput(imageStorageId, imageWidth, imageHeight, nodeScale, anchors);
   const mapValidation = validateMap(graphInput);
   const visualValidation = validateVisual(graphInput, visualInput);
   const connection = graphConnectedTerritories(graphForPersist);

@@ -16,6 +16,7 @@ interface GameMapSectionProps {
   mapVisual: {
     imageWidth: number;
     imageHeight: number;
+    nodeScale?: number | null;
     territoryAnchors: Record<string, { x: number; y: number }>;
   };
   mapImageUrl: string | null;

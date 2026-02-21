@@ -29,6 +29,7 @@ export interface MapVisual {
   readonly imageWidth: number;
   readonly imageHeight: number;
   readonly territoryAnchors: Record<string, TerritoryAnchor>;
+  readonly nodeScale?: number | null;
 }
 
 export interface AuthoredMap {
@@ -111,6 +112,13 @@ export function validateVisual(
   }
   if (!Number.isFinite(visual.imageHeight) || visual.imageHeight <= 0) {
     errors.push("imageHeight must be a positive number");
+  }
+  if (
+    visual.nodeScale !== undefined &&
+    visual.nodeScale !== null &&
+    (!Number.isFinite(visual.nodeScale) || visual.nodeScale <= 0)
+  ) {
+    errors.push("nodeScale must be a positive number");
   }
 
   for (const territoryId of Object.keys(map.territories)) {

@@ -63,6 +63,7 @@ export default function AdminMapsPage() {
           imageStorageId: storageId as Id<"_storage">,
           imageWidth: width,
           imageHeight: height,
+          nodeScale: 1,
           territoryAnchors: {},
         },
       });

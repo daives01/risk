@@ -57,6 +57,12 @@ const MAP_DEFS = {
   },
 } as const;
 
+function normalizeNodeScale(nodeScale: number | null | undefined): number {
+  return typeof nodeScale === "number" && Number.isFinite(nodeScale) && nodeScale > 0
+    ? nodeScale
+    : 1;
+}
+
 /**
  * Seeds a draft map with a predefined graph + starter anchors.
  *
@@ -108,6 +114,7 @@ export const seedMap = mutation({
         imageStorageId: map.visual.imageStorageId,
         imageWidth: map.visual.imageWidth,
         imageHeight: map.visual.imageHeight,
+        nodeScale: normalizeNodeScale(map.visual.nodeScale),
         territoryAnchors: mapDef.anchors,
       },
       authoring: {

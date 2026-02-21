@@ -31,6 +31,7 @@ const visualValidator = v.object({
   imageStorageId: v.id("_storage"),
   imageWidth: v.number(),
   imageHeight: v.number(),
+  nodeScale: v.optional(v.union(v.number(), v.null())),
   territoryAnchors: v.record(
     v.string(),
     v.object({
@@ -39,6 +40,19 @@ const visualValidator = v.object({
     }),
   ),
 });
+
+function normalizeNodeScale(nodeScale: number | null | undefined): number {
+  return typeof nodeScale === "number" && Number.isFinite(nodeScale) && nodeScale > 0
+    ? nodeScale
+    : 1;
+}
+
+function normalizeVisual<T extends { nodeScale?: number | null }>(visual: T): T & { nodeScale: number } {
+  return {
+    ...visual,
+    nodeScale: normalizeNodeScale(visual.nodeScale),
+  };
+}
 
 const mapPlayerLimitsValidator = v.object({
   minPlayers: v.number(),
@@ -55,6 +69,7 @@ export const list = query({
     return Promise.all(
       docs.map(async (doc) => ({
         ...doc,
+        visual: normalizeVisual(doc.visual),
         playerLimits: resolveMapPlayerLimits(
           doc.playerLimits,
           Object.keys(doc.graphMap.territories).length,
@@ -75,6 +90,7 @@ export const getByMapId = query({
     if (!doc || doc.authoring.status !== "published") return null;
     return {
       ...doc,
+      visual: normalizeVisual(doc.visual),
       playerLimits: resolveMapPlayerLimits(
         doc.playerLimits,
         Object.keys(doc.graphMap.territories).length,
@@ -95,6 +111,7 @@ export const upsert = internalMutation({
   },
   handler: async (ctx, { mapId, name, graphMap, visual, playerLimits, authoringStatus }) => {
     const now = Date.now();
+    const normalizedVisual = normalizeVisual(visual);
     const resolvedPlayerLimits =
       playerLimits ?? defaultMapPlayerLimits(Object.keys(graphMap.territories).length);
     const playerLimitErrors = validateMapPlayerLimits(
@@ -118,7 +135,7 @@ export const upsert = internalMutation({
       await ctx.db.patch(existing._id, {
         name,
         graphMap,
-        visual,
+        visual: normalizedVisual,
         playerLimits: resolvedPlayerLimits,
         authoring,
         createdAt: now,
@@ -129,7 +146,7 @@ export const upsert = internalMutation({
       mapId,
       name,
       graphMap,
-      visual,
+      visual: normalizedVisual,
       playerLimits: resolvedPlayerLimits,
       authoring,
       createdAt: now,

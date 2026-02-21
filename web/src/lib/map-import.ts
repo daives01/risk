@@ -32,6 +32,51 @@ export interface MapImportParseResult {
   errors: string[];
 }
 
+export function buildMapExportJson(args: {
+  graphMap: EditorGraphMap;
+  anchors: Record<string, Anchor>;
+  playerLimits: { minPlayers: number; maxPlayers: number };
+}): MapImportJson {
+  const territoryIds = Object.keys(args.graphMap.territories).sort();
+  const territories = territoryIds.map((territoryId) => {
+    const info = args.graphMap.territories[territoryId] ?? {};
+    const anchor = args.anchors[territoryId];
+    return {
+      id: territoryId,
+      ...(info.name ? { name: info.name } : {}),
+      ...(Array.isArray(info.tags) && info.tags.length > 0 ? { tags: [...info.tags] } : {}),
+      ...(anchor ? { x: anchor.x, y: anchor.y } : {}),
+    };
+  });
+
+  const adjacency = Object.fromEntries(
+    territoryIds.map((territoryId) => [
+      territoryId,
+      [...(args.graphMap.adjacency[territoryId] ?? [])].sort(),
+    ]),
+  );
+
+  const continentIds = Object.keys(args.graphMap.continents ?? {}).sort();
+  const continents = continentIds.map((continentId) => {
+    const continent = args.graphMap.continents?.[continentId];
+    return {
+      id: continentId,
+      bonus: Math.max(1, Math.floor(continent?.bonus ?? 1)),
+      territoryIds: [...new Set(continent?.territoryIds ?? [])].sort(),
+    };
+  });
+
+  return {
+    territories,
+    adjacency,
+    continents,
+    playerLimits: {
+      minPlayers: args.playerLimits.minPlayers,
+      maxPlayers: args.playerLimits.maxPlayers,
+    },
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -290,9 +335,6 @@ export function parseMapImportJson(input: string): MapImportParseResult {
     if (count === 0) {
       errors.push(`Territory "${territoryId}" is not assigned to any continent`);
     }
-    if (count > 1) {
-      errors.push(`Territory "${territoryId}" is assigned to multiple continents`);
-    }
   }
 
   let playerLimits: { minPlayers: number; maxPlayers: number } | null = null;
@@ -370,7 +412,7 @@ Hard constraints:
 2. Every territory id must be unique.
 3. adjacency must be symmetric: if A lists B, B must list A.
 4. adjacency and continents must only reference known territory ids.
-5. Every territory must be assigned to exactly one continent.
+5. Every territory must be assigned to at least one continent.
 6. Continent bonuses must be positive integers.
 7. Anchor x/y values are draft suggestions only and must be normalized 0..1.
 

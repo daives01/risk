@@ -28,6 +28,7 @@ export type MapVisual = {
   imageStorageId: string;
   imageWidth: number;
   imageHeight: number;
+  nodeScale?: number | null;
   territoryAnchors: Record<string, { x: number; y: number }>;
 };
 

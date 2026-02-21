@@ -11,7 +11,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import type { Anchor, EditorContinent, EditorGraphMap, TerritoryInfo } from "@/lib/map-editor-validation";
 import { normalizeAdjacency, useMapEditorValidation } from "@/lib/map-editor-validation";
-import { buildMapImportPrompt, parseMapImportJson, type ParsedMapImport } from "@/lib/map-import";
+import {
+  buildMapExportJson,
+  buildMapImportPrompt,
+  parseMapImportJson,
+  type ParsedMapImport,
+} from "@/lib/map-import";
 import { useMapPanZoom } from "@/lib/use-map-pan-zoom";
 import { readImageDimensions, uploadImage } from "@/lib/map-upload";
 
@@ -24,6 +29,7 @@ type EditorMap = {
     imageStorageId: string;
     imageWidth: number;
     imageHeight: number;
+    nodeScale?: number | null;
     territoryAnchors: Record<string, Anchor>;
   };
   playerLimits: {
@@ -81,6 +87,7 @@ export default function AdminMapEditorPage() {
   const [imageStorageId, setImageStorageId] = useState<Id<"_storage"> | null>(null);
   const [imageWidth, setImageWidth] = useState(1);
   const [imageHeight, setImageHeight] = useState(1);
+  const [nodeScale, setNodeScale] = useState(1);
   const [minPlayers, setMinPlayers] = useState(2);
   const [maxPlayers, setMaxPlayers] = useState(6);
 
@@ -130,6 +137,13 @@ export default function AdminMapEditorPage() {
     setImageStorageId(getDraft.visual.imageStorageId as Id<"_storage">);
     setImageWidth(getDraft.visual.imageWidth);
     setImageHeight(getDraft.visual.imageHeight);
+    setNodeScale(
+      typeof getDraft.visual.nodeScale === "number" &&
+        Number.isFinite(getDraft.visual.nodeScale) &&
+        getDraft.visual.nodeScale > 0
+        ? getDraft.visual.nodeScale
+        : 1,
+    );
     setMinPlayers(getDraft.playerLimits.minPlayers);
     setMaxPlayers(getDraft.playerLimits.maxPlayers);
   }, [getDraft]);
@@ -183,6 +197,7 @@ export default function AdminMapEditorPage() {
     imageStorageId,
     imageWidth,
     imageHeight,
+    nodeScale,
     anchors,
     territories,
     continents,
@@ -424,6 +439,7 @@ export default function AdminMapEditorPage() {
         imageStorageId: storageId as Id<"_storage">,
         imageWidth: dimensions.width,
         imageHeight: dimensions.height,
+        nodeScale,
         territoryAnchors: anchors,
       });
 
@@ -460,6 +476,7 @@ export default function AdminMapEditorPage() {
         imageStorageId: imageStorageId ?? undefined,
         imageWidth,
         imageHeight,
+        nodeScale,
         territoryAnchors: anchors,
       });
       toast.success("Draft saved");
@@ -580,6 +597,23 @@ export default function AdminMapEditorPage() {
     }
   }
 
+  async function handleExportJson() {
+    try {
+      const payload = buildMapExportJson({
+        graphMap: graphForPersist,
+        anchors,
+        playerLimits: {
+          minPlayers,
+          maxPlayers,
+        },
+      });
+      await navigator.clipboard.writeText(`${JSON.stringify(payload, null, 2)}\n`);
+      toast.success("Map JSON copied");
+    } catch {
+      toast.error("Failed to copy map JSON");
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background p-4 text-foreground">
       <div className="mx-auto grid w-full max-w-7xl gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -609,7 +643,7 @@ export default function AdminMapEditorPage() {
                 </Button>
               </div>
             </div>
-            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
+            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-center">
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -636,6 +670,23 @@ export default function AdminMapEditorPage() {
                     setMaxPlayers(Number.parseInt(event.target.value, 10) || 0)
                   }
                   className="w-20"
+                />
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">Node Scale</span>
+                <Input
+                  type="number"
+                  min={0.2}
+                  max={3}
+                  step={0.05}
+                  value={nodeScale}
+                  onChange={(event) => {
+                    const parsed = Number.parseFloat(event.target.value);
+                    setNodeScale(
+                      Number.isFinite(parsed) && parsed > 0 ? parsed : 1,
+                    );
+                  }}
+                  className="w-24"
                 />
               </div>
               <Input
@@ -839,6 +890,9 @@ export default function AdminMapEditorPage() {
                 <Button size="xs" variant="outline" onClick={handleCopyPrompt}>
                   Copy Prompt
                 </Button>
+                <Button size="xs" variant="outline" onClick={handleExportJson}>
+                  Export JSON
+                </Button>
                 <Button size="xs" onClick={handlePreviewImport}>
                   Preview
                 </Button>
@@ -1021,7 +1075,7 @@ export default function AdminMapEditorPage() {
                 Active continent: <strong>{activeContinentId ?? "none"}</strong>. Click map nodes to add/remove territories.
               </p>
 
-              <div className="space-y-2">
+              <div className="max-h-[280px] space-y-2 overflow-auto">
                 {Object.entries(continents)
                   .sort(([a], [b]) => a.localeCompare(b))
                   .map(([continentId, continent]) => (

@@ -23,6 +23,7 @@ const mapVisual = v.object({
   imageStorageId: v.id("_storage"),
   imageWidth: v.number(),
   imageHeight: v.number(),
+  nodeScale: v.optional(v.union(v.number(), v.null())),
   territoryAnchors: v.record(
     v.string(),
     v.object({

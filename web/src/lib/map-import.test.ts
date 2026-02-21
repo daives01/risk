@@ -79,6 +79,32 @@ describe("parseMapImportJson", () => {
       "playerLimits.maxPlayers must be >= playerLimits.minPlayers",
     );
   });
+
+  test("allows a territory to belong to multiple continents", () => {
+    const input = JSON.stringify({
+      territories: [
+        { id: "alpha" },
+        { id: "beta" },
+      ],
+      adjacency: {
+        alpha: ["beta"],
+        beta: ["alpha"],
+      },
+      continents: [
+        { id: "north", bonus: 2, territoryIds: ["alpha", "beta"] },
+        { id: "ring", bonus: 1, territoryIds: ["alpha"] },
+      ],
+    });
+
+    const result = parseMapImportJson(input);
+
+    expect(result.errors).toEqual([]);
+    expect(result.value).not.toBeNull();
+    expect(result.value?.graphMap.continents).toEqual({
+      north: { bonus: 2, territoryIds: ["alpha", "beta"] },
+      ring: { bonus: 1, territoryIds: ["alpha"] },
+    });
+  });
 });
 
 describe("buildMapImportPrompt", () => {
@@ -88,7 +114,7 @@ describe("buildMapImportPrompt", () => {
     expect(prompt).toContain('"territories"');
     expect(prompt).toContain('"adjacency"');
     expect(prompt).toContain("adjacency must be symmetric");
-    expect(prompt).toContain("Every territory must be assigned to exactly one continent");
+    expect(prompt).toContain("Every territory must be assigned to at least one continent");
     expect(prompt).toContain("Example JSON");
   });
 });

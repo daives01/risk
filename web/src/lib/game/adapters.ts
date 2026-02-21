@@ -41,9 +41,20 @@ export function adaptView(playerView: unknown, publicView: unknown) {
 
 export function adaptMapDoc(mapDoc: unknown) {
   const resolved = (mapDoc ?? null) as MapDocLike | null;
+  const visual = resolved?.visual
+    ? {
+      ...resolved.visual,
+      nodeScale:
+        typeof resolved.visual.nodeScale === "number" &&
+          Number.isFinite(resolved.visual.nodeScale) &&
+          resolved.visual.nodeScale > 0
+          ? resolved.visual.nodeScale
+          : 1,
+    }
+    : undefined;
   return {
     graphMap: resolved?.graphMap,
-    mapVisual: resolved?.visual,
+    mapVisual: visual,
     mapImageUrl: resolved?.imageUrl ?? null,
   };
 }

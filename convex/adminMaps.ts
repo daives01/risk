@@ -42,6 +42,12 @@ const mapPlayerLimitsValidator = v.object({
   maxPlayers: v.number(),
 });
 
+function normalizeNodeScale(nodeScale: number | null | undefined): number {
+  return typeof nodeScale === "number" && Number.isFinite(nodeScale) && nodeScale > 0
+    ? nodeScale
+    : 1;
+}
+
 async function requireAdmin(ctx: any) {
   const user = await authComponent.safeGetAuthUser(ctx);
   if (!user) throw new Error("Not authenticated");
@@ -81,9 +87,6 @@ function validateContinentAssignments(graphMap: GraphMap): string[] {
     if (count === 0) {
       errors.push(`Territory "${territoryId}" is not assigned to any continent`);
     }
-    if (count > 1) {
-      errors.push(`Territory "${territoryId}" is assigned to multiple continents`);
-    }
   }
 
   return errors;
@@ -104,6 +107,10 @@ export const listAdminMaps = query({
     return Promise.all(
       maps.map(async (m) => ({
         ...m,
+        visual: {
+          ...m.visual,
+          nodeScale: normalizeNodeScale(m.visual.nodeScale),
+        },
         playerLimits: resolveMapPlayerLimits(
           m.playerLimits,
           Object.keys(m.graphMap.territories).length,
@@ -142,6 +149,10 @@ export const getDraft = query({
 
     return {
       ...map,
+      visual: {
+        ...map.visual,
+        nodeScale: normalizeNodeScale(map.visual.nodeScale),
+      },
       playerLimits: resolveMapPlayerLimits(
         map.playerLimits,
         Object.keys(map.graphMap.territories).length,
@@ -160,6 +171,7 @@ export const createDraft = mutation({
       imageStorageId: v.id("_storage"),
       imageWidth: v.number(),
       imageHeight: v.number(),
+      nodeScale: v.optional(v.union(v.number(), v.null())),
       territoryAnchors: v.record(v.string(), anchorValidator),
     }),
     playerLimits: v.optional(mapPlayerLimitsValidator),
@@ -167,6 +179,10 @@ export const createDraft = mutation({
   handler: async (ctx, { mapId, name, graphMap, visual, playerLimits }) => {
     await requireAdmin(ctx);
     const now = Date.now();
+    const normalizedVisual = {
+      ...visual,
+      nodeScale: normalizeNodeScale(visual.nodeScale),
+    };
     const resolvedPlayerLimits = playerLimits ?? defaultMapPlayerLimits();
     const playerLimitsErrors = validateMapPlayerLimits(resolvedPlayerLimits);
     if (playerLimitsErrors.length > 0) {
@@ -185,7 +201,7 @@ export const createDraft = mutation({
       mapId,
       name,
       graphMap,
-      visual,
+      visual: normalizedVisual,
       playerLimits: resolvedPlayerLimits,
       authoring: {
         status: "draft",
@@ -234,11 +250,12 @@ export const saveAnchors = mutation({
     imageStorageId: v.optional(v.id("_storage")),
     imageWidth: v.optional(v.number()),
     imageHeight: v.optional(v.number()),
+    nodeScale: v.optional(v.union(v.number(), v.null())),
     territoryAnchors: v.record(v.string(), anchorValidator),
   },
   handler: async (
     ctx,
-    { mapId, imageStorageId, imageWidth, imageHeight, territoryAnchors },
+    { mapId, imageStorageId, imageWidth, imageHeight, nodeScale, territoryAnchors },
   ) => {
     await requireAdmin(ctx);
 
@@ -252,6 +269,7 @@ export const saveAnchors = mutation({
       imageStorageId: (imageStorageId ?? map.visual.imageStorageId) as string,
       imageWidth: imageWidth ?? map.visual.imageWidth,
       imageHeight: imageHeight ?? map.visual.imageHeight,
+      nodeScale: normalizeNodeScale(nodeScale ?? map.visual.nodeScale),
       territoryAnchors,
     };
 
@@ -260,6 +278,7 @@ export const saveAnchors = mutation({
         imageStorageId: visual.imageStorageId as any,
         imageWidth: visual.imageWidth,
         imageHeight: visual.imageHeight,
+        nodeScale: visual.nodeScale,
         territoryAnchors: visual.territoryAnchors,
       },
       authoring: {
@@ -292,6 +311,7 @@ export const publish = mutation({
         imageStorageId: String(map.visual.imageStorageId),
         imageWidth: map.visual.imageWidth,
         imageHeight: map.visual.imageHeight,
+        nodeScale: normalizeNodeScale(map.visual.nodeScale),
         territoryAnchors: map.visual.territoryAnchors,
       },
     });

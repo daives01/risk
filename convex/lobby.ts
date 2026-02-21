@@ -607,8 +607,12 @@ export const setRulesetOverrides = mutation({
   args: {
     gameId: v.id("games"),
     rulesetOverrides: v.optional(rulesetOverridesValidator),
+    timingMode: v.optional(
+      v.union(v.literal("realtime"), v.literal("async_1d"), v.literal("async_3d")),
+    ),
+    excludeWeekends: v.optional(v.boolean()),
   },
-  handler: async (ctx, { gameId, rulesetOverrides }) => {
+  handler: async (ctx, { gameId, rulesetOverrides, timingMode, excludeWeekends }) => {
     const user = await authComponent.safeGetAuthUser(ctx);
     if (!user) throw new Error("Not authenticated");
 
@@ -626,10 +630,16 @@ export const setRulesetOverrides = mutation({
       game.teamModeEnabled ?? false,
       sanitized,
     );
+    const nextTimingMode = (timingMode ?? game.timingMode ?? "realtime") as GameTimingMode;
+    const nextExcludeWeekends = isAsyncTimingMode(nextTimingMode)
+      ? (excludeWeekends ?? game.excludeWeekends ?? false)
+      : false;
 
     await ctx.db.patch(gameId, {
       rulesetOverrides: sanitized,
       effectiveRuleset: toStoredRuleset(effectiveRuleset),
+      timingMode: nextTimingMode,
+      excludeWeekends: nextExcludeWeekends,
     });
   },
 });

@@ -12,6 +12,7 @@ interface GraphMapLike {
 interface VisualLayout {
   imageWidth: number;
   imageHeight: number;
+  nodeScale?: number | null;
   territoryAnchors: Record<string, { x: number; y: number }>;
 }
 
@@ -187,11 +188,15 @@ export function MapCanvas({
   }, [containerSize.height, containerSize.width, imageFit.height, imageFit.width]);
 
   const markerScaleFactor = 0.035;
+  const nodeScale = useMemo(() => {
+    if (typeof visual.nodeScale !== "number" || !Number.isFinite(visual.nodeScale)) return 1;
+    return Math.max(0.2, Math.min(3, visual.nodeScale));
+  }, [visual.nodeScale]);
   const markerSize = useMemo(() => {
     if (!imagePixelSize.width || !imagePixelSize.height) return 18;
     const base = Math.min(imagePixelSize.width, imagePixelSize.height) * markerScaleFactor;
-    return base;
-  }, [imagePixelSize.height, imagePixelSize.width, markerScaleFactor]);
+    return base * nodeScale;
+  }, [imagePixelSize.height, imagePixelSize.width, markerScaleFactor, nodeScale]);
 
   const projectedAnchors = useMemo(() => {
     const result: Record<string, { x: number; y: number }> = {};

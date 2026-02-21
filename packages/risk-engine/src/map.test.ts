@@ -173,6 +173,21 @@ describe("validateVisual", () => {
     expect(result.errors.some((e) => e.includes('Anchor x for territory "A"'))).toBe(true);
     expect(result.errors.some((e) => e.includes('Anchor y for territory "A"'))).toBe(true);
   });
+
+  test("rejects non-positive node scale", () => {
+    const visual = makeValidVisual();
+    (visual as { nodeScale?: number }).nodeScale = 0;
+    const result = validateVisual(makeValidMap(), visual);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("nodeScale must be a positive number");
+  });
+
+  test("accepts positive node scale", () => {
+    const visual = makeValidVisual();
+    (visual as { nodeScale?: number }).nodeScale = 0.8;
+    const result = validateVisual(makeValidMap(), visual);
+    expect(result.valid).toBe(true);
+  });
 });
 
 describe("validateAuthoredMap", () => {
