@@ -184,22 +184,24 @@ export const joinGameByInvite = mutation({
       .unique();
     if (!invite) throw new Error("Invalid invite code");
 
-    if (invite.expiresAt && invite.expiresAt < Date.now()) {
-      throw new Error("Invite code has expired");
-    }
-
     const game = await ctx.db.get(invite.gameId);
     if (!game) throw new Error("Game not found");
-    if (game.status !== "lobby") throw new Error("Game is not in lobby");
 
-    // Check if already joined
+    // Idempotent join: existing players can always resolve invite links.
     const existing = await ctx.db
       .query("gamePlayers")
       .withIndex("by_gameId_userId", (q) =>
         q.eq("gameId", invite.gameId).eq("userId", String(user._id)),
       )
       .unique();
-    if (existing) throw new Error("Already in this game");
+    if (existing) {
+      return { gameId: invite.gameId };
+    }
+
+    if (invite.expiresAt && invite.expiresAt < Date.now()) {
+      throw new Error("Invite code has expired");
+    }
+    if (game.status !== "lobby") throw new Error("Game is not in lobby");
 
     // Check slot availability
     const players = await ctx.db
