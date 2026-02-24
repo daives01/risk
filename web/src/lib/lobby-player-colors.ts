@@ -12,7 +12,7 @@ const LOBBY_COLOR_DISPLAY_ORDER = [
   "#00bec2", // Cyan
   "#005d59", // Teal
   "#209600", // Green
-  "#aafb00", // Lime
+  "#647d14", // Lime
   "#ffa210", // Orange
   "#ca0424", // Carmine
   "#ff41ff", // Magenta
