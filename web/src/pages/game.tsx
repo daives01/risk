@@ -757,8 +757,15 @@ export default function GamePage() {
     if (!typedGameId) return;
     const text = chatDraft.trim();
     if (!text) return;
+    const isEditing = Boolean(chatEditingMessageId);
+    const draftBeforeSubmit = chatDraft;
+
+    if (!isEditing) {
+      setChatDraft("");
+    }
+
     try {
-      if (chatEditingMessageId) {
+      if (isEditing) {
         await editGameChatMessageMutation({
           messageId: chatEditingMessageId as Id<"gameChatMessages">,
           text,
@@ -770,9 +777,14 @@ export default function GamePage() {
           text,
         });
       }
-      setChatDraft("");
-      setChatEditingMessageId(null);
+      if (isEditing) {
+        setChatDraft("");
+        setChatEditingMessageId(null);
+      }
     } catch (error) {
+      if (!isEditing) {
+        setChatDraft((currentDraft) => (currentDraft === "" ? draftBeforeSubmit : currentDraft));
+      }
       toast.error(error instanceof Error ? error.message : "Could not update chat message");
     }
   }, [

@@ -21,7 +21,7 @@ export const PLAYER_COLOR_NAME_BY_HEX: Record<PlayerColor, string> = {
   "#209600": "Green",
   "#ff41ff": "Magenta",
   "#710079": "Purple",
-  "#647d14": "Lime",
+  "#647d14": "Olive",
   "#00bec2": "Cyan",
   "#ffa210": "Orange",
   "#593500": "Brown",
