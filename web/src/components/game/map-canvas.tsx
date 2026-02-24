@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getReadableTextColor } from "@/lib/color-contrast";
 import { Button } from "@/components/ui/button";
 import { NumberStepper } from "@/components/ui/number-stepper";
 
@@ -619,6 +620,8 @@ export function MapCanvas({
             const outlineColor = isFrom || isTo ? actionOutline : isActionable ? actionEdge : "transparent";
 
             const showInfo = infoOverlayEnabled && infoPinnedTerritoryId === territoryId;
+            const markerBackgroundColor = getPlayerColor(territoryState.ownerId, turnOrder);
+            const markerTextColor = getReadableTextColor(markerBackgroundColor);
 
             return (
               <div
@@ -650,14 +653,15 @@ export function MapCanvas({
                     }
                   }}
                   className={cn(
-                    "flex items-center justify-center rounded-full border-2 px-0 py-0 font-bold text-white shadow-sm transition-opacity",
+                    "flex items-center justify-center rounded-full border-2 px-0 py-0 font-bold shadow-sm transition-opacity",
                     selectable || infoOverlayEnabled ? "cursor-pointer" : "cursor-default opacity-80",
                     shouldDeEmphasize && "opacity-30 saturate-50",
                   )}
                   style={{
                     outline: outlineWidth > 0 ? `${outlineWidth}px solid ${outlineColor}` : "none",
                     outlineOffset: outlineWidth > 0 ? 2 : 0,
-                    backgroundColor: getPlayerColor(territoryState.ownerId, turnOrder),
+                    backgroundColor: markerBackgroundColor,
+                    color: markerTextColor,
                     borderColor: isActionable ? actionEdge : "transparent",
                     minWidth: `${markerSize * 1.6}px`,
                     height: `${markerSize}px`,

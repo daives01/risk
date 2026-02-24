@@ -13,7 +13,7 @@ describe("lobby player color UI helpers", () => {
       "#00bec2",
       "#005d59",
       "#209600",
-      "#647d14",
+      "#88c240",
       "#ffa210",
       "#ca0424",
       "#ff41ff",
