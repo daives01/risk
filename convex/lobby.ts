@@ -48,6 +48,7 @@ import { computeTurnDeadlineAt, isAsyncTimingMode, type GameTimingMode } from ".
 import { readGraphMap } from "./typeAdapters";
 import { generateUniqueInviteCode } from "./inviteCodes";
 import { createTeamAwareTurnOrder } from "./teamTurnOrder";
+import { normalizeTeamId } from "./slackValidation";
 
 const DEFAULT_GAME_VISIBILITY = "unlisted" as const;
 
@@ -64,6 +65,29 @@ function resolveLobbyTeamCount(game: {
   const raw = game.teamCount ?? defaultCount;
   const bounded = Math.max(2, Math.min(raw, Math.max(2, playerCount)));
   return Number.isInteger(bounded) ? bounded : defaultCount;
+}
+
+async function assertUserCanUseSlackWorkspace(ctx: any, userId: string, teamId: string) {
+  const normalizedTeamId = normalizeTeamId(teamId);
+  const workspace = await ctx.db
+    .query("slackWorkspaces")
+    .withIndex("by_teamId", (q: any) => q.eq("teamId", normalizedTeamId))
+    .unique();
+  if (!workspace || workspace.status !== "active") {
+    throw new Error("Selected Slack workspace is unavailable");
+  }
+
+  const identity = await ctx.db
+    .query("userSlackIdentities")
+    .withIndex("by_userId_teamId", (q: any) =>
+      q.eq("userId", userId).eq("teamId", normalizedTeamId),
+    )
+    .unique();
+  if (!identity || identity.status !== "active") {
+    throw new Error("You must be mapped in the selected Slack workspace");
+  }
+
+  return normalizedTeamId;
 }
 
 export const createGame = mutation({
@@ -83,6 +107,8 @@ export const createGame = mutation({
     ),
     excludeWeekends: v.optional(v.boolean()),
     rulesetOverrides: v.optional(rulesetOverridesValidator),
+    slackTeamId: v.optional(v.string()),
+    slackNotificationsEnabled: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const user = await authComponent.safeGetAuthUser(ctx);
@@ -121,6 +147,10 @@ export const createGame = mutation({
     const timingMode = (args.timingMode ?? "realtime") as GameTimingMode;
     const excludeWeekends =
       isAsyncTimingMode(timingMode) ? (args.excludeWeekends ?? false) : false;
+    const slackNotificationsEnabled = args.slackNotificationsEnabled ?? false;
+    const slackTeamId = slackNotificationsEnabled
+      ? await assertUserCanUseSlackWorkspace(ctx, String(user._id), args.slackTeamId ?? "")
+      : undefined;
     const teamModeEnabled = args.teamModeEnabled ?? false;
     const teamIds = teamModeEnabled ? getTeamIds(2) : [];
     const teamNames = teamModeEnabled ? resolveTeamNames(teamIds) : undefined;
@@ -140,6 +170,8 @@ export const createGame = mutation({
       rulesetOverrides,
       createdBy: String(user._id),
       createdAt: Date.now(),
+      slackTeamId,
+      slackNotificationsEnabled,
     });
 
     // Add creator as host
@@ -353,6 +385,8 @@ export const getLobby = query({
         teamAssignmentStrategy: game.teamAssignmentStrategy ?? "manual",
         rulesetOverrides: game.rulesetOverrides ?? null,
         effectiveRuleset: game.effectiveRuleset ?? null,
+        slackTeamId: game.slackTeamId ?? null,
+        slackNotificationsEnabled: game.slackNotificationsEnabled ?? false,
       },
       players: players.map((p) => ({
         userId: p.userId,
@@ -646,6 +680,44 @@ export const setRulesetOverrides = mutation({
   },
 });
 
+export const setSlackNotifications = mutation({
+  args: {
+    gameId: v.id("games"),
+    enabled: v.boolean(),
+    slackTeamId: v.optional(v.string()),
+  },
+  handler: async (ctx, { gameId, enabled, slackTeamId }) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+
+    const game = await ctx.db.get(gameId);
+    if (!game) throw new Error("Game not found");
+    if (game.status !== "lobby") throw new Error("Game is not in lobby");
+    if (game.createdBy !== String(user._id)) {
+      throw new Error("Only the host can update Slack notifications");
+    }
+
+    if (!enabled) {
+      await ctx.db.patch(gameId, {
+        slackNotificationsEnabled: false,
+        slackTeamId: undefined,
+      });
+      return { enabled: false, slackTeamId: null };
+    }
+
+    const normalizedTeamId = await assertUserCanUseSlackWorkspace(
+      ctx,
+      String(user._id),
+      slackTeamId ?? "",
+    );
+    await ctx.db.patch(gameId, {
+      slackNotificationsEnabled: true,
+      slackTeamId: normalizedTeamId,
+    });
+    return { enabled: true, slackTeamId: normalizedTeamId };
+  },
+});
+
 export const startGame = mutation({
   args: {
     gameId: v.id("games"),
@@ -891,7 +963,7 @@ export const startGame = mutation({
     });
 
     if (isAsyncTimingMode((game.timingMode ?? "realtime") as GameTimingMode)) {
-      await ctx.scheduler.runAfter(0, internal.asyncTurns.sendYourTurnEmail, {
+      await ctx.scheduler.runAfter(0, (internal as any).turnNotifications.sendTurnNotifications, {
         gameId,
         expectedPlayerId: engineState.turn.currentPlayerId,
         turnStartedAt,

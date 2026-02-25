@@ -773,8 +773,11 @@ export default function HomePage() {
                   {isAdmin && (
                     <div className="space-y-3 rounded-lg border bg-background/75 p-3">
                       <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Admin</p>
-                      <p className="text-sm text-muted-foreground">Manage map drafts and publishing tools.</p>
-                      <Button onClick={() => navigate("/admin/maps")}>Open map editor</Button>
+                      <p className="text-sm text-muted-foreground">Manage maps and Slack notifications.</p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button onClick={() => navigate("/admin/maps")}>Open map editor</Button>
+                        <Button variant="outline" onClick={() => navigate("/admin/slack")}>Open Slack admin</Button>
+                      </div>
                     </div>
                   )}
                 </div>

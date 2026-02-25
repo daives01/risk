@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { ArrowLeft, Map } from "lucide-react";
 import { api } from "@backend/_generated/api";
 import { authClient } from "@/lib/auth-client";
@@ -25,6 +26,10 @@ type RulesetOverridesInput = {
 
 type GameTimingMode = "realtime" | "async_1d" | "async_3d";
 type GameVisibility = "public" | "unlisted";
+type MapListQuery = FunctionReturnType<typeof api.maps.list>;
+type MapListItem = MapListQuery[number];
+type SlackWorkspaceListQuery = FunctionReturnType<typeof api.slackAdmin.listMyWorkspaceOptions>;
+type SlackWorkspaceListItem = SlackWorkspaceListQuery[number];
 
 const TIMING_MODE_OPTIONS: Array<{ value: GameTimingMode; label: string }> = [
   { value: "realtime", label: "Realtime" },
@@ -98,6 +103,10 @@ export default function CreateGamePage() {
   const location = useLocation();
 
   const maps = useQuery(api.maps.list);
+  const slackWorkspaceOptions = useQuery(
+    api.slackAdmin.listMyWorkspaceOptions,
+    session ? {} : "skip",
+  );
   const createGame = useMutation(api.lobby.createGame);
 
   const [name, setName] = useState("");
@@ -108,6 +117,8 @@ export default function CreateGamePage() {
   const [teamAssignmentStrategy, setTeamAssignmentStrategy] = useState<"manual" | "balancedRandom">("balancedRandom");
   const [timingMode, setTimingMode] = useState<GameTimingMode>("realtime");
   const [excludeWeekends, setExcludeWeekends] = useState(false);
+  const [slackNotificationsEnabled, setSlackNotificationsEnabled] = useState(false);
+  const [slackTeamId, setSlackTeamId] = useState<string | null>(null);
   const [fortifyMode, setFortifyMode] = useState<"adjacent" | "connected">("connected");
   const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | "unlimited">(1);
   const [forcedTradeHandSize, setForcedTradeHandSize] = useState(5);
@@ -122,7 +133,7 @@ export default function CreateGamePage() {
     (session?.user as { username?: string | null } | undefined)?.username ?? session?.user.name ?? "";
   const gameNamePlaceholder = sessionUsername ? `${sessionUsername}'s Risk Game` : "Risk Game";
   const selectedMap = useMemo(
-    () => maps?.find((map) => map.mapId === selectedMapId) ?? null,
+    () => maps?.find((map: MapListItem) => map.mapId === selectedMapId) ?? null,
     [maps, selectedMapId],
   );
   const allowedPlayerCounts = useMemo(() => {
@@ -170,6 +181,10 @@ export default function CreateGamePage() {
       setError("Please select a map");
       return;
     }
+    if (slackNotificationsEnabled && !slackTeamId) {
+      setError("Select a Slack workspace or disable Slack notifications");
+      return;
+    }
 
     setError(null);
     setLoading(true);
@@ -200,6 +215,8 @@ export default function CreateGamePage() {
         teamAssignmentStrategy,
         timingMode,
         excludeWeekends,
+        slackNotificationsEnabled,
+        ...(slackNotificationsEnabled && slackTeamId ? { slackTeamId } : {}),
         rulesetOverrides,
       });
       navigate(`/g/${gameId}`);
@@ -250,7 +267,7 @@ export default function CreateGamePage() {
                 )}
                 {maps && maps.length > 0 && (
                   <div className="grid gap-2">
-                    {maps.map((map) => (
+                    {maps.map((map: MapListItem) => (
                       <button
                         key={map.mapId}
                         type="button"
@@ -332,6 +349,40 @@ export default function CreateGamePage() {
                 )}
                 {timingMode === "realtime" && (
                   <p className="text-xs text-muted-foreground">Realtime games have no turn deadlines.</p>
+                )}
+                {slackWorkspaceOptions && slackWorkspaceOptions.length > 0 && (
+                  <div className="space-y-2 pt-1">
+                    <label className="flex items-center justify-between gap-3 border border-border/75 bg-background/65 px-3 py-2">
+                      <span className="text-sm text-foreground">Slack turn notifications</span>
+                      <Switch
+                        checked={slackNotificationsEnabled}
+                        onCheckedChange={(checked) => {
+                          setSlackNotificationsEnabled(checked);
+                          if (!checked) setSlackTeamId(null);
+                        }}
+                      />
+                    </label>
+                    {slackNotificationsEnabled && (
+                      <div className="space-y-2">
+                        <Label htmlFor="slackTeamId">Slack Workspace</Label>
+                        <Select
+                          value={slackTeamId ?? undefined}
+                          onValueChange={(value) => setSlackTeamId(value)}
+                        >
+                          <SelectTrigger id="slackTeamId">
+                            <SelectValue placeholder="Select workspace" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(slackWorkspaceOptions ?? []).map((workspace: SlackWorkspaceListItem) => (
+                              <SelectItem key={workspace.teamId} value={workspace.teamId}>
+                                {workspace.teamName} ({workspace.defaultChannelId})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 

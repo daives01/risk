@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as adminAuth from "../adminAuth.js";
 import type * as adminMaps from "../adminMaps.js";
 import type * as asyncTurns from "../asyncTurns.js";
 import type * as auth from "../auth.js";
@@ -29,7 +30,15 @@ import type * as playerColors from "../playerColors.js";
 import type * as rulesets from "../rulesets.js";
 import type * as seed from "../seed.js";
 import type * as sendEmail from "../sendEmail.js";
+import type * as slackAdmin from "../slackAdmin.js";
+import type * as slackAdminActions from "../slackAdminActions.js";
+import type * as slackCrypto from "../slackCrypto.js";
+import type * as slackMessage from "../slackMessage.js";
+import type * as slackNotificationData from "../slackNotificationData.js";
+import type * as slackNotifications from "../slackNotifications.js";
+import type * as slackValidation from "../slackValidation.js";
 import type * as teamTurnOrder from "../teamTurnOrder.js";
+import type * as turnNotifications from "../turnNotifications.js";
 import type * as typeAdapters from "../typeAdapters.js";
 import type * as userSettings from "../userSettings.js";
 
@@ -40,6 +49,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  adminAuth: typeof adminAuth;
   adminMaps: typeof adminMaps;
   asyncTurns: typeof asyncTurns;
   auth: typeof auth;
@@ -61,7 +71,15 @@ declare const fullApi: ApiFromModules<{
   rulesets: typeof rulesets;
   seed: typeof seed;
   sendEmail: typeof sendEmail;
+  slackAdmin: typeof slackAdmin;
+  slackAdminActions: typeof slackAdminActions;
+  slackCrypto: typeof slackCrypto;
+  slackMessage: typeof slackMessage;
+  slackNotificationData: typeof slackNotificationData;
+  slackNotifications: typeof slackNotifications;
+  slackValidation: typeof slackValidation;
   teamTurnOrder: typeof teamTurnOrder;
+  turnNotifications: typeof turnNotifications;
   typeAdapters: typeof typeAdapters;
   userSettings: typeof userSettings;
 }>;

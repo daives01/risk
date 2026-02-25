@@ -272,7 +272,7 @@ export const submitAction = mutation({
     });
 
     if (timingPatch.shouldNotify && timingPatch.turnStartedAt) {
-      await ctx.scheduler.runAfter(0, internal.asyncTurns.sendYourTurnEmail, {
+      await ctx.scheduler.runAfter(0, (internal as any).turnNotifications.sendTurnNotifications, {
         gameId: args.gameId,
         expectedPlayerId: result.state.turn.currentPlayerId,
         turnStartedAt: timingPatch.turnStartedAt,
@@ -422,7 +422,7 @@ export const submitReinforcementPlacements = mutation({
     });
 
     if (timingPatch.shouldNotify && timingPatch.turnStartedAt) {
-      await ctx.scheduler.runAfter(0, internal.asyncTurns.sendYourTurnEmail, {
+      await ctx.scheduler.runAfter(0, (internal as any).turnNotifications.sendTurnNotifications, {
         gameId: args.gameId,
         expectedPlayerId: nextState.turn.currentPlayerId,
         turnStartedAt: timingPatch.turnStartedAt,
@@ -619,7 +619,7 @@ export const resign = mutation({
     });
 
     if (timingPatch.shouldNotify && timingPatch.turnStartedAt) {
-      await ctx.scheduler.runAfter(0, internal.asyncTurns.sendYourTurnEmail, {
+      await ctx.scheduler.runAfter(0, (internal as any).turnNotifications.sendTurnNotifications, {
         gameId,
         expectedPlayerId: newState.turn.currentPlayerId,
         turnStartedAt: timingPatch.turnStartedAt,

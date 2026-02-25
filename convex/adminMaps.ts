@@ -4,6 +4,7 @@ import { authComponent } from "./auth.js";
 import { components } from "./_generated/api.js";
 import { validateAuthoredMap } from "risk-engine";
 import type { GraphMap, MapVisual } from "risk-engine";
+import { requireAdmin } from "./adminAuth";
 import {
   defaultMapPlayerLimits,
   resolveMapPlayerLimits,
@@ -46,22 +47,6 @@ function normalizeNodeScale(nodeScale: number | null | undefined): number {
   return typeof nodeScale === "number" && Number.isFinite(nodeScale) && nodeScale > 0
     ? nodeScale
     : 1;
-}
-
-async function requireAdmin(ctx: any) {
-  const user = await authComponent.safeGetAuthUser(ctx);
-  if (!user) throw new Error("Not authenticated");
-
-  const admin = await ctx.db
-    .query("admins")
-    .withIndex("by_userId", (q: any) => q.eq("userId", String(user._id)))
-    .unique();
-
-  if (!admin) {
-    throw new Error("Admin access required");
-  }
-
-  return String(user._id);
 }
 
 function validateContinentAssignments(graphMap: GraphMap): string[] {

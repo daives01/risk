@@ -274,7 +274,7 @@ export const processExpiredTurns = internalMutation({
       });
 
       if (rollover.shouldNotify && rollover.turnStartedAt) {
-        await ctx.scheduler.runAfter(0, internal.asyncTurns.sendYourTurnEmail, {
+        await ctx.scheduler.runAfter(0, (internal as any).turnNotifications.sendTurnNotifications, {
           gameId: game._id,
           expectedPlayerId: resolution.nextState.turn.currentPlayerId,
           turnStartedAt: rollover.turnStartedAt,

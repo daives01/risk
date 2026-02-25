@@ -68,6 +68,9 @@ const TIMING_MODE_OPTIONS = [
 type GameTimingMode = (typeof TIMING_MODE_OPTIONS)[number]["value"];
 type LobbyQuery = FunctionReturnType<typeof api.lobby.getLobby>;
 type LobbyData = Exclude<LobbyQuery, null>;
+type LobbyPlayer = LobbyData["players"][number];
+type SlackWorkspaceListQuery = FunctionReturnType<typeof api.slackAdmin.listMyWorkspaceOptions>;
+type SlackWorkspaceListItem = SlackWorkspaceListQuery[number];
 
 function updateLobbyQuery(
   localStore: OptimisticLocalStore,
@@ -175,12 +178,16 @@ export default function LobbyPage() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
 
   const lobby = useQuery(api.lobby.getLobby, gameId ? { gameId: gameId as Id<"games"> } : "skip");
+  const slackWorkspaceOptions = useQuery(
+    api.slackAdmin.listMyWorkspaceOptions,
+    session ? {} : "skip",
+  );
   const kickPlayer = useMutation(api.lobby.kickPlayer);
   const startGame = useMutation(api.lobby.startGame);
   const setPlayerTeam = useMutation(api.lobby.setPlayerTeam).withOptimisticUpdate((localStore, args) => {
     updateLobbyQuery(localStore, args.gameId, (lobbyData) => ({
       ...lobbyData,
-      players: lobbyData.players.map((player) =>
+      players: lobbyData.players.map((player: LobbyPlayer) =>
         player.userId === args.userId ? { ...player, teamId: args.teamId } : player,
       ),
     }));
@@ -202,7 +209,7 @@ export default function LobbyPage() {
           teamCount: args.teamCount,
           teamNames: nextTeamNames,
         },
-        players: lobbyData.players.map((player) =>
+        players: lobbyData.players.map((player: LobbyPlayer) =>
           player.teamId && !teamIds.includes(player.teamId)
             ? { ...player, teamId: null }
             : player,
@@ -223,6 +230,7 @@ export default function LobbyPage() {
     }));
   });
   const setRulesetOverrides = useMutation(api.lobby.setRulesetOverrides);
+  const setSlackNotifications = useMutation(api.lobby.setSlackNotifications);
   const setPlayerColor = useMutation(api.lobby.setPlayerColor);
   const joinGameByInvite = useMutation(api.lobby.joinGameByInvite);
   const deleteGame = useMutation(api.lobby.deleteGame);
@@ -244,6 +252,8 @@ export default function LobbyPage() {
   const [timingModeDraft, setTimingModeDraft] = useState<GameTimingMode>("realtime");
   const [excludeWeekendsDraft, setExcludeWeekendsDraft] = useState(false);
   const [teamCountDraft, setTeamCountDraft] = useState(2);
+  const [slackNotificationsEnabledDraft, setSlackNotificationsEnabledDraft] = useState(false);
+  const [slackTeamIdDraft, setSlackTeamIdDraft] = useState<string | null>(null);
   const [teamNameDrafts, setTeamNameDrafts] = useState<Record<string, string>>({});
   const [pendingColorByUserId, setPendingColorByUserId] = useState<Record<string, string>>({});
   const colorRequestSeqByUserIdRef = useRef<Record<string, number>>({});
@@ -271,6 +281,10 @@ export default function LobbyPage() {
     setTimingModeDraft(((lobby.game as { timingMode?: GameTimingMode }).timingMode ?? "realtime") as GameTimingMode);
     setExcludeWeekendsDraft((lobby.game as { excludeWeekends?: boolean }).excludeWeekends ?? false);
     setTeamCountDraft(lobby.game.teamCount ?? 2);
+    setSlackNotificationsEnabledDraft(
+      (lobby.game as { slackNotificationsEnabled?: boolean }).slackNotificationsEnabled ?? false,
+    );
+    setSlackTeamIdDraft((lobby.game as { slackTeamId?: string | null }).slackTeamId ?? null);
     setTeamNameDrafts((lobby.game.teamNames as Record<string, string> | null) ?? {});
   }, [lobby]);
 
@@ -305,7 +319,7 @@ export default function LobbyPage() {
   }
 
   const userId = session.user.id;
-  const isInGame = lobby.players.some((player) => player.userId === userId);
+  const isInGame = lobby.players.some((player: LobbyPlayer) => player.userId === userId);
   const isHost = lobby.game.createdBy === userId;
   const teamModeEnabled = lobby.game.teamModeEnabled;
   const turnDeadlineAt = (lobby.game as { turnDeadlineAt?: number | null }).turnDeadlineAt ?? null;
@@ -321,9 +335,9 @@ export default function LobbyPage() {
   const teamLabel = (teamId: string) =>
     teamNames[teamId] ?? teamNameDrafts[teamId] ?? defaultTeamLabelById[teamId] ?? teamId;
   const teamSizes = Object.fromEntries(
-    teamIds.map((teamId) => [teamId, lobby.players.filter((player) => player.teamId === teamId).length]),
+    teamIds.map((teamId) => [teamId, lobby.players.filter((player: LobbyPlayer) => player.teamId === teamId).length]),
   );
-  const playersMissingTeam = lobby.players.filter((player) => !player.teamId).length;
+  const playersMissingTeam = lobby.players.filter((player: LobbyPlayer) => !player.teamId).length;
   const minTeamSize = teamIds.length > 0 ? Math.min(...teamIds.map((teamId) => teamSizes[teamId] ?? 0)) : 0;
   const maxTeamSize = teamIds.length > 0 ? Math.max(...teamIds.map((teamId) => teamSizes[teamId] ?? 0)) : 0;
   const nonDivisibleWarning = teamModeEnabled && lobby.players.length > 0 && (lobby.players.length % teamCount !== 0);
@@ -495,6 +509,15 @@ export default function LobbyPage() {
 
   async function handleSaveRules() {
     if (!gameId) return;
+    if (
+      slackWorkspaceOptions &&
+      slackWorkspaceOptions.length > 0 &&
+      slackNotificationsEnabledDraft &&
+      !slackTeamIdDraft
+    ) {
+      setError("Select a Slack workspace or disable Slack notifications.");
+      return;
+    }
     setError(null);
     setSavingRules(true);
     try {
@@ -519,6 +542,11 @@ export default function LobbyPage() {
         rulesetOverrides,
         timingMode: timingModeDraft,
         excludeWeekends: excludeWeekendsDraft,
+      });
+      await setSlackNotifications({
+        gameId: gameId as Id<"games">,
+        enabled: slackNotificationsEnabledDraft,
+        ...(slackNotificationsEnabledDraft && slackTeamIdDraft ? { slackTeamId: slackTeamIdDraft } : {}),
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save rules");
@@ -568,7 +596,7 @@ export default function LobbyPage() {
             <div className="space-y-2">
               <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Players</p>
               <div className="space-y-2">
-                {lobby.players.map((player) => (
+                {lobby.players.map((player: LobbyPlayer) => (
                   <div key={player.userId} className="rounded-lg border bg-background/75 p-3">
                     <div className="flex items-center gap-2">
                       <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -854,9 +882,46 @@ export default function LobbyPage() {
                         />
                       </div>
                     )}
-                    <Button variant="outline" size="sm" onClick={handleSaveRules} disabled={savingRules}>
-                      {savingRules ? "Saving..." : "Save Rules"}
-                    </Button>
+                    {slackWorkspaceOptions && slackWorkspaceOptions.length > 0 && (
+                      <div className="space-y-2 pt-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">Slack Notifications</p>
+                        <label className="flex items-center justify-between gap-3 border border-border/75 bg-background/65 px-3 py-2">
+                          <span className="text-sm text-foreground">Notify Slack on turn changes</span>
+                          <Switch
+                            checked={slackNotificationsEnabledDraft}
+                            onCheckedChange={(checked) => {
+                              setSlackNotificationsEnabledDraft(checked);
+                              if (!checked) setSlackTeamIdDraft(null);
+                            }}
+                          />
+                        </label>
+                        {slackNotificationsEnabledDraft && (
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">Workspace</span>
+                            <Select
+                              value={slackTeamIdDraft ?? undefined}
+                              onValueChange={(value) => setSlackTeamIdDraft(value)}
+                            >
+                              <SelectTrigger className="h-8 w-[220px] text-xs sm:w-[360px]">
+                                <SelectValue placeholder="Select workspace" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(slackWorkspaceOptions ?? []).map((workspace: SlackWorkspaceListItem) => (
+                                  <SelectItem key={workspace.teamId} value={workspace.teamId}>
+                                    {workspace.teamName} ({workspace.defaultChannelId})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="pt-1">
+                      <Button variant="outline" size="sm" onClick={handleSaveRules} disabled={savingRules}>
+                        {savingRules ? "Saving..." : "Save Rules"}
+                      </Button>
+                    </div>
                   </>
                 ) : (
                   <div className="space-y-1 text-xs">
@@ -910,6 +975,21 @@ export default function LobbyPage() {
                         <span className="text-muted-foreground">Current deadline: </span>
                         <span className="text-foreground">{new Date(turnDeadlineAt).toLocaleString()}</span>
                       </p>
+                    )}
+                    {slackWorkspaceOptions && slackWorkspaceOptions.length > 0 && (
+                      <>
+                        <p className="pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">Slack Notifications</p>
+                        <p>
+                          <span className="text-muted-foreground">Enabled: </span>
+                          <span className="text-foreground">{slackNotificationsEnabledDraft ? "Yes" : "No"}</span>
+                        </p>
+                        {slackNotificationsEnabledDraft && (
+                          <p>
+                            <span className="text-muted-foreground">Workspace: </span>
+                            <span className="text-foreground">{slackTeamIdDraft ?? "Unknown"}</span>
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

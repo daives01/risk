@@ -13,6 +13,7 @@ import JoinGamePage from "@/pages/join-game";
 import GamePage from "@/pages/game";
 import AdminMapsPage from "@/pages/admin-maps";
 import AdminMapEditorPage from "@/pages/admin-map-editor";
+import AdminSlackPage from "@/pages/admin-slack";
 
 function App() {
   return (
@@ -31,6 +32,7 @@ function App() {
           <Route path="/join/:code" element={<JoinGamePage />} />
           <Route path="/admin/maps" element={<AdminMapsPage />} />
           <Route path="/admin/maps/:mapId" element={<AdminMapEditorPage />} />
+          <Route path="/admin/slack" element={<AdminSlackPage />} />
         </Routes>
         <Toaster />
       </BrowserRouter>

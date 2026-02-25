@@ -80,6 +80,8 @@ export default defineSchema({
     stateVersion: v.optional(v.number()),
     turnStartedAt: v.optional(v.number()),
     turnDeadlineAt: v.optional(v.number()),
+    slackTeamId: v.optional(v.string()),
+    slackNotificationsEnabled: v.optional(v.boolean()),
   })
     .index("by_visibility_status_createdAt", [
       "visibility",
@@ -90,7 +92,8 @@ export default defineSchema({
       "status",
       "timingMode",
       "turnDeadlineAt",
-    ]),
+    ])
+    .index("by_slackTeamId", ["slackTeamId"]),
   gamePlayers: defineTable({
     gameId: v.id("games"),
     userId: v.string(),
@@ -160,4 +163,29 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),
+  slackWorkspaces: defineTable({
+    teamId: v.string(),
+    teamName: v.string(),
+    defaultChannelId: v.string(),
+    status: v.union(v.literal("active"), v.literal("disabled")),
+    botTokenCiphertext: v.string(),
+    botTokenIv: v.string(),
+    botTokenTag: v.string(),
+    keyVersion: v.number(),
+    installedByUserId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_teamId", ["teamId"])
+    .index("by_status", ["status"]),
+  userSlackIdentities: defineTable({
+    userId: v.string(),
+    teamId: v.string(),
+    slackUserId: v.string(),
+    status: v.union(v.literal("active"), v.literal("unlinked")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId_teamId", ["userId", "teamId"])
+    .index("by_teamId_slackUserId", ["teamId", "slackUserId"]),
 });
