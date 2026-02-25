@@ -59,14 +59,9 @@ export function GamePlayersCard({
   onResign,
 }: PlayersCardProps) {
   const [resignOpen, setResignOpen] = useState(false);
-  const columnGapClass = teamModeEnabled
-    ? "gap-x-1 sm:gap-x-1.5 [@media(max-width:420px)]:gap-x-0.5"
-    : "gap-x-1.5 sm:gap-x-2 [@media(max-width:420px)]:gap-x-1";
-  const columnsClass = teamModeEnabled
-    ? "grid-cols-[minmax(4.25rem,1.2fr)_minmax(2.5rem,0.7fr)_minmax(2.25rem,0.65fr)_minmax(2.65rem,0.58fr)_minmax(1.9rem,0.45fr)] sm:grid-cols-[minmax(8rem,1.7fr)_minmax(4.5rem,0.95fr)_minmax(4rem,0.9fr)_minmax(4.9rem,0.75fr)_minmax(3.2rem,0.5fr)]"
-    : "grid-cols-[minmax(4.25rem,1.2fr)_minmax(2.5rem,0.7fr)_minmax(2.65rem,0.58fr)_minmax(1.9rem,0.45fr)] sm:grid-cols-[minmax(8rem,1.7fr)_minmax(4.5rem,0.95fr)_minmax(4.9rem,0.75fr)_minmax(3.2rem,0.5fr)]";
+  const tableMinWidthClass = teamModeEnabled ? "min-w-[31rem]" : "min-w-[23rem]";
 
-  const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>, playerId: string) => {
+  const handleRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, playerId: string) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     onTogglePlayerHighlight(playerId);
@@ -82,63 +77,79 @@ export function GamePlayersCard({
       </CardHeader>
       <CardContent className="min-w-0 space-y-2 pb-3">
         <div className="min-w-0 overflow-x-auto game-scrollbar">
-          <div className="w-max min-w-full space-y-2">
-            <div
-              className={`grid w-full min-w-0 items-center rounded-md border border-border/70 bg-background/70 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 [@media(max-width:420px)]:text-[9px] ${columnsClass} ${columnGapClass}`}
-            >
-              <span className="truncate">Player</span>
-              <span className="text-center truncate"><span className="sm:hidden">Stat</span><span className="hidden sm:inline">Status</span></span>
-              {teamModeEnabled && <span className="truncate">Team</span>}
-              <span className="text-center truncate"><span className="sm:hidden">R/T</span><span className="hidden sm:inline">Res/Troops</span></span>
-              <span className="text-center">Cards</span>
-            </div>
-            {playerStats.map((player) => {
-              const isCurrent = player.playerId === displayState.turn.currentPlayerId;
-              const isGameOver = displayState.turn.phase === "GameOver";
-              const isWinner = isGameOver && player.status === "alive";
-              const isDefeated = player.status === "defeated";
-              const teamId = player.teamId;
-              const playerHighlightKey = `player:${player.playerId}` as HighlightFilter;
-              const teamHighlightKey = teamId ? (`team:${teamId}` as HighlightFilter) : null;
-              const isPlayerHighlighted = activeHighlight === playerHighlightKey;
-              const isTeamHighlighted = teamHighlightKey ? activeHighlight === teamHighlightKey : false;
-              const color = getPlayerColor(player.playerId, displayState.turnOrder);
-              const baseStatusLabel = isGameOver
-                ? isWinner
-                  ? "Winner"
-                  : player.status
-                : player.status;
-              const statusLabel = showTurnTimer && isCurrent
-                ? (turnTimerLabel ?? "Turn")
-                : !showTurnTimer && !isGameOver && isCurrent
-                  ? "Turn"
-                  : baseStatusLabel;
-              const showResign =
-                canResign &&
-                !!onResign &&
-                player.status === "alive" &&
-                !!myPlayerId &&
-                player.playerId === myPlayerId;
+          <table className={`w-full table-auto border-separate border-spacing-y-2 ${tableMinWidthClass}`}>
+            <colgroup>
+              <col className="w-[2rem]" />
+              <col />
+              <col className="w-[1.6rem]" />
+              <col className="w-[5.25rem]" />
+              {teamModeEnabled && <col className="w-[7rem]" />}
+              <col className="w-[6rem]" />
+              <col className="w-[3.25rem]" />
+            </colgroup>
+            <thead>
+              <tr className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground [@media(max-width:420px)]:text-[9px]">
+                <th className="rounded-l-md border-y border-l border-border/70 bg-background/70 px-1 py-1.5 text-center [@media(max-width:420px)]:py-1" />
+                <th className="border-y border-border/70 bg-background/70 px-1 py-1.5 text-left [@media(max-width:420px)]:py-1">Player</th>
+                <th className="border-y border-border/70 bg-background/70 px-1 py-1.5 text-center [@media(max-width:420px)]:py-1" />
+                <th className="border-y border-border/70 bg-background/70 px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1"><span className="sm:hidden">Stat</span><span className="hidden sm:inline">Status</span></th>
+                {teamModeEnabled && <th className="border-y border-border/70 bg-background/70 px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1">Team</th>}
+                <th className="border-y border-border/70 bg-background/70 px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1"><span className="sm:hidden">R/T</span><span className="hidden sm:inline">Res/Troops</span></th>
+                <th className="rounded-r-md border-y border-r border-border/70 bg-background/70 px-3 py-1.5 text-center [@media(max-width:420px)]:px-2.5 [@media(max-width:420px)]:py-1">Cards</th>
+              </tr>
+            </thead>
+            <tbody>
+              {playerStats.map((player) => {
+                const isCurrent = player.playerId === displayState.turn.currentPlayerId;
+                const isGameOver = displayState.turn.phase === "GameOver";
+                const isWinner = isGameOver && player.status === "alive";
+                const isDefeated = player.status === "defeated";
+                const teamId = player.teamId;
+                const playerHighlightKey = `player:${player.playerId}` as HighlightFilter;
+                const teamHighlightKey = teamId ? (`team:${teamId}` as HighlightFilter) : null;
+                const isPlayerHighlighted = activeHighlight === playerHighlightKey;
+                const isTeamHighlighted = teamHighlightKey ? activeHighlight === teamHighlightKey : false;
+                const color = getPlayerColor(player.playerId, displayState.turnOrder);
+                const baseStatusLabel = isGameOver
+                  ? isWinner
+                    ? "Winner"
+                    : player.status
+                  : player.status;
+                const statusLabel = showTurnTimer && isCurrent
+                  ? (turnTimerLabel ?? "Turn")
+                  : !showTurnTimer && !isGameOver && isCurrent
+                    ? "Turn"
+                    : baseStatusLabel;
+                const showResign =
+                  canResign &&
+                  !!onResign &&
+                  player.status === "alive" &&
+                  !!myPlayerId &&
+                  player.playerId === myPlayerId;
+                const rowToneClass = isPlayerHighlighted
+                  ? "border-primary/70 bg-primary/10"
+                  : "border-border/70 bg-background/80 group-hover:border-primary/50";
 
-              return (
-                <div
-                  key={player.playerId}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onTogglePlayerHighlight(player.playerId)}
-                  onKeyDown={(event) => handleRowKeyDown(event, player.playerId)}
-                  className={`w-full cursor-pointer rounded-lg border bg-background/80 px-2.5 py-1.5 transition hover:border-primary/50 [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 ${
-                    isDefeated ? "opacity-55" : ""
-                  } ${isPlayerHighlighted ? "border-primary/70 bg-primary/10" : ""}`}
-                >
-                  <div
-                    className={`grid w-full min-w-0 items-center text-sm [@media(max-width:420px)]:text-[0.72rem] ${columnsClass} ${columnGapClass}`}
+                return (
+                  <tr
+                    key={player.playerId}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onTogglePlayerHighlight(player.playerId)}
+                    onKeyDown={(event) => handleRowKeyDown(event, player.playerId)}
+                    className={`group cursor-pointer outline-none transition ${isDefeated ? "opacity-55" : ""}`}
                   >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-                      <span className={`min-w-0 truncate font-semibold ${isDefeated ? "line-through" : ""}`}>
-                        {getPlayerName(player.playerId, playerMap)}
-                      </span>
+                    <td className={`rounded-l-lg border-y border-l px-1 py-1.5 text-center [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
+                      <span className="mx-auto block size-2.5 rounded-full" style={{ backgroundColor: color }} />
+                    </td>
+                    <td className={`border-y px-1 py-1.5 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
+                      <div className="min-w-0 text-sm [@media(max-width:420px)]:text-[0.72rem]">
+                        <span className={`block min-w-0 truncate font-semibold ${isDefeated ? "line-through" : ""}`}>
+                          {getPlayerName(player.playerId, playerMap)}
+                        </span>
+                      </div>
+                    </td>
+                    <td className={`border-y px-1 py-1.5 text-center [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
                       {showResign && (
                         <Popover open={resignOpen} onOpenChange={setResignOpen}>
                           <PopoverTrigger asChild>
@@ -149,9 +160,7 @@ export function GamePlayersCard({
                               aria-label="Resign game"
                               title="Resign game"
                               className="text-muted-foreground hover:text-foreground"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                              }}
+                              onClick={(event) => event.stopPropagation()}
                             >
                               <Flag className="size-3" />
                             </Button>
@@ -193,24 +202,26 @@ export function GamePlayersCard({
                           </PopoverContent>
                         </Popover>
                       )}
-                    </div>
-                    <span
-                      className={`truncate text-center text-xs font-medium ${
-                        showTurnTimer && isCurrent
-                          ? "font-semibold text-amber-500"
-                          : isWinner || (!showTurnTimer && !isGameOver && isCurrent)
-                            ? "font-semibold text-primary"
-                            : "text-muted-foreground"
-                      }`}
-                    >
-                      {statusLabel}
-                    </span>
+                    </td>
+                    <td className={`border-y px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
+                      <span
+                        className={`truncate text-xs font-medium ${
+                          showTurnTimer && isCurrent
+                            ? "font-semibold text-amber-500"
+                            : isWinner || (!showTurnTimer && !isGameOver && isCurrent)
+                              ? "font-semibold text-primary"
+                              : "text-muted-foreground"
+                        }`}
+                      >
+                        {statusLabel}
+                      </span>
+                    </td>
                     {teamModeEnabled && (
-                      <div className="min-w-0">
+                      <td className={`border-y px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
                         {teamId ? (
                           <button
                             type="button"
-                            className={`w-full truncate rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition ${
+                            className={`inline-flex max-w-full items-center justify-center truncate rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition ${
                               isTeamHighlighted
                                 ? "border-primary bg-primary/15 text-primary"
                                 : "border-border text-muted-foreground hover:border-primary/50"
@@ -225,15 +236,19 @@ export function GamePlayersCard({
                         ) : (
                           <span className="text-xs text-muted-foreground/80">-</span>
                         )}
-                      </div>
+                      </td>
                     )}
-                    <span className="text-center text-xs tabular-nums">{player.reserveTroops} / {player.armies}</span>
-                    <span className="text-center text-xs tabular-nums">{player.cards}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                    <td className={`border-y px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
+                      <span className="text-xs tabular-nums">{player.reserveTroops} / {player.armies}</span>
+                    </td>
+                    <td className={`rounded-r-lg border-y border-r px-3 py-1.5 text-center [@media(max-width:420px)]:px-2.5 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
+                      <span className="text-xs tabular-nums">{player.cards}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </CardContent>
     </Card>
