@@ -59,13 +59,12 @@ export function GamePlayersCard({
   onResign,
 }: PlayersCardProps) {
   const [resignOpen, setResignOpen] = useState(false);
-  const columnsClass = showTurnTimer
-    ? teamModeEnabled
-      ? "grid-cols-[minmax(4.25rem,1.2fr)_minmax(2.25rem,0.65fr)_repeat(4,minmax(1.85rem,0.5fr))_minmax(2.5rem,0.65fr)_minmax(2.25rem,0.6fr)] sm:grid-cols-[minmax(8rem,1.7fr)_minmax(4rem,0.9fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.5rem,0.9fr)_minmax(4.25rem,0.85fr)]"
-      : "grid-cols-[minmax(4.25rem,1.2fr)_repeat(4,minmax(1.85rem,0.5fr))_minmax(2.5rem,0.65fr)_minmax(2.25rem,0.6fr)] sm:grid-cols-[minmax(8rem,1.7fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.5rem,0.9fr)_minmax(4.25rem,0.85fr)]"
-    : teamModeEnabled
-      ? "grid-cols-[minmax(4.25rem,1.2fr)_minmax(2.25rem,0.65fr)_repeat(4,minmax(1.85rem,0.5fr))_minmax(2.25rem,0.6fr)] sm:grid-cols-[minmax(8rem,1.7fr)_minmax(4rem,0.9fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.25rem,0.85fr)]"
-      : "grid-cols-[minmax(4.25rem,1.2fr)_repeat(4,minmax(1.85rem,0.5fr))_minmax(2.25rem,0.6fr)] sm:grid-cols-[minmax(8rem,1.7fr)_repeat(4,minmax(3.25rem,0.7fr))_minmax(4.25rem,0.85fr)]";
+  const columnGapClass = teamModeEnabled
+    ? "gap-x-1 sm:gap-x-1.5 [@media(max-width:420px)]:gap-x-0.5"
+    : "gap-x-1.5 sm:gap-x-2 [@media(max-width:420px)]:gap-x-1";
+  const columnsClass = teamModeEnabled
+    ? "grid-cols-[minmax(4.25rem,1.2fr)_minmax(2.5rem,0.7fr)_minmax(2.25rem,0.65fr)_minmax(2.65rem,0.58fr)_minmax(1.9rem,0.45fr)] sm:grid-cols-[minmax(8rem,1.7fr)_minmax(4.5rem,0.95fr)_minmax(4rem,0.9fr)_minmax(4.9rem,0.75fr)_minmax(3.2rem,0.5fr)]"
+    : "grid-cols-[minmax(4.25rem,1.2fr)_minmax(2.5rem,0.7fr)_minmax(2.65rem,0.58fr)_minmax(1.9rem,0.45fr)] sm:grid-cols-[minmax(8rem,1.7fr)_minmax(4.5rem,0.95fr)_minmax(4.9rem,0.75fr)_minmax(3.2rem,0.5fr)]";
 
   const handleRowKeyDown = (event: KeyboardEvent<HTMLDivElement>, playerId: string) => {
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -85,16 +84,13 @@ export function GamePlayersCard({
         <div className="min-w-0 overflow-x-auto game-scrollbar">
           <div className="w-max min-w-full space-y-2">
             <div
-              className={`grid w-full min-w-0 items-center gap-2 rounded-md border border-border/70 bg-background/70 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground [@media(max-width:420px)]:gap-1 [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 [@media(max-width:420px)]:text-[9px] ${columnsClass}`}
+              className={`grid w-full min-w-0 items-center rounded-md border border-border/70 bg-background/70 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 [@media(max-width:420px)]:text-[9px] ${columnsClass} ${columnGapClass}`}
             >
               <span className="truncate">Player</span>
-              {teamModeEnabled && <span className="truncate">Team</span>}
-              <span className="text-center">Terr.</span>
-              <span className="text-center truncate">Arm.</span>
-              <span className="text-center truncate"><span className="sm:hidden">Res.</span><span className="hidden sm:inline">Reserve</span></span>
-              <span className="text-center">Cards</span>
-              {showTurnTimer && <span className="text-center truncate"><span className="sm:hidden">Tmr</span><span className="hidden sm:inline">Timer</span></span>}
               <span className="text-center truncate"><span className="sm:hidden">Stat</span><span className="hidden sm:inline">Status</span></span>
+              {teamModeEnabled && <span className="truncate">Team</span>}
+              <span className="text-center truncate"><span className="sm:hidden">R/T</span><span className="hidden sm:inline">Res/Troops</span></span>
+              <span className="text-center">Cards</span>
             </div>
             {playerStats.map((player) => {
               const isCurrent = player.playerId === displayState.turn.currentPlayerId;
@@ -107,13 +103,16 @@ export function GamePlayersCard({
               const isPlayerHighlighted = activeHighlight === playerHighlightKey;
               const isTeamHighlighted = teamHighlightKey ? activeHighlight === teamHighlightKey : false;
               const color = getPlayerColor(player.playerId, displayState.turnOrder);
-              const statusLabel = isGameOver
+              const baseStatusLabel = isGameOver
                 ? isWinner
                   ? "Winner"
                   : player.status
-                : isCurrent
+                : player.status;
+              const statusLabel = showTurnTimer && isCurrent
+                ? (turnTimerLabel ?? "Turn")
+                : !showTurnTimer && !isGameOver && isCurrent
                   ? "Turn"
-                  : player.status;
+                  : baseStatusLabel;
               const showResign =
                 canResign &&
                 !!onResign &&
@@ -133,7 +132,7 @@ export function GamePlayersCard({
                   } ${isPlayerHighlighted ? "border-primary/70 bg-primary/10" : ""}`}
                 >
                   <div
-                    className={`grid w-full min-w-0 items-center gap-2 text-sm [@media(max-width:420px)]:gap-1 [@media(max-width:420px)]:text-[0.72rem] ${columnsClass}`}
+                    className={`grid w-full min-w-0 items-center text-sm [@media(max-width:420px)]:text-[0.72rem] ${columnsClass} ${columnGapClass}`}
                   >
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
@@ -195,6 +194,17 @@ export function GamePlayersCard({
                         </Popover>
                       )}
                     </div>
+                    <span
+                      className={`truncate text-center text-xs font-medium ${
+                        showTurnTimer && isCurrent
+                          ? "font-semibold text-amber-500"
+                          : isWinner || (!showTurnTimer && !isGameOver && isCurrent)
+                            ? "font-semibold text-primary"
+                            : "text-muted-foreground"
+                      }`}
+                    >
+                      {statusLabel}
+                    </span>
                     {teamModeEnabled && (
                       <div className="min-w-0">
                         {teamId ? (
@@ -217,22 +227,8 @@ export function GamePlayersCard({
                         )}
                       </div>
                     )}
-                    <span className="text-center text-xs tabular-nums">{player.territories}</span>
-                    <span className="text-center text-xs tabular-nums">{player.armies}</span>
-                    <span className="text-center text-xs tabular-nums">{player.reserveTroops}</span>
+                    <span className="text-center text-xs tabular-nums">{player.reserveTroops} / {player.armies}</span>
                     <span className="text-center text-xs tabular-nums">{player.cards}</span>
-                    {showTurnTimer && (
-                      <span className="truncate text-center text-xs tabular-nums text-muted-foreground">
-                        {isCurrent ? (turnTimerLabel ?? "-") : "-"}
-                      </span>
-                    )}
-                    <span
-                      className={`truncate text-center text-xs font-medium capitalize ${
-                        isWinner || (!isGameOver && isCurrent) ? "font-semibold text-primary" : "text-muted-foreground"
-                      }`}
-                    >
-                      {statusLabel}
-                    </span>
                   </div>
                 </div>
               );
