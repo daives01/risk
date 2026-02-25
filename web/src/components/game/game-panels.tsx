@@ -60,6 +60,7 @@ export function GamePlayersCard({
 }: PlayersCardProps) {
   const [resignOpen, setResignOpen] = useState(false);
   const tableMinWidthClass = teamModeEnabled ? "min-w-[31rem]" : "min-w-[23rem]";
+  const toTitleCase = (value: string) => value.slice(0, 1).toUpperCase() + value.slice(1).toLowerCase();
 
   const handleRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, playerId: string) => {
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -113,8 +114,8 @@ export function GamePlayersCard({
                 const baseStatusLabel = isGameOver
                   ? isWinner
                     ? "Winner"
-                    : player.status
-                  : player.status;
+                    : toTitleCase(player.status)
+                  : toTitleCase(player.status);
                 const statusLabel = showTurnTimer && isCurrent
                   ? (turnTimerLabel ?? "Turn")
                   : !showTurnTimer && !isGameOver && isCurrent
