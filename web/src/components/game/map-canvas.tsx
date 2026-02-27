@@ -202,17 +202,6 @@ export function MapCanvas({
   );
 
   const imageFit = useMemo(() => {
-    if (fullscreen) {
-      if (imageAspect >= frameAspect) {
-        const drawWidth = imageAspect / frameAspect;
-        const left = (1 - drawWidth) / 2;
-        return { left, top: 0, width: drawWidth, height: 1 };
-      }
-      const drawHeight = frameAspect / imageAspect;
-      const top = (1 - drawHeight) / 2;
-      return { left: 0, top, width: 1, height: drawHeight };
-    }
-
     if (imageAspect >= frameAspect) {
       const drawHeight = frameAspect / imageAspect;
       const top = (1 - drawHeight) / 2;
@@ -221,7 +210,7 @@ export function MapCanvas({
     const drawWidth = imageAspect / frameAspect;
     const left = (1 - drawWidth) / 2;
     return { left, top: 0, width: drawWidth, height: 1 };
-  }, [frameAspect, fullscreen, imageAspect]);
+  }, [frameAspect, imageAspect]);
 
   const imagePixelSize = useMemo(() => {
     if (!containerSize.width || !containerSize.height) return { width: 0, height: 0 };

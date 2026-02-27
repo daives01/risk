@@ -7,6 +7,7 @@ export const ROTATING_HINTS = [
   "Press I to better explore the map",
   "Use the arrow keys to increase/decrease troop counts",
   "Use the number row to set troop count, dice count, etc",
+  "During placement, right-click to remove a troop you placed",
   "Arrow keys adjust troop counts during attacks and fortifies",
   "Click on a player to highlight their territories",
   "Strengthen borders first before interior territories",
