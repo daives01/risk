@@ -1,8 +1,11 @@
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
+  Check,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   History,
   Info,
   Layers,
@@ -11,6 +14,7 @@ import {
   SkipBack,
   SkipForward,
   SlidersHorizontal,
+  Undo2,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -111,9 +115,9 @@ export function GameHeader({
   const showPhaseTitle = historyOpen || !["Reinforcement", "Attack", "Fortify"].includes(displayPhase);
 
   return (
-    <div className="game-header glass-panel relative flex min-h-12 flex-wrap items-center gap-2 px-2 py-1.5">
+    <div className="game-header glass-panel relative flex min-h-12 flex-nowrap items-center gap-1.5 px-2 py-1.5 md:gap-2">
       {showBackHome && (
-        <Button asChild size="sm" type="button" variant="outline" title="Back to home">
+        <Button asChild size="sm" type="button" variant="outline" title="Back to home" className="hidden md:inline-flex">
           <Link to="/" aria-label="Back to home">
             <ArrowLeft className="size-4" />
           </Link>
@@ -178,35 +182,39 @@ export function GameHeader({
       {!historyOpen && isMyTurn && phase === "Reinforcement" && (
         <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-sm">
           <Button
-            size="xs"
             type="button"
+            size="sm"
             variant="outline"
-            disabled={controlsDisabled || uncommittedReinforcements <= 0 || placeCount <= 1}
-            onClick={onDecreasePlaceCount}
-          >
-            -
-          </Button>
-          <span className="inline-flex min-w-8 items-center justify-center rounded border bg-background/80 px-2 py-1 font-semibold">
-            {placeCount}
-          </span>
-          <Button
-            size="xs"
-            type="button"
-            variant="outline"
-            disabled={controlsDisabled || uncommittedReinforcements <= 0 || placeCount >= uncommittedReinforcements}
-            onClick={onIncreasePlaceCount}
-          >
-            +
-          </Button>
-          <Button
-            type="button"
-            size="xs"
-            variant="outline"
+            aria-label="Undo placement"
             disabled={controlsDisabled || reinforcementDraftCount === 0}
             onClick={onUndoPlacement}
           >
-            Undo
+            <Undo2 className="size-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Undo</span>
           </Button>
+          <div className="inline-flex h-8 overflow-hidden rounded-md border bg-background/80">
+            <span className="inline-flex min-w-9 items-center justify-center px-2 text-sm font-semibold">{placeCount}</span>
+            <div className="flex flex-col border-l">
+              <button
+                type="button"
+                aria-label="Increase placement count"
+                className="flex h-4 w-6 items-center justify-center border-b hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                disabled={controlsDisabled || uncommittedReinforcements <= 0 || placeCount >= uncommittedReinforcements}
+                onClick={onIncreasePlaceCount}
+              >
+                <ChevronUp className="size-3" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                aria-label="Decrease placement count"
+                className="flex h-4 w-6 items-center justify-center hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                disabled={controlsDisabled || uncommittedReinforcements <= 0 || placeCount <= 1}
+                onClick={onDecreasePlaceCount}
+              >
+                <ChevronDown className="size-3" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -214,9 +222,9 @@ export function GameHeader({
         <span className="shrink-0 rounded border bg-background/70 px-2 py-1 text-sm">{winnerName}</span>
       )}
 
-      <div className="ml-auto flex flex-wrap items-center gap-1.5">
+      <div className="ml-auto flex flex-nowrap items-center gap-1.5">
         {historyOpen && (
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-nowrap items-center gap-1.5">
             <Button
               size="xs"
               type="button"
@@ -261,12 +269,14 @@ export function GameHeader({
               type="button"
               size="sm"
               title="Confirm placements (Cmd/Ctrl+Enter)"
+              aria-label="Confirm placements"
               disabled={controlsDisabled || reinforcementDraftCount === 0}
               onClick={onConfirmPlacements}
               className="action-cta"
             >
-              Confirm
-              <ShortcutHint shortcut="mod+enter" />
+              <Check className="size-3.5" aria-hidden="true" />
+              <span className="hidden sm:inline">Confirm</span>
+              <ShortcutHint shortcut="mod+enter" className="hidden md:inline-flex" />
             </Button>
           )}
           {!historyOpen && isMyTurn && phase === "Attack" && !hasPendingAttack && (
@@ -280,7 +290,7 @@ export function GameHeader({
               className="action-cta"
             >
               End Attack
-              <ShortcutHint shortcut="mod+enter" />
+              <ShortcutHint shortcut="mod+enter" className="hidden md:inline-flex" />
             </Button>
           )}
           {!historyOpen && isMyTurn && phase === "Fortify" && (
@@ -293,7 +303,7 @@ export function GameHeader({
               className="action-cta"
             >
               End Turn
-              <ShortcutHint shortcut="mod+enter" />
+              <ShortcutHint shortcut="mod+enter" className="hidden md:inline-flex" />
             </Button>
           )}
           {!cardsOpenDisabled && (

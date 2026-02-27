@@ -354,25 +354,31 @@ export function MapCanvas({
     <>
       <div className="flex items-center justify-between gap-2 rounded-md px-1 py-0.5">
         <p
-          className="cursor-grab text-xs font-medium text-muted-foreground active:cursor-grabbing"
+          className={cn(
+            "cursor-grab text-xs font-medium active:cursor-grabbing",
+            battleOverlay.mode === "attack" && battleOverlay.resolving ? "text-primary" : "text-muted-foreground",
+          )}
           onPointerDown={onStartOverlayDrag}
           onPointerMove={onOverlayDragMove}
           onPointerUp={onEndOverlayDrag}
           onPointerCancel={onEndOverlayDrag}
         >
-          {battleOverlay.mode === "occupy" ? "Move" : battleOverlay.mode === "fortify" ? "Fortify" : "Attack"}
-        </p>
-        {battleOverlay.mode === "attack" && (
           <span
             className={cn(
-              "flex min-w-[96px] items-center justify-end gap-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-opacity",
-              battleOverlay.resolving ? "opacity-100" : "opacity-0",
+              "inline-flex items-center gap-1.5",
+              battleOverlay.mode === "attack" && battleOverlay.resolving && "animate-pulse",
             )}
           >
-            <Loader2 className="size-3 animate-spin" />
-            Attacking...
+            {battleOverlay.mode === "occupy"
+              ? "Move"
+              : battleOverlay.mode === "fortify"
+                ? "Fortify"
+                : battleOverlay.resolving
+                  ? "Attacking..."
+                  : "Attack"}
+            {battleOverlay.mode === "attack" && battleOverlay.resolving && <Loader2 className="size-3 animate-spin" />}
           </span>
-        )}
+        </p>
         {(battleOverlay.mode === "attack" || battleOverlay.mode === "fortify") && (
           <Button
             type="button"
