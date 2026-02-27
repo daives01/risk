@@ -23,6 +23,8 @@ type MyGame = {
   createdAt: number;
   startedAt: number | null;
   finishedAt: number | null;
+  myEnginePlayerId: string | null;
+  currentTurnPlayerId: string | null;
 };
 
 type PublicGame = {
@@ -42,6 +44,15 @@ function gameStatusLabel(status: "active" | "lobby" | "public"): string {
   if (status === "active") return "Active";
   if (status === "lobby") return "Lobby";
   return "Public";
+}
+
+function isMyTurn(game: MyGame): boolean {
+  return (
+    game.status === "active" &&
+    game.myEnginePlayerId !== null &&
+    game.currentTurnPlayerId !== null &&
+    game.myEnginePlayerId === game.currentTurnPlayerId
+  );
 }
 
 export default function HomePage() {
@@ -101,9 +112,15 @@ export default function HomePage() {
     return (publicGames ?? []).filter((game) => game.status === "lobby" && !mine.has(game._id));
   }, [games, publicGames]);
 
-  const continueGame = useMemo(() => {
-    return sortedGames.find((game) => game.status === "active") ?? null;
+  const prioritizedActiveGames = useMemo(() => {
+    return sortedGames
+      .filter((game) => game.status === "active")
+      .sort((a, b) => Number(isMyTurn(b)) - Number(isMyTurn(a)));
   }, [sortedGames]);
+
+  const continueGame = useMemo(() => {
+    return prioritizedActiveGames[0] ?? null;
+  }, [prioritizedActiveGames]);
 
   const filteredHomeGames = useMemo(() => {
     if (gamesFilter === "public") {
@@ -111,17 +128,28 @@ export default function HomePage() {
         _id: game._id,
         name: game.name,
         status: "public" as const,
+        isMyTurn: false,
+      }));
+    }
+
+    if (gamesFilter === "active") {
+      return prioritizedActiveGames.map((game) => ({
+        _id: game._id,
+        name: game.name,
+        status: "active" as const,
+        isMyTurn: isMyTurn(game),
       }));
     }
 
     return sortedGames
-      .filter((game) => game.status === gamesFilter)
+      .filter((game) => game.status === "lobby")
       .map((game) => ({
         _id: game._id,
         name: game.name,
-        status: game.status as "active" | "lobby",
+        status: "lobby" as const,
+        isMyTurn: false,
       }));
-  }, [gamesFilter, myPublicLobbyGames, sortedGames]);
+  }, [gamesFilter, myPublicLobbyGames, prioritizedActiveGames, sortedGames]);
 
   const archiveGames = useMemo(() => {
     const q = archiveFilter.trim().toLowerCase();
@@ -507,7 +535,7 @@ export default function HomePage() {
                         </div>
                       )}
 
-                      {!isGamesLoading && pagedHomeGames.map((game, idx) => (
+                    {!isGamesLoading && pagedHomeGames.map((game, idx) => (
                         <button
                           key={game._id}
                           ref={(element) => {
@@ -521,9 +549,16 @@ export default function HomePage() {
                             }
                             navigate(game.status === "lobby" ? `/g/${game._id}` : `/play/${game._id}`);
                           }}
-                          className="grid w-full grid-cols-[1fr_auto_auto] items-center gap-2 border-b border-border/60 px-3 py-2 text-left text-sm transition last:border-b-0 hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none"
+                          className="grid w-full grid-cols-[1fr_auto_auto_auto] items-center gap-2 border-b border-border/60 px-3 py-2 text-left text-sm transition last:border-b-0 hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none"
                         >
                           <span className="truncate">{game.name}</span>
+                          {game.status !== "public" && game.isMyTurn ? (
+                            <span className="inline-flex min-w-20 items-center justify-center rounded-md border border-primary/50 bg-primary/15 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-primary">
+                              Your turn
+                            </span>
+                          ) : (
+                            <span />
+                          )}
                           <span
                             className={`inline-flex min-w-16 items-center justify-center rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] ${game.status === "active"
                               ? "border-emerald-400/45 bg-emerald-500/10 text-emerald-300"
@@ -587,6 +622,9 @@ export default function HomePage() {
                         <div>
                           <p className="text-sm text-muted-foreground">Current active game</p>
                           <p className="mt-1 text-xl font-semibold">{continueGame.name}</p>
+                          {isMyTurn(continueGame) && (
+                            <p className="mt-1 text-sm font-medium text-primary">It&apos;s your turn</p>
+                          )}
                         </div>
                         <Button className="w-full" onClick={() => openMyGame(continueGame)}>
                           View game

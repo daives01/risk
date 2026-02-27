@@ -111,7 +111,6 @@ export function GameModals({
                 <p><span className="font-semibold">I</span>: Toggle map info</p>
                 <p><span className="font-semibold">?</span>: Toggle this help</p>
                 <p><span className="font-semibold">H</span>: Toggle history</p>
-                <p><span className="font-semibold">Cmd/Ctrl + Enter</span>: Confirm or end phase</p>
               </div>
             </CardContent>
           </Card>

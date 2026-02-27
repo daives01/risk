@@ -320,6 +320,10 @@ export const listMyGames = query({
           startedAt: game.startedAt ?? null,
           finishedAt: game.finishedAt ?? null,
           myEnginePlayerId: pd.enginePlayerId ?? null,
+          currentTurnPlayerId:
+            game.status === "active"
+              ? (readGameStateNullable(game.state)?.turn.currentPlayerId ?? null)
+              : null,
           result,
         };
       }),

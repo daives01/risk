@@ -38,6 +38,7 @@ import { useRotatingHints } from "@/pages/game/hooks/use-rotating-hints";
 import { toast } from "sonner";
 
 const HINT_ROTATION_MS = 18000;
+const ACTION_BUTTON_COOLDOWN_MS = 1000;
 
 export default function GamePage() {
   const HISTORY_PLAYBACK_INTERVAL_MS = 840;
@@ -95,12 +96,14 @@ export default function GamePage() {
   const [suppressTroopDeltas, setSuppressTroopDeltas] = useState(false);
   const [highlightFilter, setHighlightFilter] = useState<HighlightFilter>("none");
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [actionButtonCooldownActive, setActionButtonCooldownActive] = useState(false);
   const autoEndFortifyVersionRef = useRef<number | null>(null);
   const optionalTradeAutoOpenRef = useRef<number | null>(null);
   const actionInFlightRef = useRef(false);
   const troopDeltaResumeTimeoutRef = useRef<number | null>(null);
   const historyDebugRef = useRef<{ framePos: number; signature: string; staleRun: number } | null>(null);
   const teamChatDefaultAppliedRef = useRef(false);
+  const actionButtonCooldownTimeoutRef = useRef<number | null>(null);
   const stopAutoAttackRef = useRef<() => void>(() => undefined);
   const setOccupyMoveRef = useRef<Dispatch<SetStateAction<number>>>(() => undefined);
 
@@ -612,7 +615,9 @@ export default function GamePage() {
   }, []);
 
   const handleConfirmPlacements = useCallback(async () => {
-    if (!typedGameId || !state || reinforcementDrafts.length === 0 || mustTradeNow) return;
+    if (!typedGameId || !state || reinforcementDrafts.length === 0 || mustTradeNow || actionButtonCooldownActive) {
+      return;
+    }
     const previousDrafts = reinforcementDrafts;
     setReinforcementDrafts([]);
     setPlaceCount(1);
@@ -628,7 +633,14 @@ export default function GamePage() {
       setReinforcementDrafts(previousDrafts);
       toast.error(error instanceof Error ? error.message : "Could not confirm placements");
     }
-  }, [mustTradeNow, reinforcementDrafts, state, submitReinforcementPlacementsMutation, typedGameId]);
+  }, [
+    actionButtonCooldownActive,
+    mustTradeNow,
+    reinforcementDrafts,
+    state,
+    submitReinforcementPlacementsMutation,
+    typedGameId,
+  ]);
 
   useEffect(() => {
     if (!isPlacementPhase || !isMyTurn) {
@@ -664,6 +676,34 @@ export default function GamePage() {
     const maxDice = Math.max(1, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1));
     setAttackDice((prev) => Math.max(1, Math.min(prev, maxDice)));
   }, [phase, selectedFrom, state]);
+
+  useEffect(() => {
+    if (!state || !isMyTurn || historyOpen) {
+      setActionButtonCooldownActive(false);
+      if (actionButtonCooldownTimeoutRef.current !== null) {
+        window.clearTimeout(actionButtonCooldownTimeoutRef.current);
+        actionButtonCooldownTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    setActionButtonCooldownActive(true);
+    if (actionButtonCooldownTimeoutRef.current !== null) {
+      window.clearTimeout(actionButtonCooldownTimeoutRef.current);
+    }
+    actionButtonCooldownTimeoutRef.current = window.setTimeout(() => {
+      setActionButtonCooldownActive(false);
+      actionButtonCooldownTimeoutRef.current = null;
+    }, ACTION_BUTTON_COOLDOWN_MS);
+  }, [historyOpen, isMyTurn, state, state?.stateVersion]);
+
+  useEffect(() => {
+    return () => {
+      if (actionButtonCooldownTimeoutRef.current !== null) {
+        window.clearTimeout(actionButtonCooldownTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!state || !isMyTurn || historyOpen) return;
@@ -734,13 +774,15 @@ export default function GamePage() {
   }, [autoAttackSubmittedVersionRef, autoAttacking, setAutoAttacking, stopAutoAttack]);
 
   const handleEndAttackPhase = useCallback(() => {
+    if (actionButtonCooldownActive) return;
     stopAutoAttack();
     void submitAction({ type: "EndAttackPhase" });
-  }, [stopAutoAttack, submitAction]);
+  }, [actionButtonCooldownActive, stopAutoAttack, submitAction]);
 
   const handleEndTurn = useCallback(() => {
+    if (actionButtonCooldownActive) return;
     void submitAction({ type: "EndTurn" });
-  }, [submitAction]);
+  }, [actionButtonCooldownActive, submitAction]);
 
   const handleResign = useCallback(async () => {
     if (!typedGameId) return;
@@ -963,11 +1005,6 @@ export default function GamePage() {
       }
     },
     onUndoPlacement: handleUndoPlacement,
-    onConfirmPlacements: () => {
-      void handleConfirmPlacements();
-    },
-    onEndAttackPhase: handleEndAttackPhase,
-    onEndTurn: handleEndTurn,
   });
 
   const displayState = historyOpen ? (historyFrames[historyFrameIndex]?.state ?? state) : state;
@@ -1300,6 +1337,7 @@ export default function GamePage() {
           void handleConfirmPlacements();
         }}
         onEndAttackPhase={handleEndAttackPhase}
+        actionButtonsDisabled={actionButtonCooldownActive}
         onEndTurn={handleEndTurn}
       />
 

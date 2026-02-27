@@ -20,7 +20,6 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { HistoryScrubber } from "@/components/game/history-scrubber";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ShortcutHint } from "@/components/ui/shortcut-hint";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface GameHeaderProps {
@@ -65,6 +64,7 @@ interface GameHeaderProps {
   renderHistoryScrubber?: () => ReactNode;
   onConfirmPlacements: () => void;
   onEndAttackPhase: () => void;
+  actionButtonsDisabled: boolean;
   onEndTurn: () => void;
 }
 
@@ -110,6 +110,7 @@ export function GameHeader({
   renderHistoryScrubber,
   onConfirmPlacements,
   onEndAttackPhase,
+  actionButtonsDisabled,
   onEndTurn,
 }: GameHeaderProps) {
   const showPhaseTitle = historyOpen || !["Reinforcement", "Attack", "Fortify"].includes(displayPhase);
@@ -268,42 +269,39 @@ export function GameHeader({
             <Button
               type="button"
               size="sm"
-              title="Confirm placements (Cmd/Ctrl+Enter)"
+              title="Confirm placements"
               aria-label="Confirm placements"
-              disabled={controlsDisabled || reinforcementDraftCount === 0}
+              disabled={controlsDisabled || actionButtonsDisabled || reinforcementDraftCount === 0}
               onClick={onConfirmPlacements}
               className="action-cta"
             >
               <Check className="size-3.5" aria-hidden="true" />
               <span className="hidden sm:inline">Confirm</span>
-              <ShortcutHint shortcut="mod+enter" className="hidden md:inline-flex" />
             </Button>
           )}
-          {!historyOpen && isMyTurn && phase === "Attack" && !hasPendingAttack && (
+          {!historyOpen && isMyTurn && phase === "Attack" && (
             <Button
               type="button"
               size="sm"
               variant="outline"
-              title="End attack phase (Cmd/Ctrl+Enter)"
-              disabled={controlsDisabled}
+              title="End attack phase"
+              disabled={controlsDisabled || actionButtonsDisabled || hasPendingAttack}
               onClick={onEndAttackPhase}
               className="action-cta"
             >
               End Attack
-              <ShortcutHint shortcut="mod+enter" className="hidden md:inline-flex" />
             </Button>
           )}
           {!historyOpen && isMyTurn && phase === "Fortify" && (
             <Button
               size="sm"
               variant="outline"
-              title="End turn (Cmd/Ctrl+Enter)"
-              disabled={controlsDisabled}
+              title="End turn"
+              disabled={controlsDisabled || actionButtonsDisabled}
               onClick={onEndTurn}
               className="action-cta"
             >
               End Turn
-              <ShortcutHint shortcut="mod+enter" className="hidden md:inline-flex" />
             </Button>
           )}
           {!cardsOpenDisabled && (
