@@ -1,4 +1,4 @@
-const web = Bun.spawn(["bun", "run", "--filter", "web", "dev"], {
+const web = Bun.spawn(["bun", "run", "--filter", "web", "dev", "--host"], {
   stdout: "inherit",
   stderr: "inherit",
   stdin: "inherit",

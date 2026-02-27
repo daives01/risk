@@ -36,6 +36,7 @@ import { useGameOccupy } from "@/pages/game/hooks/use-game-occupy";
 import { useMapPanelSize } from "@/pages/game/hooks/use-map-panel-size";
 import { useRotatingHints } from "@/pages/game/hooks/use-rotating-hints";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const HINT_ROTATION_MS = 18000;
 const ACTION_BUTTON_COOLDOWN_MS = 1000;
@@ -44,6 +45,7 @@ export default function GamePage() {
   const HISTORY_PLAYBACK_INTERVAL_MS = 840;
   const TROOP_DELTA_DURATION_MS = Math.round(HISTORY_PLAYBACK_INTERVAL_MS * 1.25);
   const MAP_MAX_HEIGHT = "min(88vh, calc(100vh - 7rem))";
+  const MAP_FULLSCREEN_MAX_HEIGHT = "100%";
   const { gameId } = useParams<{ gameId: string }>();
   const location = useLocation();
   const historyDebugEnabled = useMemo(() => {
@@ -95,6 +97,7 @@ export default function GamePage() {
   const recentAttackTimeoutRef = useRef<number | null>(null);
   const [suppressTroopDeltas, setSuppressTroopDeltas] = useState(false);
   const [highlightFilter, setHighlightFilter] = useState<HighlightFilter>("none");
+  const [isMapFullscreen, setIsMapFullscreen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [actionButtonCooldownActive, setActionButtonCooldownActive] = useState(false);
   const autoEndFortifyVersionRef = useRef<number | null>(null);
@@ -978,7 +981,10 @@ export default function GamePage() {
     occupyMaxMove: state?.pending?.maxMove ?? 1,
     canSetFortify: canSetFortifyShortcut,
     maxFortifyCount: maxFortifyMove,
-    onToggleHistory: () => setHistoryOpen((prev) => !prev),
+    onToggleHistory: () => {
+      if (isMapFullscreen) return;
+      setHistoryOpen((prev) => !prev);
+    },
     onToggleShortcutCheatSheet: () => setShortcutsOpen((prev) => !prev),
     onSetHistoryPlaying: setHistoryPlaying,
     onSetHistoryFrameIndex: setHistoryFrameIndex,
@@ -1075,6 +1081,34 @@ export default function GamePage() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setIsMapFullscreen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (!isMapFullscreen) return;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [isMapFullscreen]);
+
+  useEffect(() => {
+    if (!isMapFullscreen) return;
+    if (!historyOpen) return;
+    setHistoryOpen(false);
+    setHistoryPlaying(false);
+  }, [historyOpen, isMapFullscreen, setHistoryOpen, setHistoryPlaying]);
 
   const debugTerritories = historyOpen ? historyFrames[historyFrameIndex]?.state?.territories : displayedTerritories;
 
@@ -1271,7 +1305,12 @@ export default function GamePage() {
           : null;
 
   return (
-    <div className="page-shell soft-grid game-shell overflow-x-hidden md:overflow-x-visible">
+    <div
+      className={cn(
+        "page-shell soft-grid game-shell overflow-x-hidden md:overflow-x-visible",
+        isMapFullscreen && "game-map-fullscreen-shell flex h-dvh flex-col overflow-hidden md:overflow-hidden",
+      )}
+    >
       <GameHeader
         phaseTitle={phaseCopy.title}
         actionHint={actionHint}
@@ -1317,10 +1356,12 @@ export default function GamePage() {
           }
         }}
         onToggleHistory={() => {
+          if (isMapFullscreen) return;
           setHistoryOpen((prev) => !prev);
           setHistoryPlaying(false);
         }}
         historyToggleDisabled={historyCount === 0}
+        isMapFullscreen={isMapFullscreen}
         showBackHome={!isMyTurn}
         renderHistoryScrubber={() => (
           <HistoryScrubber
@@ -1341,13 +1382,18 @@ export default function GamePage() {
         onEndTurn={handleEndTurn}
       />
 
-      <div className="page-container max-w-none flex flex-1 flex-col gap-4 game-body">
+      <div
+        className={cn(
+          "page-container max-w-none flex flex-1 flex-col gap-4 game-body",
+          isMapFullscreen && "min-h-0 flex-1 gap-0 overflow-hidden p-0 md:p-0",
+        )}
+      >
         <GameMapSection
           mapPanelRef={mapPanelRef}
           mapPanelHeight={mapPanelHeight}
           mapPanelWidth={mapPanelWidth}
           mapImageWidth={mapImageWidth}
-          mapMaxHeight={MAP_MAX_HEIGHT}
+          mapMaxHeight={isMapFullscreen ? MAP_FULLSCREEN_MAX_HEIGHT : MAP_MAX_HEIGHT}
           graphMap={graphMap}
           mapVisual={mapVisual}
           mapImageUrl={mapImageUrl}
@@ -1355,6 +1401,7 @@ export default function GamePage() {
           resolvedDisplayState={resolvedDisplayState}
           mapSelectedFrom={mapSelectedFrom}
           mapSelectedTo={mapSelectedTo}
+          isMapFullscreen={isMapFullscreen}
           historyOpen={historyOpen}
           isMyTurn={isMyTurn}
           validFromIds={validFromIds}
@@ -1378,64 +1425,67 @@ export default function GamePage() {
             setSelectedFrom(null);
             setSelectedTo(null);
           }}
+          onToggleFullscreen={() => setIsMapFullscreen((prev) => !prev)}
           getPlayerColor={resolvePlayerColor}
           battleOverlay={battleOverlay}
           historyEvents={historyEvents}
           activeHistoryEventIndex={activeHistoryEventIndex}
           onSelectHistoryEvent={onSelectHistoryEvent}
         />
-        <div
-          className="mx-auto grid w-full min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
-          style={{
-            maxWidth:
-              mapImageWidth && mapPanelWidth
-                ? `${Math.min(mapImageWidth, mapPanelWidth)}px`
-                : mapImageWidth
-                  ? `${mapImageWidth}px`
-                  : mapPanelWidth
-                    ? `${mapPanelWidth}px`
-                    : undefined,
-          }}
-        >
-          <GameSidePanels
-            playerStats={playerStats}
-            resolvedDisplayState={resolvedDisplayState}
-            playerMap={playerMap}
-            teamModeEnabled={!!view.teamModeEnabled}
-            teamNames={teamNames}
-            showTurnTimer={showTurnTimer}
-            turnTimerLabel={turnTimerLabel}
-            highlightFilter={highlightFilter}
-            onTogglePlayerHighlight={handleTogglePlayerHighlight}
-            onToggleTeamHighlight={handleToggleTeamHighlight}
-            getPlayerColor={resolvePlayerColor}
-            getPlayerName={getPlayerName}
-            myEnginePlayerId={myEnginePlayerId ?? undefined}
-            canResign={!isSpectator && !historyOpen}
-            onResign={handleResign}
-            chatMessages={chatMessages ?? []}
-            chatChannel={chatChannel}
-            canUseTeamChat={canUseTeamChat}
-            myTeamName={myTeamName}
-            canSendChat={canSendChat}
-            chatDraft={chatDraft}
-            chatEditingMessageId={chatEditingMessageId}
-            onSetChatDraft={setChatDraft}
-            onSelectChannel={(nextChannel) => {
-              setChatChannel(nextChannel);
-              setChatEditingMessageId(null);
-              setChatDraft("");
+        {!isMapFullscreen && (
+          <div
+            className="mx-auto grid w-full min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+            style={{
+              maxWidth:
+                mapImageWidth && mapPanelWidth
+                  ? `${Math.min(mapImageWidth, mapPanelWidth)}px`
+                  : mapImageWidth
+                    ? `${mapImageWidth}px`
+                    : mapPanelWidth
+                      ? `${mapPanelWidth}px`
+                      : undefined,
             }}
-            onStartEditMessage={handleStartEditChatMessage}
-            onCancelEditMessage={handleCancelEditChatMessage}
-            onDeleteMessage={(messageId) => {
-              void handleDeleteChatMessage(messageId);
-            }}
-            onSendMessage={() => {
-              void handleSendChatMessage();
-            }}
-          />
-        </div>
+          >
+            <GameSidePanels
+              playerStats={playerStats}
+              resolvedDisplayState={resolvedDisplayState}
+              playerMap={playerMap}
+              teamModeEnabled={!!view.teamModeEnabled}
+              teamNames={teamNames}
+              showTurnTimer={showTurnTimer}
+              turnTimerLabel={turnTimerLabel}
+              highlightFilter={highlightFilter}
+              onTogglePlayerHighlight={handleTogglePlayerHighlight}
+              onToggleTeamHighlight={handleToggleTeamHighlight}
+              getPlayerColor={resolvePlayerColor}
+              getPlayerName={getPlayerName}
+              myEnginePlayerId={myEnginePlayerId ?? undefined}
+              canResign={!isSpectator && !historyOpen}
+              onResign={handleResign}
+              chatMessages={chatMessages ?? []}
+              chatChannel={chatChannel}
+              canUseTeamChat={canUseTeamChat}
+              myTeamName={myTeamName}
+              canSendChat={canSendChat}
+              chatDraft={chatDraft}
+              chatEditingMessageId={chatEditingMessageId}
+              onSetChatDraft={setChatDraft}
+              onSelectChannel={(nextChannel) => {
+                setChatChannel(nextChannel);
+                setChatEditingMessageId(null);
+                setChatDraft("");
+              }}
+              onStartEditMessage={handleStartEditChatMessage}
+              onCancelEditMessage={handleCancelEditChatMessage}
+              onDeleteMessage={(messageId) => {
+                void handleDeleteChatMessage(messageId);
+              }}
+              onSendMessage={() => {
+                void handleSendChatMessage();
+              }}
+            />
+          </div>
+        )}
       </div>
       <GameModals
         shortcutsOpen={shortcutsOpen}

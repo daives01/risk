@@ -356,6 +356,24 @@
     min-height: calc(100vh - 3rem);
     padding: 1rem 1rem 1.25rem;
   }
+
+  .game-map-fullscreen-shell {
+    min-height: 100dvh;
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .game-map-fullscreen-body {
+    min-height: calc(100dvh - 3.5rem);
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .game-map-fullscreen-shell > .page-container {
+    width: 100%;
+    max-width: 100%;
+    margin-inline: 0;
+  }
 }
 
 @media (min-width: 768px) {
@@ -367,6 +385,10 @@
 
   .game-body {
     padding: 1.25rem 1.5rem 1.5rem;
+  }
+
+  .game-map-fullscreen-shell .game-body {
+    padding: 0;
   }
 }
 
@@ -436,6 +458,10 @@
 }
 
 @layer utilities {
+  .game-map-viewport-touch {
+    touch-action: none;
+  }
+
   .troop-delta-float {
     animation: troop-delta-float 950ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
   }

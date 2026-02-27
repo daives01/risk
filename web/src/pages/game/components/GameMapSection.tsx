@@ -2,6 +2,7 @@ import { MapCanvas } from "@/components/game/map-canvas";
 import { GameEventsCard } from "@/components/game/game-panels";
 import type { ComponentProps, RefObject } from "react";
 import type { PublicState } from "@/lib/game/types";
+import { cn } from "@/lib/utils";
 
 interface GameMapSectionProps {
   mapPanelRef: RefObject<HTMLDivElement | null>;
@@ -24,6 +25,7 @@ interface GameMapSectionProps {
   resolvedDisplayState: PublicState;
   mapSelectedFrom: string | null;
   mapSelectedTo: string | null;
+  isMapFullscreen: boolean;
   historyOpen: boolean;
   isMyTurn: boolean;
   validFromIds: Set<string>;
@@ -41,6 +43,7 @@ interface GameMapSectionProps {
   onTerritoryClick: (territoryId: string) => void;
   onMapImageRectChange: (rect: { width: number; height: number }) => void;
   onClearSelection: () => void;
+  onToggleFullscreen: () => void;
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
   battleOverlay: ComponentProps<typeof MapCanvas>["battleOverlay"];
   historyEvents: Array<{ key: string; text: string; index: number }>;
@@ -61,6 +64,7 @@ export function GameMapSection({
   resolvedDisplayState,
   mapSelectedFrom,
   mapSelectedTo,
+  isMapFullscreen,
   historyOpen,
   isMyTurn,
   validFromIds,
@@ -78,6 +82,7 @@ export function GameMapSection({
   onTerritoryClick,
   onMapImageRectChange,
   onClearSelection,
+  onToggleFullscreen,
   getPlayerColor,
   battleOverlay,
   historyEvents,
@@ -85,13 +90,17 @@ export function GameMapSection({
   onSelectHistoryEvent,
 }: GameMapSectionProps) {
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-map-canvas-zone="true">
+    <div
+      className={cn("flex min-w-0 flex-col gap-4", isMapFullscreen && "h-full gap-0 overflow-hidden")}
+      data-map-canvas-zone="true"
+    >
       <div
-        className={`flex min-w-0 flex-col ${
-          historyOpen ? "gap-3" : "gap-0"
-        } [@media(orientation:landscape)]:flex-row [@media(orientation:landscape)]:items-start`}
+        className={cn(
+          `flex min-w-0 flex-col ${historyOpen ? "gap-3" : "gap-0"} [@media(orientation:landscape)]:flex-row [@media(orientation:landscape)]:items-start`,
+          isMapFullscreen && "flex-1 h-full overflow-hidden",
+        )}
       >
-        <div ref={mapPanelRef} className="min-w-0 flex-1">
+        <div ref={mapPanelRef} className={cn("min-w-0 flex-1", isMapFullscreen && "h-full overflow-hidden")}>
           <MapCanvas
             map={graphMap}
             visual={mapVisual}
@@ -115,6 +124,9 @@ export function GameMapSection({
             troopDeltaDurationMs={troopDeltaDurationMs}
             showTroopDeltas={!suppressTroopDeltas}
             maxHeight={mapMaxHeight}
+            fullscreen={isMapFullscreen}
+            panZoomEnabled={isMapFullscreen}
+            onToggleFullscreen={onToggleFullscreen}
             infoOverlayEnabled={infoOverlayEnabled}
             infoPinnedTerritoryId={infoPinnedTerritoryId}
             onSetInfoPinnedTerritoryId={onSetInfoPinnedTerritoryId}
@@ -126,7 +138,7 @@ export function GameMapSection({
           />
         </div>
         <div
-          className={`hidden min-h-0 shrink-0 overflow-hidden transition-[width,transform,opacity] duration-220 ease-out [@media(orientation:landscape)]:flex ${historyOpen
+          className={`hidden min-h-0 shrink-0 overflow-hidden transition-[width,transform,opacity] duration-220 ease-out [@media(orientation:landscape)]:flex ${historyOpen && !isMapFullscreen
             ? "w-[min(34vw,300px)] translate-x-0 opacity-100"
             : "pointer-events-none w-0 translate-x-10 opacity-0"
             }`}
@@ -146,29 +158,31 @@ export function GameMapSection({
         </div>
       </div>
 
-      <div
-        className="mx-auto grid w-full gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
-        style={{
-          maxWidth:
-            mapImageWidth && mapPanelWidth
-              ? `${Math.min(mapImageWidth, mapPanelWidth)}px`
-              : mapImageWidth
-                ? `${mapImageWidth}px`
-                : mapPanelWidth
-                  ? `${mapPanelWidth}px`
-                  : undefined,
-        }}
-      >
-        {historyOpen && (
-          <div className="h-[25vh] min-h-0 overflow-hidden [@media(orientation:landscape)]:hidden">
-            <GameEventsCard
-              events={historyEvents}
-              activeIndex={activeHistoryEventIndex}
-              onSelectEvent={onSelectHistoryEvent}
-            />
-          </div>
-        )}
-      </div>
+      {!isMapFullscreen && (
+        <div
+          className="mx-auto grid w-full gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+          style={{
+            maxWidth:
+              mapImageWidth && mapPanelWidth
+                ? `${Math.min(mapImageWidth, mapPanelWidth)}px`
+                : mapImageWidth
+                  ? `${mapImageWidth}px`
+                  : mapPanelWidth
+                    ? `${mapPanelWidth}px`
+                    : undefined,
+          }}
+        >
+          {historyOpen && (
+            <div className="h-[25vh] min-h-0 overflow-hidden [@media(orientation:landscape)]:hidden">
+              <GameEventsCard
+                events={historyEvents}
+                activeIndex={activeHistoryEventIndex}
+                onSelectEvent={onSelectHistoryEvent}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

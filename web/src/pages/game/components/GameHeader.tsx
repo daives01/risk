@@ -60,6 +60,7 @@ interface GameHeaderProps {
   onToggleInfo: () => void;
   onToggleHistory: () => void;
   historyToggleDisabled: boolean;
+  isMapFullscreen: boolean;
   showBackHome: boolean;
   renderHistoryScrubber?: () => ReactNode;
   onConfirmPlacements: () => void;
@@ -106,6 +107,7 @@ export function GameHeader({
   onToggleInfo,
   onToggleHistory,
   historyToggleDisabled,
+  isMapFullscreen,
   showBackHome,
   renderHistoryScrubber,
   onConfirmPlacements,
@@ -364,22 +366,24 @@ export function GameHeader({
               </PopoverContent>
             </Popover>
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={historyOpen ? "default" : "outline"}
-                size="icon-sm"
-                type="button"
-                aria-label="Toggle history"
-                onClick={onToggleHistory}
-                disabled={historyToggleDisabled}
-                className="enabled:cursor-pointer"
-              >
-                <History className="size-4" aria-hidden="true" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Toggle history (H)</TooltipContent>
-          </Tooltip>
+          {!isMapFullscreen && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={historyOpen ? "default" : "outline"}
+                  size="icon-sm"
+                  type="button"
+                  aria-label="Toggle history"
+                  onClick={onToggleHistory}
+                  disabled={historyToggleDisabled}
+                  className="enabled:cursor-pointer"
+                >
+                  <History className="size-4" aria-hidden="true" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Toggle history (H)</TooltipContent>
+            </Tooltip>
+          )}
         </TooltipProvider>
       </div>
     </div>

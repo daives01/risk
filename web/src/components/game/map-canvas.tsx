@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Loader2, X } from "lucide-react";
+import { Loader2, Maximize2, Minimize2, Minus, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getReadableTextColor } from "@/lib/color-contrast";
 import { Button } from "@/components/ui/button";
 import { NumberStepper } from "@/components/ui/number-stepper";
+import { useMapPanZoomInteraction } from "@/lib/game/use-map-pan-zoom-interaction";
 
 interface GraphMapLike {
   territories: Record<string, { name?: string }>;
@@ -39,6 +40,9 @@ interface MapCanvasProps {
   troopDeltaDurationMs?: number;
   showTroopDeltas?: boolean;
   maxHeight?: number | string;
+  fullscreen?: boolean;
+  panZoomEnabled?: boolean;
+  onToggleFullscreen?: () => void;
   infoOverlayEnabled?: boolean;
   infoPinnedTerritoryId?: string | null;
   onSetInfoPinnedTerritoryId?: (territoryId: string | null) => void;
@@ -120,6 +124,9 @@ export function MapCanvas({
   troopDeltaDurationMs = 1000,
   showTroopDeltas = true,
   maxHeight,
+  fullscreen = false,
+  panZoomEnabled = false,
+  onToggleFullscreen,
   infoOverlayEnabled = false,
   infoPinnedTerritoryId = null,
   onSetInfoPinnedTerritoryId = () => undefined,
@@ -145,8 +152,30 @@ export function MapCanvas({
     originY: number;
   } | null>(null);
   const previousTerritoriesRef = useRef<Record<string, TerritoryState> | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const frameAspect = 4 / 3;
+  const {
+    containerRef,
+    scale,
+    transformStyle,
+    isGestureActive,
+    zoomIn,
+    zoomOut,
+    reset,
+    bindViewportHandlers,
+    markInteractiveTargetPointerDown,
+    shouldSuppressClick,
+  } = useMapPanZoomInteraction({
+    enabled: panZoomEnabled,
+    minScale: 1,
+    maxScale: 6,
+    zoomStep: 0.2,
+    longPressMs: 180,
+    dragThresholdPx: 6,
+    clickSuppressWindowMs: 160,
+  });
+  const frameAspect =
+    containerSize.width > 0 && containerSize.height > 0
+      ? containerSize.width / containerSize.height
+      : 4 / 3;
   const imageAspect = visual.imageWidth / visual.imageHeight;
   const highlightActive = highlightedTerritoryIds.size > 0;
   const explicitActionEdges = actionEdgeIds !== undefined && actionEdgeIds.size > 0;
@@ -170,6 +199,17 @@ export function MapCanvas({
   );
 
   const imageFit = useMemo(() => {
+    if (fullscreen) {
+      if (imageAspect >= frameAspect) {
+        const drawWidth = imageAspect / frameAspect;
+        const left = (1 - drawWidth) / 2;
+        return { left, top: 0, width: drawWidth, height: 1 };
+      }
+      const drawHeight = frameAspect / imageAspect;
+      const top = (1 - drawHeight) / 2;
+      return { left: 0, top, width: 1, height: drawHeight };
+    }
+
     if (imageAspect >= frameAspect) {
       const drawHeight = frameAspect / imageAspect;
       const top = (1 - drawHeight) / 2;
@@ -178,7 +218,7 @@ export function MapCanvas({
     const drawWidth = imageAspect / frameAspect;
     const left = (1 - drawWidth) / 2;
     return { left, top: 0, width: drawWidth, height: 1 };
-  }, [frameAspect, imageAspect]);
+  }, [frameAspect, fullscreen, imageAspect]);
 
   const imagePixelSize = useMemo(() => {
     if (!containerSize.width || !containerSize.height) return { width: 0, height: 0 };
@@ -189,6 +229,15 @@ export function MapCanvas({
   }, [containerSize.height, containerSize.width, imageFit.height, imageFit.width]);
 
   const markerScaleFactor = 0.035;
+  const imageSurfaceStyle = useMemo(
+    () => ({
+      left: `${imageFit.left * 100}%`,
+      top: `${imageFit.top * 100}%`,
+      width: `${imageFit.width * 100}%`,
+      height: `${imageFit.height * 100}%`,
+    }),
+    [imageFit.height, imageFit.left, imageFit.top, imageFit.width],
+  );
   const nodeScale = useMemo(() => {
     if (typeof visual.nodeScale !== "number" || !Number.isFinite(visual.nodeScale)) return 1;
     return Math.max(0.2, Math.min(3, visual.nodeScale));
@@ -244,15 +293,20 @@ export function MapCanvas({
     : "none";
   const overlayDragOffset =
     overlayDragState.key === overlayDragKey ? { x: overlayDragState.x, y: overlayDragState.y } : { x: 0, y: 0 };
-  const frameStyle = maxHeight
-    ? {
-      maxHeight,
-      maxWidth: typeof maxHeight === "number" ? `${(maxHeight * 4) / 3}px` : `calc(${maxHeight} * 4 / 3)`,
-    }
-    : undefined;
+  const frameStyle = fullscreen
+    ? { width: "100%", height: "100%" }
+    : maxHeight
+      ? {
+        maxHeight,
+        maxWidth: typeof maxHeight === "number" ? `${(maxHeight * 4) / 3}px` : `calc(${maxHeight} * 4 / 3)`,
+      }
+      : undefined;
 
   const onStartOverlayDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!battleOverlay) return;
+    if (panZoomEnabled) {
+      markInteractiveTargetPointerDown(event.pointerId);
+    }
     overlayDragRef.current = {
       key: overlayDragKey,
       pointerId: event.pointerId,
@@ -301,6 +355,11 @@ export function MapCanvas({
     if (!imagePixelSize.width || !imagePixelSize.height) return;
     onImageRectChange({ width: imagePixelSize.width, height: imagePixelSize.height });
   }, [imagePixelSize.height, imagePixelSize.width, onImageRectChange]);
+
+  useEffect(() => {
+    if (panZoomEnabled) return;
+    reset();
+  }, [panZoomEnabled, reset]);
 
   useEffect(() => {
     if (!showTroopDeltas) {
@@ -388,7 +447,10 @@ export function MapCanvas({
             onClick={battleOverlay.onCancelSelection}
             disabled={battleOverlay.disabled}
             className="size-6"
-            onPointerDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => {
+              if (panZoomEnabled) markInteractiveTargetPointerDown(event.pointerId);
+              event.stopPropagation();
+            }}
           >
             <X className="size-3.5" />
           </Button>
@@ -520,17 +582,61 @@ export function MapCanvas({
   }
 
   return (
-    <div className="w-full select-none">
+    <div className={cn("w-full select-none", fullscreen && "h-full")}>
       <div
         ref={containerRef}
         className={cn(
-          "relative mx-auto aspect-[4/3] w-full max-w-full overflow-hidden rounded-xl border border-border/70 bg-muted select-none",
+          "relative w-full max-w-full overflow-hidden bg-muted select-none",
+          fullscreen ? "h-full rounded-none border-0" : "mx-auto aspect-[4/3] rounded-xl border border-border/70",
+          panZoomEnabled && "game-map-viewport-touch",
+          panZoomEnabled && isGestureActive && "cursor-grabbing",
         )}
         style={frameStyle}
       >
+        {onToggleFullscreen && (
+          <div className="pointer-events-none absolute right-2 top-2 z-10">
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="outline"
+              aria-label={fullscreen ? "Exit fullscreen map" : "Enter fullscreen map"}
+              className="pointer-events-auto bg-card/90 backdrop-blur-sm"
+              onClick={onToggleFullscreen}
+              onPointerDown={(event) => {
+                markInteractiveTargetPointerDown(event.pointerId);
+                event.stopPropagation();
+              }}
+            >
+              {fullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+            </Button>
+          </div>
+        )}
+
+        {fullscreen && panZoomEnabled && (
+          <div
+            className="pointer-events-none absolute left-2 top-2 z-10"
+            onPointerDown={(event) => {
+              markInteractiveTargetPointerDown(event.pointerId);
+              event.stopPropagation();
+            }}
+          >
+            <div className="pointer-events-auto inline-flex items-center gap-1 rounded border border-border/70 bg-card/90 p-1 shadow-sm backdrop-blur-sm">
+              <Button type="button" size="icon-xs" variant="outline" onClick={zoomOut} aria-label="Zoom out">
+                <Minus className="size-3.5" />
+              </Button>
+              <span className="w-12 text-center text-xs font-semibold">{Math.round(scale * 100)}%</span>
+              <Button type="button" size="icon-xs" variant="outline" onClick={zoomIn} aria-label="Zoom in">
+                <Plus className="size-3.5" />
+              </Button>
+              <Button type="button" size="xs" variant="outline" onClick={reset}>Reset</Button>
+            </div>
+          </div>
+        )}
         <div
           className="relative h-full w-full"
+          {...bindViewportHandlers}
           onClick={(event) => {
+            if (panZoomEnabled && shouldSuppressClick()) return;
             if (event.target !== event.currentTarget) return;
             if (infoOverlayEnabled) {
               onSetInfoPinnedTerritoryId(null);
@@ -538,73 +644,75 @@ export function MapCanvas({
             if (interactive && onClearSelection) onClearSelection();
           }}
         >
-          <img
-            src={imageUrl}
-            alt="Global Domination map"
-            className={cn(
-              "h-full w-full object-contain pointer-events-none select-none transition-[filter] duration-200",
-              highlightActive && "saturate-50",
-            )}
-            draggable={false}
-          />
+          <div className="relative h-full w-full" style={transformStyle}>
+            <img
+              src={imageUrl}
+              alt="Global Domination map"
+              className={cn(
+                "pointer-events-none absolute max-w-none select-none transition-[filter] duration-200",
+                highlightActive && "saturate-50",
+              )}
+              style={imageSurfaceStyle}
+              draggable={false}
+            />
 
-          <svg className="pointer-events-none absolute inset-0 h-full w-full">
-            {graphEdges.map(({ from, to }) => {
-              const fromAnchor = projectedAnchors[from];
-              const toAnchor = projectedAnchors[to];
-              if (!fromAnchor || !toAnchor) return null;
+            <svg className="pointer-events-none absolute inset-0 h-full w-full">
+              {graphEdges.map(({ from, to }) => {
+                const fromAnchor = projectedAnchors[from];
+                const toAnchor = projectedAnchors[to];
+                if (!fromAnchor || !toAnchor) return null;
 
-              const touchesFrom = selectedFrom === from || selectedFrom === to;
-              const touchesHighlight =
-                highlightedTerritoryIds.has(from) || highlightedTerritoryIds.has(to);
-              const edgeKey = from < to ? `${from}|${to}` : `${to}|${from}`;
-              const hasExplicitEdge = !!actionEdgeIds?.has(edgeKey);
-              const isCandidate =
-                !!selectedFrom &&
-                ((from === selectedFrom && validToIds.has(to)) || (to === selectedFrom && validToIds.has(from)));
-              const isSelectedPair =
-                !!selectedFrom &&
-                !!selectedTo &&
-                ((from === selectedFrom && to === selectedTo) || (to === selectedFrom && from === selectedTo));
-              const showActionEdge = explicitActionEdges
-                ? hasExplicitEdge
-                : selectedTo
-                  ? isSelectedPair
-                  : isCandidate || isSelectedPair;
-              if (graphEdgeMode === "none") return null;
-              if (graphEdgeMode === "action" && !showActionEdge) return null;
+                const touchesFrom = selectedFrom === from || selectedFrom === to;
+                const touchesHighlight =
+                  highlightedTerritoryIds.has(from) || highlightedTerritoryIds.has(to);
+                const edgeKey = from < to ? `${from}|${to}` : `${to}|${from}`;
+                const hasExplicitEdge = !!actionEdgeIds?.has(edgeKey);
+                const isCandidate =
+                  !!selectedFrom &&
+                  ((from === selectedFrom && validToIds.has(to)) || (to === selectedFrom && validToIds.has(from)));
+                const isSelectedPair =
+                  !!selectedFrom &&
+                  !!selectedTo &&
+                  ((from === selectedFrom && to === selectedTo) || (to === selectedFrom && from === selectedTo));
+                const showActionEdge = explicitActionEdges
+                  ? hasExplicitEdge
+                  : selectedTo
+                    ? isSelectedPair
+                    : isCandidate || isSelectedPair;
+                if (graphEdgeMode === "none") return null;
+                if (graphEdgeMode === "action" && !showActionEdge) return null;
 
-              const fromOwner = territories[from]?.ownerId ?? "neutral";
-              const fromOwnerColor = getPlayerColor(fromOwner, turnOrder);
-              const selectedOwnerColor = selectedFrom
-                ? getPlayerColor(territories[selectedFrom]?.ownerId ?? "neutral", turnOrder)
-                : null;
-              const actionEdgeBase = showActionEdge && selectedOwnerColor ? selectedOwnerColor : fromOwnerColor;
-              const actionEdgeColor = withAlpha(actionEdgeBase, 0.7);
+                const fromOwner = territories[from]?.ownerId ?? "neutral";
+                const fromOwnerColor = getPlayerColor(fromOwner, turnOrder);
+                const selectedOwnerColor = selectedFrom
+                  ? getPlayerColor(territories[selectedFrom]?.ownerId ?? "neutral", turnOrder)
+                  : null;
+                const actionEdgeBase = showActionEdge && selectedOwnerColor ? selectedOwnerColor : fromOwnerColor;
+                const actionEdgeColor = withAlpha(actionEdgeBase, 0.7);
 
-              const edgeStroke = isSelectedPair
-                ? withAlpha(actionEdgeBase, 0.95)
-                : touchesFrom || isCandidate || showActionEdge
-                  ? actionEdgeColor
-                  : highlightActive
-                    ? touchesHighlight
-                      ? "rgba(255,255,255,0.24)"
-                      : "rgba(255,255,255,0.09)"
-                    : "rgba(255,255,255,0.24)";
+                const edgeStroke = isSelectedPair
+                  ? withAlpha(actionEdgeBase, 0.95)
+                  : touchesFrom || isCandidate || showActionEdge
+                    ? actionEdgeColor
+                    : highlightActive
+                      ? touchesHighlight
+                        ? "rgba(255,255,255,0.24)"
+                        : "rgba(255,255,255,0.09)"
+                      : "rgba(255,255,255,0.24)";
 
-              return (
-                <line
-                  key={`${from}-${to}`}
-                  x1={`${fromAnchor.x * 100}%`}
-                  y1={`${fromAnchor.y * 100}%`}
-                  x2={`${toAnchor.x * 100}%`}
-                  y2={`${toAnchor.y * 100}%`}
-                  stroke={edgeStroke}
-                  strokeWidth={touchesFrom || isCandidate || isSelectedPair || showActionEdge ? 3 : 1.5}
-                />
-              );
-            })}
-          </svg>
+                return (
+                  <line
+                    key={`${from}-${to}`}
+                    x1={`${fromAnchor.x * 100}%`}
+                    y1={`${fromAnchor.y * 100}%`}
+                    x2={`${toAnchor.x * 100}%`}
+                    y2={`${toAnchor.y * 100}%`}
+                    stroke={edgeStroke}
+                    strokeWidth={touchesFrom || isCandidate || isSelectedPair || showActionEdge ? 3 : 1.5}
+                  />
+                );
+              })}
+            </svg>
 
           {Object.entries(map.territories).map(([territoryId, territory]) => {
             const anchor = projectedAnchors[territoryId];
@@ -641,10 +749,14 @@ export function MapCanvas({
                 <button
                   type="button"
                   onClick={() => {
+                    if (panZoomEnabled && shouldSuppressClick()) return;
                     if (infoOverlayEnabled && !supportsHover) {
                       onSetInfoPinnedTerritoryId(infoPinnedTerritoryId === territoryId ? null : territoryId);
                     }
                     onClickTerritory(territoryId);
+                  }}
+                  onPointerDown={(event) => {
+                    if (panZoomEnabled) markInteractiveTargetPointerDown(event.pointerId);
                   }}
                   disabled={!selectable && !infoOverlayEnabled}
                   title={territory.name ?? territoryId}
@@ -693,46 +805,52 @@ export function MapCanvas({
             );
           })}
 
-          {floatingDeltas.map((delta) => {
-            const anchor = projectedAnchors[delta.territoryId];
-            if (!anchor) return null;
-            return (
-              <span
-                key={delta.id}
-                className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 rounded-full border px-2 py-0.5 text-sm font-extrabold leading-none text-white backdrop-blur-[1.5px] troop-delta-float"
+            {floatingDeltas.map((delta) => {
+              const anchor = projectedAnchors[delta.territoryId];
+              if (!anchor) return null;
+              return (
+                <span
+                  key={delta.id}
+                  className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 rounded-full border px-2 py-0.5 text-sm font-extrabold leading-none text-white backdrop-blur-[1.5px] troop-delta-float"
+                  style={{
+                    left: `${anchor.x * 100}%`,
+                    top: `${anchor.y * 100}%`,
+                    borderColor: delta.color,
+                    backgroundColor: "rgba(10, 12, 16, 0.78)",
+                    boxShadow: `0 0 0 1px rgba(0,0,0,0.7), 0 2px 10px ${delta.color}66`,
+                    textShadow:
+                      "-1px 0 rgba(0,0,0,0.9), 0 1px rgba(0,0,0,0.9), 1px 0 rgba(0,0,0,0.9), 0 -1px rgba(0,0,0,0.9)",
+                    animationDuration: `${troopDeltaDurationMs}ms`,
+                  }}
+                >
+                  {delta.amount > 0 ? `+${delta.amount}` : delta.amount}
+                </span>
+              );
+            })}
+
+            {battleOverlay && attackOverlayAnchor && battleOverlayContent && (
+              <div
+                className={cn(
+                  "absolute z-20 w-[min(320px,92vw)] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm",
+                  fullscreen ? "block" : "hidden sm:block",
+                )}
                 style={{
-                  left: `${anchor.x * 100}%`,
-                  top: `${anchor.y * 100}%`,
-                  borderColor: delta.color,
-                  backgroundColor: "rgba(10, 12, 16, 0.78)",
-                  boxShadow: `0 0 0 1px rgba(0,0,0,0.7), 0 2px 10px ${delta.color}66`,
-                  textShadow:
-                    "-1px 0 rgba(0,0,0,0.9), 0 1px rgba(0,0,0,0.9), 1px 0 rgba(0,0,0,0.9), 0 -1px rgba(0,0,0,0.9)",
-                  animationDuration: `${troopDeltaDurationMs}ms`,
+                  left: `${attackOverlayAnchor.x * 100}%`,
+                  top: `${attackOverlayAnchor.y * 100}%`,
+                  transform: `translate(calc(-50% + ${overlayDragOffset.x}px), calc(-50% + ${overlayDragOffset.y}px))`,
+                }}
+                onPointerDown={(event) => {
+                  if (panZoomEnabled) markInteractiveTargetPointerDown(event.pointerId);
+                  event.stopPropagation();
                 }}
               >
-                {delta.amount > 0 ? `+${delta.amount}` : delta.amount}
-              </span>
-            );
-          })}
-
-          {battleOverlay && attackOverlayAnchor && battleOverlayContent && (
-            <div
-              className="absolute z-20 hidden w-[min(320px,92vw)] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm sm:block"
-              style={{
-                left: `${attackOverlayAnchor.x * 100}%`,
-                top: `${attackOverlayAnchor.y * 100}%`,
-                transform: `translate(calc(-50% + ${overlayDragOffset.x}px), calc(-50% + ${overlayDragOffset.y}px))`,
-              }}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              {battleOverlayContent}
-            </div>
-          )}
+                {battleOverlayContent}
+              </div>
+            )}
+          </div>
         </div>
-
       </div>
-      {battleOverlay && battleOverlayContent && (
+      {!fullscreen && battleOverlay && battleOverlayContent && (
         <div className="mt-2 flex justify-center sm:hidden">
           <div className="w-[min(320px,92vw)] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm">
             {battleOverlayContent}
