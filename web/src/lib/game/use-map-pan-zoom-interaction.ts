@@ -26,7 +26,6 @@ interface MapPanZoomInteractionControllerOptions {
   maxScale?: number;
   initialScale?: number;
   zoomStep?: number;
-  longPressMs?: number;
   dragThresholdPx?: number;
   clickSuppressWindowMs?: number;
 }
@@ -44,7 +43,6 @@ export class MapPanZoomInteractionController {
   private readonly maxScale: number;
   private readonly initialScale: number;
   private readonly zoomStep: number;
-  private readonly longPressMs: number;
   private readonly dragThresholdPx: number;
   private readonly clickSuppressWindowMs: number;
 
@@ -61,7 +59,6 @@ export class MapPanZoomInteractionController {
       pointerId: number;
       startX: number;
       startY: number;
-      startAtMs: number;
       panOrigin: Point;
       movedBeyondThreshold: boolean;
     }
@@ -91,7 +88,6 @@ export class MapPanZoomInteractionController {
     this.maxScale = options.maxScale ?? 4;
     this.initialScale = options.initialScale ?? 1;
     this.zoomStep = options.zoomStep ?? 0.2;
-    this.longPressMs = options.longPressMs ?? 180;
     this.dragThresholdPx = options.dragThresholdPx ?? 6;
     this.clickSuppressWindowMs = options.clickSuppressWindowMs ?? 160;
 
@@ -162,7 +158,6 @@ export class MapPanZoomInteractionController {
         pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
-        startAtMs: event.nowMs,
         panOrigin: this.pan,
         movedBeyondThreshold: false,
       };
@@ -221,10 +216,6 @@ export class MapPanZoomInteractionController {
       const moved = Math.hypot(dx, dy);
       if (moved >= this.dragThresholdPx) {
         this.pendingTouch.movedBeyondThreshold = true;
-      }
-
-      const heldLongEnough = event.nowMs - this.pendingTouch.startAtMs >= this.longPressMs;
-      if (this.pendingTouch.movedBeyondThreshold && heldLongEnough) {
         this.gestureMode = "pan";
         this.activePan = {
           pointerId: event.pointerId,
@@ -358,7 +349,6 @@ export function useMapPanZoomInteraction({
   maxScale = 4,
   initialScale = 1,
   zoomStep = 0.2,
-  longPressMs = 180,
   dragThresholdPx = 6,
   clickSuppressWindowMs = 160,
 }: UseMapPanZoomInteractionOptions) {
@@ -376,7 +366,6 @@ export function useMapPanZoomInteraction({
       maxScale,
       initialScale,
       zoomStep,
-      longPressMs,
       dragThresholdPx,
       clickSuppressWindowMs,
     });

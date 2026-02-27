@@ -168,7 +168,6 @@ export function MapCanvas({
     minScale: 1,
     maxScale: 6,
     zoomStep: 0.2,
-    longPressMs: 180,
     dragThresholdPx: 6,
     clickSuppressWindowMs: 160,
   });
@@ -586,7 +585,7 @@ export function MapCanvas({
       <div
         ref={containerRef}
         className={cn(
-          "relative w-full max-w-full overflow-hidden bg-muted select-none",
+          "relative w-full max-w-full overflow-hidden bg-[var(--app-bg)] select-none",
           fullscreen ? "h-full rounded-none border-0" : "mx-auto aspect-[4/3] rounded-xl border border-border/70",
           panZoomEnabled && "game-map-viewport-touch",
           panZoomEnabled && isGestureActive && "cursor-grabbing",

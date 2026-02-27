@@ -27,7 +27,7 @@ describe("MapPanZoomInteractionController", () => {
     expect(controller.shouldSuppressClick(90)).toBe(false);
   });
 
-  test("long press and drag pans and suppresses click", () => {
+  test("touch drag pans immediately after threshold and suppresses click", () => {
     const controller = new MapPanZoomInteractionController();
 
     controller.onPointerDown({
@@ -44,7 +44,7 @@ describe("MapPanZoomInteractionController", () => {
       clientX: 218,
       clientY: 235,
       rect,
-      nowMs: 220,
+      nowMs: 25,
     });
     controller.onPointerUp({
       pointerId: 1,
