@@ -617,6 +617,36 @@ export default function GamePage() {
     setReinforcementDrafts((prev) => prev.slice(0, -1));
   }, []);
 
+  const reinforcementDraftTerritoryIds = useMemo(() => {
+    return new Set(reinforcementDrafts.map((draft) => draft.territoryId));
+  }, [reinforcementDrafts]);
+
+  const handleTerritoryRightClick = useCallback(
+    (territoryId: string) => {
+      if (!state || controlsDisabled) return;
+      if (state.turn.phase !== "Reinforcement") return;
+      if (mustTradeNow) return;
+      setReinforcementDrafts((prev) => {
+        const index = (() => {
+          for (let i = prev.length - 1; i >= 0; i -= 1) {
+            if (prev[i]?.territoryId === territoryId && prev[i].count > 0) return i;
+          }
+          return -1;
+        })();
+        if (index < 0) return prev;
+        const entry = prev[index];
+        if (!entry) return prev;
+        if (entry.count === 1) return [...prev.slice(0, index), ...prev.slice(index + 1)];
+        return [
+          ...prev.slice(0, index),
+          { ...entry, count: entry.count - 1 },
+          ...prev.slice(index + 1),
+        ];
+      });
+    },
+    [controlsDisabled, mustTradeNow, state],
+  );
+
   const handleConfirmPlacements = useCallback(async () => {
     if (!typedGameId || !state || reinforcementDrafts.length === 0 || mustTradeNow || actionButtonCooldownActive) {
       return;
@@ -1417,6 +1447,8 @@ export default function GamePage() {
           troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
           suppressTroopDeltas={suppressTroopDeltas}
           onTerritoryClick={handleTerritoryClick}
+          onTerritoryRightClick={handleTerritoryRightClick}
+          rightClickableTerritoryIds={reinforcementDraftTerritoryIds}
           onMapImageRectChange={(rect) => {
             setMapImageWidth(rect.width > 0 ? rect.width : null);
           }}

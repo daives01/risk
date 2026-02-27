@@ -47,6 +47,8 @@ interface MapCanvasProps {
   infoPinnedTerritoryId?: string | null;
   onSetInfoPinnedTerritoryId?: (territoryId: string | null) => void;
   onClickTerritory: (territoryId: string) => void;
+  onRightClickTerritory?: (territoryId: string) => void;
+  rightClickableTerritoryIds?: Set<string>;
   onClearSelection?: () => void;
   onImageRectChange?: (rect: { width: number; height: number }) => void;
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
@@ -131,6 +133,8 @@ export function MapCanvas({
   infoPinnedTerritoryId = null,
   onSetInfoPinnedTerritoryId = () => undefined,
   onClickTerritory,
+  onRightClickTerritory,
+  rightClickableTerritoryIds,
   onClearSelection,
   onImageRectChange,
   getPlayerColor,
@@ -722,6 +726,7 @@ export function MapCanvas({
             const isTo = selectedTo === territoryId;
             const isValidFrom = validFromIds.has(territoryId);
             const isValidTo = validToIds.has(territoryId);
+            const rightClickable = rightClickableTerritoryIds?.has(territoryId) ?? false;
             const selectable = interactive && (isValidFrom || isValidTo);
             const isHighlighted = !highlightActive || highlightedTerritoryIds.has(territoryId);
             const shouldDeEmphasize = highlightActive && !isHighlighted && !isFrom && !isTo;
@@ -757,7 +762,12 @@ export function MapCanvas({
                   onPointerDown={(event) => {
                     if (panZoomEnabled) markInteractiveTargetPointerDown(event.pointerId);
                   }}
-                  disabled={!selectable && !infoOverlayEnabled}
+                  onContextMenu={(event) => {
+                    if (!rightClickable || !onRightClickTerritory) return;
+                    event.preventDefault();
+                    onRightClickTerritory(territoryId);
+                  }}
+                  disabled={!selectable && !infoOverlayEnabled && !rightClickable}
                   title={territory.name ?? territoryId}
                   onMouseEnter={() => {
                     if (infoOverlayEnabled && supportsHover) {
@@ -771,7 +781,7 @@ export function MapCanvas({
                   }}
                   className={cn(
                     "flex items-center justify-center rounded-full border-2 px-0 py-0 font-bold shadow-sm transition-opacity",
-                    selectable || infoOverlayEnabled ? "cursor-pointer" : "cursor-default opacity-80",
+                    selectable || infoOverlayEnabled || rightClickable ? "cursor-pointer" : "cursor-default opacity-80",
                     shouldDeEmphasize && "opacity-30 saturate-50",
                   )}
                   style={{

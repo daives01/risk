@@ -41,6 +41,8 @@ interface GameMapSectionProps {
   troopDeltaDurationMs: number;
   suppressTroopDeltas: boolean;
   onTerritoryClick: (territoryId: string) => void;
+  onTerritoryRightClick: (territoryId: string) => void;
+  rightClickableTerritoryIds: Set<string>;
   onMapImageRectChange: (rect: { width: number; height: number }) => void;
   onClearSelection: () => void;
   onToggleFullscreen: () => void;
@@ -80,6 +82,8 @@ export function GameMapSection({
   troopDeltaDurationMs,
   suppressTroopDeltas,
   onTerritoryClick,
+  onTerritoryRightClick,
+  rightClickableTerritoryIds,
   onMapImageRectChange,
   onClearSelection,
   onToggleFullscreen,
@@ -131,6 +135,8 @@ export function GameMapSection({
             infoPinnedTerritoryId={infoPinnedTerritoryId}
             onSetInfoPinnedTerritoryId={onSetInfoPinnedTerritoryId}
             onClickTerritory={onTerritoryClick}
+            onRightClickTerritory={onTerritoryRightClick}
+            rightClickableTerritoryIds={rightClickableTerritoryIds}
             onImageRectChange={onMapImageRectChange}
             onClearSelection={onClearSelection}
             getPlayerColor={getPlayerColor}
