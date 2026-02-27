@@ -1040,6 +1040,9 @@ export default function GamePage() {
         setInfoOverlayEnabled((prev) => !prev);
       }
     },
+    onToggleFullscreen: () => {
+      setIsMapFullscreen((prev) => !prev);
+    },
     onUndoPlacement: handleUndoPlacement,
   });
 

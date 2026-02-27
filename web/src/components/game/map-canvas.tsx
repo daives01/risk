@@ -401,18 +401,21 @@ export function MapCanvas({
     };
   }, [getPlayerColor, showTroopDeltas, territories, troopDeltaDurationMs, turnOrder]);
 
+  const overlayIsDraggable = !fullscreen;
+
   const battleOverlayContent = battleOverlay ? (
     <>
       <div className="flex items-center justify-between gap-2 rounded-md px-1 py-0.5">
         <p
           className={cn(
-            "cursor-grab text-xs font-medium active:cursor-grabbing",
+            "text-xs font-medium",
+            overlayIsDraggable && "cursor-grab active:cursor-grabbing",
             battleOverlay.mode === "attack" && battleOverlay.resolving ? "text-primary" : "text-muted-foreground",
           )}
-          onPointerDown={onStartOverlayDrag}
-          onPointerMove={onOverlayDragMove}
-          onPointerUp={onEndOverlayDrag}
-          onPointerCancel={onEndOverlayDrag}
+          onPointerDown={overlayIsDraggable ? onStartOverlayDrag : undefined}
+          onPointerMove={overlayIsDraggable ? onOverlayDragMove : undefined}
+          onPointerUp={overlayIsDraggable ? onEndOverlayDrag : undefined}
+          onPointerCancel={overlayIsDraggable ? onEndOverlayDrag : undefined}
         >
           <span
             className={cn(
@@ -826,11 +829,11 @@ export function MapCanvas({
               );
             })}
 
-            {battleOverlay && attackOverlayAnchor && battleOverlayContent && (
+            {!fullscreen && battleOverlay && attackOverlayAnchor && battleOverlayContent && (
               <div
                 className={cn(
                   "absolute z-20 w-[min(320px,92vw)] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm",
-                  fullscreen ? "block" : "hidden sm:block",
+                  "hidden sm:block",
                 )}
                 style={{
                   left: `${attackOverlayAnchor.x * 100}%`,
@@ -847,6 +850,19 @@ export function MapCanvas({
             )}
           </div>
         </div>
+        {fullscreen && battleOverlay && battleOverlayContent && (
+          <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3 pt-[max(env(safe-area-inset-top),0.25rem)]">
+            <div
+              className="pointer-events-auto w-[min(340px,100%)] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm"
+              onPointerDown={(event) => {
+                if (panZoomEnabled) markInteractiveTargetPointerDown(event.pointerId);
+                event.stopPropagation();
+              }}
+            >
+              {battleOverlayContent}
+            </div>
+          </div>
+        )}
       </div>
       {!fullscreen && battleOverlay && battleOverlayContent && (
         <div className="mt-2 flex justify-center sm:hidden">

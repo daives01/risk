@@ -32,6 +32,7 @@ interface UseGameShortcutsOptions {
   onSetOccupyMove: (count: number) => void;
   onSetFortifyCount: (count: number) => void;
   onToggleInfoOverlay: () => void;
+  onToggleFullscreen: () => void;
   onToggleCards: () => void;
   onCloseCards: () => void;
   onClearSelection: () => void;
@@ -68,6 +69,7 @@ export function useGameShortcuts({
   onSetOccupyMove,
   onSetFortifyCount,
   onToggleInfoOverlay,
+  onToggleFullscreen,
   onToggleCards,
   onCloseCards,
   onClearSelection,
@@ -142,6 +144,12 @@ export function useGameShortcuts({
       if (!historyOpen && key === "i") {
         event.preventDefault();
         onToggleInfoOverlay();
+        return;
+      }
+
+      if (key === "f") {
+        event.preventDefault();
+        onToggleFullscreen();
         return;
       }
 
@@ -239,6 +247,7 @@ export function useGameShortcuts({
     onSetOccupyMove,
     onSetPlaceCount,
     onToggleInfoOverlay,
+    onToggleFullscreen,
     onToggleShortcutCheatSheet,
     onToggleHistory,
     onToggleCards,

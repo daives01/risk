@@ -109,6 +109,7 @@ export function GameModals({
                 <p><span className="font-semibold">U</span>: Undo last placement</p>
                 <p><span className="font-semibold">C</span>: Open cards</p>
                 <p><span className="font-semibold">I</span>: Toggle map info</p>
+                <p><span className="font-semibold">F</span>: Toggle fullscreen map</p>
                 <p><span className="font-semibold">?</span>: Toggle this help</p>
                 <p><span className="font-semibold">H</span>: Toggle history</p>
               </div>
