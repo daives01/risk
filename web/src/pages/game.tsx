@@ -151,7 +151,12 @@ export default function GamePage() {
   );
   const remainingReinforcements = state?.reinforcements?.remaining ?? 0;
   const uncommittedReinforcements = Math.max(0, remainingReinforcements - queuedReinforcementTotal);
-  const isPlacementPhase = state?.turn.phase === "Reinforcement";
+  const hasQueuedPlacements = reinforcementDrafts.length > 0;
+  const isAttackTradePlacementPhase = state?.turn.phase === "Attack" && remainingReinforcements > 0;
+  const isPlacementPhase =
+    state?.turn.phase === "Reinforcement" ||
+    isAttackTradePlacementPhase ||
+    (state?.turn.phase === "Attack" && hasQueuedPlacements);
   const effectiveTeams = (view?.effectiveRuleset as {
     teams?: {
       teamsEnabled?: boolean;
@@ -203,8 +208,9 @@ export default function GamePage() {
   const mustTradeNow =
     !historyOpen &&
     isMyTurn &&
-    phase === "Reinforcement" &&
+    (phase === "Reinforcement" || phase === "Attack") &&
     myCardCount >= forcedTradeHandSize;
+  const canTradeInCurrentState = phase === "Reinforcement" || (phase === "Attack" && mustTradeNow);
   const autoTradeCardIds = findAutoTradeSet(myHand ?? [], tradeSets);
   const timingMode = (view as { timingMode?: "realtime" | "async_1d" | "async_3d" } | null)?.timingMode ?? "realtime";
   const turnDeadlineAt = (view as { turnDeadlineAt?: number | null } | null)?.turnDeadlineAt ?? null;
@@ -262,7 +268,7 @@ export default function GamePage() {
     const ids = new Set<string>();
     if (!state || !myEnginePlayerId || !graphMap) return ids;
 
-    if (state.turn.phase === "Reinforcement") {
+    if (isPlacementPhase) {
       if (uncommittedReinforcements <= 0) return ids;
       for (const [territoryId, territory] of Object.entries(state.territories)) {
         if (
@@ -292,6 +298,7 @@ export default function GamePage() {
   }, [
     allowPlaceOnTeammate,
     graphMap,
+    isPlacementPhase,
     isTeammateOwner,
     myEnginePlayerId,
     state,
@@ -535,7 +542,7 @@ export default function GamePage() {
     (territoryId: string) => {
       if (!state || controlsDisabled) return;
 
-      if (state.turn.phase === "Reinforcement") {
+      if (isPlacementPhase) {
         if (mustTradeNow) return;
         if (validFromIds.has(territoryId) && uncommittedReinforcements > 0) {
           const queuedCount = Math.min(placeCount, uncommittedReinforcements);
@@ -602,6 +609,7 @@ export default function GamePage() {
     },
     [
       controlsDisabled,
+      isPlacementPhase,
       mustTradeNow,
       placeCount,
       selectedFrom,
@@ -624,7 +632,7 @@ export default function GamePage() {
   const handleTerritoryRightClick = useCallback(
     (territoryId: string) => {
       if (!state || controlsDisabled) return;
-      if (state.turn.phase !== "Reinforcement") return;
+      if (!isPlacementPhase) return;
       if (mustTradeNow) return;
       setReinforcementDrafts((prev) => {
         const index = (() => {
@@ -644,7 +652,7 @@ export default function GamePage() {
         ];
       });
     },
-    [controlsDisabled, mustTradeNow, state],
+    [controlsDisabled, isPlacementPhase, mustTradeNow, state],
   );
 
   const handleConfirmPlacements = useCallback(async () => {
@@ -777,12 +785,13 @@ export default function GamePage() {
   }, []);
 
   const handleTrade = useCallback(() => {
+    if (!canTradeInCurrentState) return;
     if (selectedCardIds.size !== 3) return;
     void submitAction({
       type: "TradeCards",
       cardIds: Array.from(selectedCardIds) as CardId[],
     });
-  }, [selectedCardIds, submitAction]);
+  }, [canTradeInCurrentState, selectedCardIds, submitAction]);
 
   const handleResolveAttack = useCallback(() => {
     if (!selectedFrom || !selectedTo) return;
@@ -966,7 +975,7 @@ export default function GamePage() {
 
   useEffect(() => {
     if (historyOpen || isSpectator || !isMyTurn) return;
-    if (phase !== "Reinforcement") return;
+    if (phase !== "Reinforcement" && phase !== "Attack") return;
     if (!myHand || myHand.length === 0) return;
     if (!autoTradeCardIds) return;
     if (cardsOpen) return;
@@ -975,6 +984,7 @@ export default function GamePage() {
       setCardsOpen(true);
       return;
     }
+    if (phase === "Attack") return;
     if (optionalTradeAutoOpenRef.current === stateVersion) return;
     optionalTradeAutoOpenRef.current = stateVersion;
     setCardsOpen(true);
@@ -1217,7 +1227,7 @@ export default function GamePage() {
       : `${fortifiesRemainingForDisplay} ${fortifiesRemainingForDisplay === 1 ? "fortify" : "fortifies"} left`;
   const actionHint = !historyOpen && isMyTurn
     ? (() => {
-      if (phase === "Reinforcement") {
+      if (isPlacementPhase) {
         return "Click territory to place";
       }
       if (phase === "Attack") {
@@ -1538,11 +1548,12 @@ export default function GamePage() {
         tradesCompleted={state?.tradesCompleted ?? 0}
         onCloseCards={() => setCardsOpen(false)}
         controlsDisabled={controlsDisabled}
-        phase={phase}
+        canTradeCards={canTradeInCurrentState}
         submitting={submitting}
         autoTradeCardIds={autoTradeCardIds}
         onTrade={handleTrade}
         onAutoTrade={(cardIds) => {
+          if (!canTradeInCurrentState) return;
           void submitAction({ type: "TradeCards", cardIds });
         }}
         endgameModal={endgameModal}

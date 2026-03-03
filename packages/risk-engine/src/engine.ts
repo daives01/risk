@@ -93,9 +93,9 @@ function handlePlaceReinforcements(
   teamsConfig?: TeamsConfig,
 ): ActionResult {
   // Phase check
-  if (state.turn.phase !== "Reinforcement") {
+  if (state.turn.phase !== "Reinforcement" && state.turn.phase !== "Attack") {
     throw new ActionError(
-      `Cannot place reinforcements: current phase is ${state.turn.phase}, expected Reinforcement`,
+      `Cannot place reinforcements: current phase is ${state.turn.phase}, expected Reinforcement or Attack`,
     );
   }
 
@@ -153,8 +153,11 @@ function handlePlaceReinforcements(
     },
   };
 
-  // Transition to Attack phase when all reinforcements placed
-  const newPhase = newRemaining === 0 ? "Attack" as const : "Reinforcement" as const;
+  // Reinforcement placements transition to Attack only when spent out.
+  // Attack-phase placements keep the player in Attack.
+  const newPhase = state.turn.phase === "Reinforcement"
+    ? (newRemaining === 0 ? "Attack" as const : "Reinforcement" as const)
+    : "Attack" as const;
 
   const newState: GameState = {
     ...state,
@@ -186,6 +189,7 @@ function handleAttack(
   action: AttackAction,
   map: GraphMap,
   combat: CombatConfig,
+  cardsConfig?: CardsConfig,
   teamsConfig?: TeamsConfig,
 ): ActionResult {
   // Phase check
@@ -207,6 +211,21 @@ function handleAttack(
     throw new ActionError(
       `Cannot attack while an Occupy is pending`,
     );
+  }
+
+  // Forced elimination trade check
+  if (cardsConfig) {
+    const hand = state.hands[playerId] ?? [];
+    if (hand.length >= cardsConfig.forcedTradeHandSize) {
+      throw new ActionError(
+        `Must trade cards before continuing attacks (hand size ${hand.length} >= ${cardsConfig.forcedTradeHandSize})`,
+      );
+    }
+  }
+
+  // If card trade armies were generated during Attack, they must be placed first.
+  if ((state.reinforcements?.remaining ?? 0) > 0) {
+    throw new ActionError("Must place traded reinforcements before continuing attacks");
   }
 
   // Territory existence
@@ -485,6 +504,7 @@ function handleOccupy(
 function handleEndAttackPhase(
   state: GameState,
   playerId: PlayerId,
+  cardsConfig?: CardsConfig,
 ): ActionResult {
   // Phase check
   if (state.turn.phase !== "Attack") {
@@ -505,6 +525,20 @@ function handleEndAttackPhase(
     throw new ActionError(
       `Cannot end attack phase while an Occupy is pending`,
     );
+  }
+
+  // Forced elimination trade check
+  if (cardsConfig) {
+    const hand = state.hands[playerId] ?? [];
+    if (hand.length >= cardsConfig.forcedTradeHandSize) {
+      throw new ActionError(
+        `Must trade cards before ending attack phase (hand size ${hand.length} >= ${cardsConfig.forcedTradeHandSize})`,
+      );
+    }
+  }
+
+  if ((state.reinforcements?.remaining ?? 0) > 0) {
+    throw new ActionError("Must place traded reinforcements before ending attack phase");
   }
 
   const newState: GameState = {
@@ -705,9 +739,9 @@ function handleTradeCards(
   cardsConfig: CardsConfig,
 ): ActionResult {
   // Phase check
-  if (state.turn.phase !== "Reinforcement") {
+  if (state.turn.phase !== "Reinforcement" && state.turn.phase !== "Attack") {
     throw new ActionError(
-      `Cannot trade cards: current phase is ${state.turn.phase}, expected Reinforcement`,
+      `Cannot trade cards: current phase is ${state.turn.phase}, expected Reinforcement or Attack`,
     );
   }
 
@@ -727,6 +761,14 @@ function handleTradeCards(
 
   // Cards must be in player's hand
   const hand: readonly CardId[] = state.hands[playerId] ?? [];
+
+  // During Attack, trades are only allowed when forced by hand-size cap.
+  if (state.turn.phase === "Attack" && hand.length < cardsConfig.forcedTradeHandSize) {
+    throw new ActionError(
+      `Cannot trade cards during Attack unless forced (hand size ${hand.length} < ${cardsConfig.forcedTradeHandSize})`,
+    );
+  }
+
   for (const cardId of action.cardIds) {
     if (!hand.includes(cardId)) {
       throw new ActionError(
@@ -959,11 +1001,11 @@ export function applyAction(
     case "Attack":
       if (!map) throw new ActionError("GraphMap is required for Attack actions");
       if (!combat) throw new ActionError("CombatConfig is required for Attack actions");
-      return handleAttack(state, playerId, action, map, combat, teamsConfig);
+      return handleAttack(state, playerId, action, map, combat, cardsConfig, teamsConfig);
     case "Occupy":
       return handleOccupy(state, playerId, action);
     case "EndAttackPhase":
-      return handleEndAttackPhase(state, playerId);
+      return handleEndAttackPhase(state, playerId, cardsConfig);
     case "Fortify":
       if (!map) throw new ActionError("GraphMap is required for Fortify actions");
       if (!fortifyConfig) throw new ActionError("FortifyConfig is required for Fortify actions");

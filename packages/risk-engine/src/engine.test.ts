@@ -188,11 +188,11 @@ describe("PlaceReinforcements", () => {
 
   test("rejects placement when not in Reinforcement phase", () => {
     const state = makeState({
-      turn: { currentPlayerId: P1, phase: "Attack", round: 1 },
+      turn: { currentPlayerId: P1, phase: "Fortify", round: 1 },
     });
     expect(() => applyAction(state, P1, place(T1, 1))).toThrow(ActionError);
     expect(() => applyAction(state, P1, place(T1, 1))).toThrow(
-      /current phase is Attack/,
+      /current phase is Fortify/,
     );
   });
 
@@ -258,6 +258,37 @@ describe("PlaceReinforcements", () => {
     expect(() => applyAction(state, P1, place(T1, 1))).toThrow(
       /only 0 remaining/,
     );
+  });
+
+  test("allows placement during Attack when traded reinforcements are pending", () => {
+    const state = makeAttackState({
+      territories: {
+        [T1]: { ownerId: P1, armies: 3 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 4 },
+      },
+      reinforcements: { remaining: 3 },
+    });
+    const result = applyAction(state, P1, place(T1, 2), testMap, defaultCombat, undefined, defaultRuleset.cards);
+
+    expect(result.state.turn.phase).toBe("Attack");
+    expect(result.state.reinforcements?.remaining).toBe(1);
+    expect(result.state.territories[T1].armies).toBe(5);
+  });
+
+  test("spending last attack-phase traded reinforcements keeps phase at Attack", () => {
+    const state = makeAttackState({
+      territories: {
+        [T1]: { ownerId: P1, armies: 3 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 4 },
+      },
+      reinforcements: { remaining: 2 },
+    });
+    const result = applyAction(state, P1, place(T1, 2), testMap, defaultCombat, undefined, defaultRuleset.cards);
+
+    expect(result.state.turn.phase).toBe("Attack");
+    expect(result.state.reinforcements).toBeUndefined();
   });
 });
 
@@ -842,6 +873,37 @@ describe("EndAttackPhase", () => {
     const state = makeOccupyState();
     expect(() => applyAction(state, P1, endAttack())).toThrow(
       /Occupy is pending/,
+    );
+  });
+
+  test("rejects when forced elimination trade is required", () => {
+    const C1 = "c1" as CardId;
+    const C2 = "c2" as CardId;
+    const C3 = "c3" as CardId;
+    const C4 = "c4" as CardId;
+    const C5 = "c5" as CardId;
+    const state = makeAttackState({
+      hands: { p1: [C1, C2, C3, C4, C5] },
+      cardsById: {
+        [C1]: { kind: "A" },
+        [C2]: { kind: "B" },
+        [C3]: { kind: "C" },
+        [C4]: { kind: "A" },
+        [C5]: { kind: "B" },
+      },
+    });
+
+    expect(() => applyAction(state, P1, endAttack(), testMap, defaultCombat, undefined, defaultRuleset.cards)).toThrow(
+      /Must trade cards before ending attack phase/,
+    );
+  });
+
+  test("rejects when attack-phase traded reinforcements remain unplaced", () => {
+    const state = makeAttackState({
+      reinforcements: { remaining: 3 },
+    });
+    expect(() => applyAction(state, P1, endAttack(), testMap, defaultCombat, undefined, defaultRuleset.cards)).toThrow(
+      /Must place traded reinforcements before ending attack phase/,
     );
   });
 });
@@ -1915,6 +1977,79 @@ describe("Card transfer on elimination", () => {
         expect(result.state.hands[P2 as string]).toEqual([]);
         return;
       }
+    }
+    throw new Error("No capture occurred in 100 seeds");
+  });
+
+  test("requires forced trade during Attack after elimination transfer exceeds threshold", () => {
+    const C1 = "c1" as CardId;
+    const C2 = "c2" as CardId;
+    const C3 = "c3" as CardId;
+    const C4 = "c4" as CardId;
+    const C5 = "c5" as CardId;
+    const C6 = "c6" as CardId;
+    const C7 = "c7" as CardId;
+    const state = makeAttackState({
+      players: { p1: { status: "alive" }, p2: { status: "alive" }, p3: { status: "alive" } },
+      turnOrder: [P1, P2, P3],
+      territories: {
+        [T1]: { ownerId: P1, armies: 5 },
+        [T2]: { ownerId: P1, armies: 2 },
+        [T3]: { ownerId: P2, armies: 1 },
+        [T4]: { ownerId: P3, armies: 1 },
+      },
+      hands: {
+        p1: [C1, C2, C3, C4],
+        p2: [C5, C6, C7],
+      },
+      cardsById: {
+        [C1]: { kind: "A" },
+        [C2]: { kind: "B" },
+        [C3]: { kind: "C" },
+        [C4]: { kind: "A" },
+        [C5]: { kind: "B" },
+        [C6]: { kind: "C" },
+        [C7]: { kind: "A" },
+      },
+    });
+
+    for (let seed = 0; seed < 100; seed++) {
+      const s = { ...state, rng: { seed, index: 0 } };
+      const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat, undefined, defaultRuleset.cards);
+      const attackEvent = result.events[0] as AttackResolved;
+      if (attackEvent.defenderLosses !== 1) continue;
+
+      const pending = result.state.pending;
+      if (!pending || pending.type !== "Occupy") {
+        throw new Error("Expected pending occupy after capture");
+      }
+
+      const afterOccupy = applyAction(
+        result.state,
+        P1,
+        occupy(pending.minMove),
+        testMap,
+        defaultCombat,
+        undefined,
+        defaultRuleset.cards,
+      );
+
+      expect(afterOccupy.state.hands[P1 as string]).toHaveLength(7);
+      expect(() =>
+        applyAction(afterOccupy.state, P1, endAttack(), testMap, defaultCombat, undefined, defaultRuleset.cards),
+      ).toThrow(/Must trade cards before ending attack phase/);
+      expect(() =>
+        applyAction(
+          afterOccupy.state,
+          P1,
+          { type: "Attack", from: T1, to: T2 },
+          testMap,
+          defaultCombat,
+          undefined,
+          defaultRuleset.cards,
+        ),
+      ).toThrow(/Must trade cards before continuing attacks/);
+      return;
     }
     throw new Error("No capture occurred in 100 seeds");
   });

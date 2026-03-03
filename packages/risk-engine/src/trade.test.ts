@@ -134,12 +134,39 @@ describe("TradeCards", () => {
 
   test("rejects wrong phase", () => {
     const state = makeState({
-      turn: { currentPlayerId: P1, phase: "Attack", round: 1 },
+      turn: { currentPlayerId: P1, phase: "Fortify", round: 1 },
       reinforcements: undefined,
     });
     expect(() =>
       applyAction(state, P1, trade(C1, C2, C3), undefined, undefined, undefined, cardsConfig),
-    ).toThrow("expected Reinforcement");
+    ).toThrow("expected Reinforcement or Attack");
+  });
+
+  test("allows forced trade during Attack when hand is at threshold", () => {
+    const state = makeState({
+      turn: { currentPlayerId: P1, phase: "Attack", round: 1 },
+      reinforcements: undefined,
+      hands: { [P1]: [C1, C2, C3, C4, C5] },
+    });
+    const result = applyAction(
+      state, P1, trade(C1, C2, C3),
+      undefined, undefined, undefined, cardsConfig,
+    );
+    const event = result.events[0] as CardsTraded;
+    expect(event.type).toBe("CardsTraded");
+    expect(result.state.turn.phase).toBe("Attack");
+    expect(result.state.reinforcements?.remaining).toBe(6);
+  });
+
+  test("rejects optional trade during Attack when below threshold", () => {
+    const state = makeState({
+      turn: { currentPlayerId: P1, phase: "Attack", round: 1 },
+      reinforcements: undefined,
+      hands: { [P1]: [C1, C2, C3, C4] },
+    });
+    expect(() =>
+      applyAction(state, P1, trade(C1, C2, C3), undefined, undefined, undefined, cardsConfig),
+    ).toThrow("unless forced");
   });
 
   test("rejects wrong player", () => {

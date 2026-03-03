@@ -155,6 +155,9 @@ export function useGameShortcuts({
 
       if (!historyOpen && isMyTurn && !controlsDisabled && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
         const delta = event.key === "ArrowUp" ? 1 : -1;
+        const isPlacementMode =
+          phase === "Reinforcement" ||
+          (phase === "Attack" && (maxPlaceCount > 0 || reinforcementDraftCount > 0));
         if (canSetOccupy) {
           event.preventDefault();
           const next = occupyMove + delta;
@@ -168,13 +171,13 @@ export function useGameShortcuts({
           onSetFortifyCount(Math.min(Math.max(1, next), maxFortifyCount));
           return;
         }
-        if (phase === "Reinforcement" && maxPlaceCount > 0) {
+        if (isPlacementMode && maxPlaceCount > 0) {
           event.preventDefault();
           const next = placeCount + delta;
           onSetPlaceCount(Math.min(Math.max(1, next), maxPlaceCount));
           return;
         }
-        if (phase === "Attack" && !hasPendingOccupy && maxAttackDice > 0) {
+        if (phase === "Attack" && maxPlaceCount <= 0 && !hasPendingOccupy && maxAttackDice > 0) {
           event.preventDefault();
           const next = attackDice + delta;
           onSetAttackDice(Math.min(Math.max(1, next), maxAttackDice));
@@ -184,6 +187,9 @@ export function useGameShortcuts({
 
       const numericKey = Number.parseInt(event.key, 10);
       if (!Number.isNaN(numericKey) && numericKey >= 1) {
+        const isPlacementMode =
+          phase === "Reinforcement" ||
+          (phase === "Attack" && (maxPlaceCount > 0 || reinforcementDraftCount > 0));
         if (!historyOpen && isMyTurn && canSetOccupy && !controlsDisabled) {
           event.preventDefault();
           const clamped = Math.min(Math.max(numericKey, occupyMinMove), Math.max(occupyMinMove, occupyMaxMove));
@@ -195,12 +201,12 @@ export function useGameShortcuts({
           onSetFortifyCount(Math.min(Math.max(1, maxFortifyCount), numericKey));
           return;
         }
-        if (!historyOpen && isMyTurn && phase === "Reinforcement" && !controlsDisabled && maxPlaceCount > 0) {
+        if (!historyOpen && isMyTurn && isPlacementMode && !controlsDisabled && maxPlaceCount > 0) {
           event.preventDefault();
           onSetPlaceCount(Math.min(numericKey, Math.max(1, maxPlaceCount)));
           return;
         }
-        if (!historyOpen && isMyTurn && phase === "Attack" && !hasPendingOccupy && maxAttackDice > 0) {
+        if (!historyOpen && isMyTurn && phase === "Attack" && maxPlaceCount <= 0 && !hasPendingOccupy && maxAttackDice > 0) {
           if (numericKey <= 3 && numericKey <= maxAttackDice) {
             event.preventDefault();
             onSetAttackDice(numericKey);
@@ -209,7 +215,11 @@ export function useGameShortcuts({
         }
       }
 
-      if (!historyOpen && isMyTurn && phase === "Reinforcement") {
+      if (
+        !historyOpen &&
+        isMyTurn &&
+        (phase === "Reinforcement" || (phase === "Attack" && (maxPlaceCount > 0 || reinforcementDraftCount > 0)))
+      ) {
         if (key === "u" && reinforcementDraftCount > 0) {
           event.preventDefault();
           onUndoPlacement();

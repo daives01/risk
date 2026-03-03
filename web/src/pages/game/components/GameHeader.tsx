@@ -116,6 +116,9 @@ export function GameHeader({
   onEndTurn,
 }: GameHeaderProps) {
   const showPhaseTitle = historyOpen || !["Reinforcement", "Attack", "Fortify"].includes(displayPhase);
+  const isPlacementMode =
+    phase === "Reinforcement" ||
+    (phase === "Attack" && (uncommittedReinforcements > 0 || reinforcementDraftCount > 0));
 
   return (
     <div className="game-header glass-panel relative flex min-h-12 flex-nowrap items-center gap-1.5 px-2 py-1.5 md:gap-2">
@@ -137,7 +140,7 @@ export function GameHeader({
             {actionHint}
           </span>
         )}
-        {!historyOpen && isMyTurn && phase === "Reinforcement" && (
+        {!historyOpen && isMyTurn && isPlacementMode && (
           <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{uncommittedReinforcements} left</span>
         )}
         {!historyOpen && isMyTurn && phase === "Fortify" && (
@@ -182,7 +185,7 @@ export function GameHeader({
         </div>
       )}
 
-      {!historyOpen && isMyTurn && phase === "Reinforcement" && (
+      {!historyOpen && isMyTurn && isPlacementMode && (
         <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-sm">
           <Button
             type="button"
@@ -267,7 +270,7 @@ export function GameHeader({
           </div>
         )}
         <TooltipProvider>
-          {!historyOpen && isMyTurn && phase === "Reinforcement" && (
+          {!historyOpen && isMyTurn && isPlacementMode && (
             <Button
               type="button"
               size="sm"
@@ -281,7 +284,7 @@ export function GameHeader({
               <span className="hidden sm:inline">Confirm</span>
             </Button>
           )}
-          {!historyOpen && isMyTurn && phase === "Attack" && (
+          {!historyOpen && isMyTurn && phase === "Attack" && !isPlacementMode && (
             <Button
               type="button"
               size="sm"

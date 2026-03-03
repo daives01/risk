@@ -13,7 +13,7 @@ type GameViewState = {
 function applyOptimisticAction(state: PublicState, action: Action): PublicState | null {
   switch (action.type) {
     case "PlaceReinforcements": {
-      if (state.turn.phase !== "Reinforcement") return null;
+      if (state.turn.phase !== "Reinforcement" && state.turn.phase !== "Attack") return null;
       const territory = state.territories[action.territoryId];
       if (!territory) return null;
       const remaining = state.reinforcements?.remaining ?? 0;
@@ -23,7 +23,9 @@ function applyOptimisticAction(state: PublicState, action: Action): PublicState 
         ...state.territories,
         [action.territoryId]: { ...territory, armies: territory.armies + action.count },
       };
-      const nextPhase = nextRemaining === 0 ? "Attack" : state.turn.phase;
+      const nextPhase = state.turn.phase === "Reinforcement"
+        ? (nextRemaining === 0 ? "Attack" : "Reinforcement")
+        : "Attack";
       return {
         ...state,
         territories: nextTerritories,

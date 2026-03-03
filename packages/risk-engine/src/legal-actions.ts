@@ -174,6 +174,32 @@ function getAttackActions(
   // But during Attack phase with pending, no attack/end actions
   if (state.pending) return [];
 
+  const hand = state.hands[playerId] ?? [];
+  const remaining = state.reinforcements?.remaining ?? 0;
+  const forcedTradeInAttack = config.cards !== undefined && hand.length >= config.cards.forcedTradeHandSize;
+
+  if (forcedTradeInAttack) {
+    if (config.cards && hand.length >= 3) {
+      const validSets = findValidTradeSets(hand, state.cardsById, config.cards.tradeSets);
+      for (const cardIds of validSets) {
+        actions.push({ type: "TradeCards", cardIds: cardIds as CardId[] });
+      }
+    }
+    return actions;
+  }
+
+  // If attack-phase trade armies are pending placement, only placement actions are legal.
+  if (remaining > 0) {
+    const territoryIds = Object.keys(state.territories) as TerritoryId[];
+    for (const tid of territoryIds) {
+      const territory = state.territories[tid]!;
+      if (canPlace(playerId, territory.ownerId, state.players, config.teams)) {
+        actions.push({ type: "PlaceReinforcements", territoryId: tid, count: remaining });
+      }
+    }
+    return actions;
+  }
+
   // EndAttackPhase is always valid when no pending occupy
   actions.push({ type: "EndAttackPhase" });
 

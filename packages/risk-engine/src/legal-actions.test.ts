@@ -295,6 +295,40 @@ describe("getLegalActions - Attack", () => {
     expect(actions).toHaveLength(0);
   });
 
+  test("forced elimination trade: only TradeCards returned when hand >= forcedTradeHandSize", () => {
+    const C1 = "c1" as CardId;
+    const C2 = "c2" as CardId;
+    const C3 = "c3" as CardId;
+    const C4 = "c4" as CardId;
+    const C5 = "c5" as CardId;
+    const state = makeState({
+      turn: { currentPlayerId: P1, phase: "Attack", round: 1 },
+      reinforcements: undefined,
+      hands: { [P1]: [C1, C2, C3, C4, C5] },
+      cardsById: {
+        [C1]: { kind: "A" },
+        [C2]: { kind: "B" },
+        [C3]: { kind: "C" },
+        [C4]: { kind: "A" },
+        [C5]: { kind: "B" },
+      },
+    });
+    const actions = getLegalActions(state, makeConfig());
+    expect(actions.length).toBeGreaterThan(0);
+    expect(actions.every((action) => action.type === "TradeCards")).toBe(true);
+  });
+
+  test("attack-phase traded reinforcements pending: only PlaceReinforcements returned", () => {
+    const state = makeState({
+      turn: { currentPlayerId: P1, phase: "Attack", round: 1 },
+      reinforcements: { remaining: 4 },
+      hands: { [P1]: [] },
+    });
+    const actions = getLegalActions(state, makeConfig());
+    expect(actions.length).toBeGreaterThan(0);
+    expect(actions.every((action) => action.type === "PlaceReinforcements")).toBe(true);
+  });
+
   test("cannot attack own territory", () => {
     const state = makeState({
       turn: { currentPlayerId: P1, phase: "Attack", round: 1 },

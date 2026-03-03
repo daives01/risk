@@ -980,11 +980,18 @@ function applyEventsFallbackForTimeline(
         if (typeof event.tradesCompletedAfter === "number") {
           tradesCompleted = event.tradesCompletedAfter;
         }
-        if (reinforcements && typeof event.value === "number") {
-          reinforcements = {
-            ...reinforcements,
-            remaining: reinforcements.remaining + event.value,
-          };
+        if (typeof event.value === "number") {
+          if (reinforcements) {
+            reinforcements = {
+              ...reinforcements,
+              remaining: reinforcements.remaining + event.value,
+            };
+          } else {
+            reinforcements = {
+              remaining: event.value,
+              sources: { trade: event.value },
+            };
+          }
         }
         break;
       }

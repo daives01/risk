@@ -20,7 +20,7 @@ interface GameModalsProps {
   tradesCompleted: number;
   onCloseCards: () => void;
   controlsDisabled: boolean;
-  phase: string;
+  canTradeCards: boolean;
   submitting: boolean;
   autoTradeCardIds: string[] | null;
   onTrade: () => void;
@@ -45,7 +45,7 @@ export function GameModals({
   tradesCompleted,
   onCloseCards,
   controlsDisabled,
-  phase,
+  canTradeCards,
   submitting,
   autoTradeCardIds,
   onTrade,
@@ -169,7 +169,7 @@ export function GameModals({
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   size="xs"
-                  disabled={controlsDisabled || phase !== "Reinforcement" || selectedCardIds.size !== 3}
+                  disabled={controlsDisabled || !canTradeCards || selectedCardIds.size !== 3}
                   onClick={onTrade}
                 >
                   Trade 3
@@ -178,7 +178,7 @@ export function GameModals({
                   <Button
                     size="xs"
                     variant="outline"
-                    disabled={controlsDisabled || submitting}
+                    disabled={controlsDisabled || submitting || !canTradeCards}
                     onClick={() => onAutoTrade(autoTradeCardIds as CardId[])}
                   >
                     Auto Trade
