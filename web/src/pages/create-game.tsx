@@ -143,10 +143,6 @@ export default function CreateGamePage() {
     return Array.from({ length: max - min + 1 }, (_, index) => min + index);
   }, [selectedMap]);
 
-  useEffect(() => {
-    if (name || !gameNamePlaceholder) return;
-    setName(gameNamePlaceholder);
-  }, [gameNamePlaceholder, name]);
 
   useEffect(() => {
     if (allowedPlayerCounts.length === 0) return;
@@ -172,11 +168,7 @@ export default function CreateGamePage() {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      setError("Please enter a game name");
-      return;
-    }
+    const trimmedName = name.trim() || gameNamePlaceholder;
     if (!selectedMapId) {
       setError("Please select a map");
       return;
@@ -255,7 +247,6 @@ export default function CreateGamePage() {
                   placeholder={gameNamePlaceholder}
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  required
                 />
               </div>
 
@@ -342,7 +333,7 @@ export default function CreateGamePage() {
                 </div>
                 {timingMode !== "realtime" && (
                   <RulesSwitch
-                    label="Exclude weekends from turn timer"
+                    label="Exclude weekends (EU mode)"
                     checked={excludeWeekends}
                     onCheckedChange={setExcludeWeekends}
                   />
@@ -375,7 +366,7 @@ export default function CreateGamePage() {
                           <SelectContent>
                             {(slackWorkspaceOptions ?? []).map((workspace: SlackWorkspaceListItem) => (
                               <SelectItem key={workspace.teamId} value={workspace.teamId}>
-                                {workspace.teamName} ({workspace.defaultChannelId})
+                                {workspace.teamName}
                               </SelectItem>
                             ))}
                           </SelectContent>

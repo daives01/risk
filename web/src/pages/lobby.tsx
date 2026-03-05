@@ -791,7 +791,7 @@ export default function LobbyPage() {
                       </div>
                       {timingModeDraft !== "realtime" && (
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">Exclude weekends</span>
+                          <span className="text-muted-foreground">Exclude weekends (EU mode)</span>
                           <label className="flex h-8 w-[220px] items-center justify-between rounded-md border border-border/75 bg-background/65 px-3 sm:w-[360px]">
                             <span className="text-xs text-foreground">{excludeWeekendsDraft ? "On" : "Off"}</span>
                             <Switch checked={excludeWeekendsDraft} onCheckedChange={setExcludeWeekendsDraft} />
@@ -908,7 +908,7 @@ export default function LobbyPage() {
                               <SelectContent>
                                 {(slackWorkspaceOptions ?? []).map((workspace: SlackWorkspaceListItem) => (
                                   <SelectItem key={workspace.teamId} value={workspace.teamId}>
-                                    {workspace.teamName} ({workspace.defaultChannelId})
+                                    {workspace.teamName}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -936,7 +936,7 @@ export default function LobbyPage() {
                     </p>
                     {timingModeDraft !== "realtime" && (
                       <p>
-                        <span className="text-muted-foreground">Exclude weekends: </span>
+                        <span className="text-muted-foreground">Exclude weekends (EU mode): </span>
                         <span className="text-foreground">{excludeWeekendsDraft ? "On" : "Off"}</span>
                       </p>
                     )}
