@@ -14,6 +14,7 @@ import GamePage from "@/pages/game";
 import AdminMapsPage from "@/pages/admin-maps";
 import AdminMapEditorPage from "@/pages/admin-map-editor";
 import AdminSlackPage from "@/pages/admin-slack";
+import FaqPage from "@/pages/faq";
 
 function App() {
   return (
@@ -33,6 +34,7 @@ function App() {
           <Route path="/admin/maps" element={<AdminMapsPage />} />
           <Route path="/admin/maps/:mapId" element={<AdminMapEditorPage />} />
           <Route path="/admin/slack" element={<AdminSlackPage />} />
+          <Route path="/faq" element={<FaqPage />} />
         </Routes>
         <Toaster />
       </BrowserRouter>

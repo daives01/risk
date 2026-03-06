@@ -113,6 +113,9 @@ export function GameModals({
                 <p><span className="font-semibold">?</span>: Toggle this help</p>
                 <p><span className="font-semibold">H</span>: Toggle history</p>
               </div>
+              <Link to="/faq" className="inline-block text-xs text-muted-foreground transition hover:text-primary">
+                FAQ &amp; How to Play →
+              </Link>
             </CardContent>
           </Card>
         </div>
