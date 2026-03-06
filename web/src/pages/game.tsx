@@ -1429,57 +1429,65 @@ export default function GamePage() {
         className={cn(
           "page-container max-w-none flex flex-1 flex-col gap-4 game-body",
           isMapFullscreen && "min-h-0 flex-1 gap-0 overflow-hidden p-0 md:p-0",
+          !isMapFullscreen && "game-body-widescreen",
         )}
       >
-        <GameMapSection
-          mapPanelRef={mapPanelRef}
-          mapPanelHeight={mapPanelHeight}
-          mapPanelWidth={mapPanelWidth}
-          mapImageWidth={mapImageWidth}
-          mapMaxHeight={isMapFullscreen ? MAP_FULLSCREEN_MAX_HEIGHT : MAP_MAX_HEIGHT}
-          graphMap={graphMap}
-          mapVisual={mapVisual}
-          mapImageUrl={mapImageUrl}
-          playbackTerritories={playbackTerritories}
-          resolvedDisplayState={resolvedDisplayState}
-          mapSelectedFrom={mapSelectedFrom}
-          mapSelectedTo={mapSelectedTo}
-          isMapFullscreen={isMapFullscreen}
-          historyOpen={historyOpen}
-          isMyTurn={isMyTurn}
-          validFromIds={validFromIds}
-          validToIds={validToIds}
-          highlightedTerritoryIds={highlightedTerritoryIds}
-          showActionEdges={showActionEdges}
-          historyAttackEdgeIds={historyAttackEdgeIds}
-          recentAttackEdgeIds={recentAttackEdgeIds}
-          fortifyConnectedEdgeIds={fortifyConnectedEdgeIds}
-          infoOverlayEnabled={infoOverlayEnabled}
-          infoPinnedTerritoryId={infoPinnedTerritoryId}
-          onSetInfoPinnedTerritoryId={setInfoPinnedTerritoryId}
-          troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
-          suppressTroopDeltas={suppressTroopDeltas}
-          onTerritoryClick={handleTerritoryClick}
-          onTerritoryRightClick={handleTerritoryRightClick}
-          rightClickableTerritoryIds={reinforcementDraftTerritoryIds}
-          onMapImageRectChange={(rect) => {
-            setMapImageWidth(rect.width > 0 ? rect.width : null);
-          }}
-          onClearSelection={() => {
-            stopAutoAttack();
-            setSelectedFrom(null);
-            setSelectedTo(null);
-          }}
-          onToggleFullscreen={() => setIsMapFullscreen((prev) => !prev)}
-          getPlayerColor={resolvePlayerColor}
-          battleOverlay={battleOverlay}
-          historyEvents={historyEvents}
-          activeHistoryEventIndex={activeHistoryEventIndex}
-          onSelectHistoryEvent={onSelectHistoryEvent}
-        />
+        <div
+          className={cn(
+            "min-w-0 game-map-col",
+            isMapFullscreen && "flex-1 h-full min-h-0 overflow-hidden",
+          )}
+        >
+          <GameMapSection
+            mapPanelRef={mapPanelRef}
+            mapPanelHeight={mapPanelHeight}
+            mapPanelWidth={mapPanelWidth}
+            mapImageWidth={mapImageWidth}
+            mapMaxHeight={isMapFullscreen ? MAP_FULLSCREEN_MAX_HEIGHT : MAP_MAX_HEIGHT}
+            graphMap={graphMap}
+            mapVisual={mapVisual}
+            mapImageUrl={mapImageUrl}
+            playbackTerritories={playbackTerritories}
+            resolvedDisplayState={resolvedDisplayState}
+            mapSelectedFrom={mapSelectedFrom}
+            mapSelectedTo={mapSelectedTo}
+            isMapFullscreen={isMapFullscreen}
+            historyOpen={historyOpen}
+            isMyTurn={isMyTurn}
+            validFromIds={validFromIds}
+            validToIds={validToIds}
+            highlightedTerritoryIds={highlightedTerritoryIds}
+            showActionEdges={showActionEdges}
+            historyAttackEdgeIds={historyAttackEdgeIds}
+            recentAttackEdgeIds={recentAttackEdgeIds}
+            fortifyConnectedEdgeIds={fortifyConnectedEdgeIds}
+            infoOverlayEnabled={infoOverlayEnabled}
+            infoPinnedTerritoryId={infoPinnedTerritoryId}
+            onSetInfoPinnedTerritoryId={setInfoPinnedTerritoryId}
+            troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
+            suppressTroopDeltas={suppressTroopDeltas}
+            onTerritoryClick={handleTerritoryClick}
+            onTerritoryRightClick={handleTerritoryRightClick}
+            rightClickableTerritoryIds={reinforcementDraftTerritoryIds}
+            onMapImageRectChange={(rect) => {
+              setMapImageWidth(rect.width > 0 ? rect.width : null);
+            }}
+            onClearSelection={() => {
+              stopAutoAttack();
+              setSelectedFrom(null);
+              setSelectedTo(null);
+            }}
+            onToggleFullscreen={() => setIsMapFullscreen((prev) => !prev)}
+            getPlayerColor={resolvePlayerColor}
+            battleOverlay={battleOverlay}
+            historyEvents={historyEvents}
+            activeHistoryEventIndex={activeHistoryEventIndex}
+            onSelectHistoryEvent={onSelectHistoryEvent}
+          />
+        </div>
         {!isMapFullscreen && (
           <div
-            className="mx-auto grid w-full min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+            className="mx-auto grid w-full min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] game-side-col"
             style={{
               maxWidth:
                 mapImageWidth && mapPanelWidth

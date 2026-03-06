@@ -392,6 +392,30 @@
   }
 }
 
+@media (min-width: 1800px) and (orientation: landscape) {
+  .game-body-widescreen {
+    flex-direction: row;
+    align-items: start;
+    justify-content: center;
+  }
+
+  .game-body-widescreen > .game-map-col {
+    flex: 0 0 auto;
+    width: calc(min(88vh, calc(100vh - 7rem)) * 4 / 3);
+    max-width: 70%;
+  }
+
+  .game-body-widescreen > .game-side-col {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0%;
+    min-width: 18rem;
+    max-width: 28rem !important;
+    margin: 0;
+    gap: 1rem;
+  }
+}
+
 @media (min-width: 640px) {
   .app-stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
