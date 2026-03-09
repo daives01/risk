@@ -812,6 +812,7 @@ export function MapCanvas({
               >
                 <button
                   type="button"
+                  aria-label={territory.name ?? territoryId}
                   onClick={() => {
                     if (panZoomEnabled && shouldSuppressClick()) return;
                     if (infoOverlayEnabled && !supportsHover) {
@@ -894,7 +895,7 @@ export function MapCanvas({
                 style={{
                   left: `${attackOverlayAnchor.x * 100}%`,
                   top: `${attackOverlayAnchor.y * 100}%`,
-                  transform: `translate(calc(-50% + ${overlayDragOffset.x}px), calc(-50% + ${overlayDragOffset.y}px)) translateY(-50%)`,
+                  transform: `translate(calc(-50% + ${overlayDragOffset.x}px), calc(-50% + ${overlayDragOffset.y}px))`,
                 }}
                 onPointerDown={(event) => {
                   if (panZoomEnabled) markInteractiveTargetPointerDown(event.pointerId);
