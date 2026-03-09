@@ -5,6 +5,7 @@ import { getReadableTextColor } from "@/lib/color-contrast";
 import { Button } from "@/components/ui/button";
 import { NumberStepper } from "@/components/ui/number-stepper";
 import { TerritoryTooltip } from "@/components/game/territory-tooltip";
+import { computeBattleOverlayPlacement } from "@/lib/game/battle-overlay-placement";
 import { useMapPanZoomInteraction } from "@/lib/game/use-map-pan-zoom-interaction";
 
 interface GraphMapLike {
@@ -149,6 +150,7 @@ export function MapCanvas({
   const hoveredTerritoryId = infoOverlayEnabled ? null : rawHoveredTerritoryId;
   const [floatingDeltas, setFloatingDeltas] = useState<FloatingTroopDelta[]>([]);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [overlayPanelSize, setOverlayPanelSize] = useState({ width: 0, height: 0 });
   const [overlayDragState, setOverlayDragState] = useState<{ key: string; x: number; y: number }>({
     key: "",
     x: 0,
@@ -162,6 +164,7 @@ export function MapCanvas({
     originX: number;
     originY: number;
   } | null>(null);
+  const overlayPanelRef = useRef<HTMLDivElement | null>(null);
   const previousTerritoriesRef = useRef<Record<string, TerritoryState> | null>(null);
   const {
     containerRef,
@@ -278,33 +281,29 @@ export function MapCanvas({
 
   const attackOverlayAnchor = useMemo(() => {
     if (!battleOverlay) return null;
-    const clampOverlayX = (value: number) => Math.max(0.14, Math.min(0.86, value));
-    const clampOverlayY = (value: number) => Math.max(0.2, Math.min(0.86, value));
-    const center = { x: 0.5, y: 0.5 };
     const from = projectedAnchors[battleOverlay.fromTerritoryId];
     const to = projectedAnchors[battleOverlay.toTerritoryId];
     if (!from) return null;
-    if (!to) {
-      return {
-        x: clampOverlayX(from.x + (center.x - from.x) * 0.2),
-        y: clampOverlayY(from.y + (center.y - from.y) * 0.24),
-      };
-    }
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
-    const length = Math.hypot(dx, dy) || 1;
-    const normalX = -dy / length;
-    const normalY = dx / length;
-    const midpointX = (from.x + to.x) / 2;
-    const midpointY = (from.y + to.y) / 2;
-    const overlayOffset = 0.16;
-    const inwardBiasX = (center.x - midpointX) * 0.2;
-    const inwardBiasY = (center.y - midpointY) * 0.2;
-    return {
-      x: clampOverlayX(midpointX + normalX * overlayOffset * imageFit.width + inwardBiasX),
-      y: clampOverlayY(midpointY + normalY * overlayOffset * imageFit.height + inwardBiasY),
+    const fallbackPanelWidth = containerSize.width > 0 ? Math.min(320, containerSize.width * 0.44) : 280;
+    const panelWidthPx = overlayPanelSize.width > 0 ? overlayPanelSize.width : fallbackPanelWidth;
+    const panelHeightPx = overlayPanelSize.height > 0 ? overlayPanelSize.height : 122;
+    const normalizedPanelSize = {
+      width: containerSize.width > 0 ? panelWidthPx / containerSize.width : 0.28,
+      height: containerSize.height > 0 ? panelHeightPx / containerSize.height : 0.16,
     };
-  }, [battleOverlay, imageFit.height, imageFit.width, projectedAnchors]);
+    const markerRadius =
+      containerSize.width > 0 && containerSize.height > 0
+        ? Math.max(markerSize / containerSize.width, markerSize / containerSize.height) * 0.9
+        : 0.03;
+
+    return computeBattleOverlayPlacement({
+      from,
+      to,
+      nearbyAnchors: Object.values(projectedAnchors),
+      panelSize: normalizedPanelSize,
+      markerRadius,
+    });
+  }, [battleOverlay, containerSize.height, containerSize.width, markerSize, overlayPanelSize.height, overlayPanelSize.width, projectedAnchors]);
   const overlayDragKey = battleOverlay
     ? `${battleOverlay.mode}:${battleOverlay.fromTerritoryId}:${battleOverlay.toTerritoryId}`
     : "none";
@@ -366,6 +365,22 @@ export function MapCanvas({
     observer.observe(node);
     return () => observer.disconnect();
   }, [containerRef]);
+
+  useEffect(() => {
+    const node = overlayPanelRef.current;
+    if (!node || fullscreen || !battleOverlay) return;
+    const updateSize = () => {
+      const rect = node.getBoundingClientRect();
+      setOverlayPanelSize((previous) => {
+        if (previous.width === rect.width && previous.height === rect.height) return previous;
+        return { width: rect.width, height: rect.height };
+      });
+    };
+    updateSize();
+    const observer = new ResizeObserver(() => updateSize());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [battleOverlay, fullscreen]);
 
   useEffect(() => {
     if (!onImageRectChange) return;
@@ -871,6 +886,7 @@ export function MapCanvas({
 
             {!fullscreen && battleOverlay && attackOverlayAnchor && battleOverlayContent && (
               <div
+                ref={overlayPanelRef}
                 className={cn(
                   "absolute z-20 w-[min(320px,92vw)] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm",
                   "hidden sm:block",
@@ -878,7 +894,7 @@ export function MapCanvas({
                 style={{
                   left: `${attackOverlayAnchor.x * 100}%`,
                   top: `${attackOverlayAnchor.y * 100}%`,
-                  transform: `translate(calc(-50% + ${overlayDragOffset.x}px), calc(-50% + ${overlayDragOffset.y}px))`,
+                  transform: `translate(calc(-50% + ${overlayDragOffset.x}px), calc(-50% + ${overlayDragOffset.y}px)) translateY(-50%)`,
                 }}
                 onPointerDown={(event) => {
                   if (panZoomEnabled) markInteractiveTargetPointerDown(event.pointerId);
