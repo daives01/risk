@@ -47,6 +47,8 @@ interface GameMapSectionProps {
   onClearSelection: () => void;
   onToggleFullscreen: () => void;
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
+  getPlayerLabel?: (playerId: string) => string;
+  getPlayerGroupId?: (playerId: string) => string;
   battleOverlay: ComponentProps<typeof MapCanvas>["battleOverlay"];
   historyEvents: Array<{ key: string; text: string; index: number }>;
   activeHistoryEventIndex: number | null;
@@ -88,6 +90,8 @@ export function GameMapSection({
   onClearSelection,
   onToggleFullscreen,
   getPlayerColor,
+  getPlayerLabel,
+  getPlayerGroupId,
   battleOverlay,
   historyEvents,
   activeHistoryEventIndex,
@@ -140,6 +144,8 @@ export function GameMapSection({
             onImageRectChange={onMapImageRectChange}
             onClearSelection={onClearSelection}
             getPlayerColor={getPlayerColor}
+            getPlayerLabel={getPlayerLabel}
+            getPlayerGroupId={getPlayerGroupId}
             battleOverlay={battleOverlay}
           />
         </div>

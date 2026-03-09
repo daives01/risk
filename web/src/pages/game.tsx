@@ -912,6 +912,24 @@ export default function GamePage() {
     [playerMap],
   );
 
+  const resolvePlayerLabel = useCallback(
+    (playerId: string) => {
+      const name = getPlayerName(playerId, playerMap);
+      const teamId = state?.players[playerId]?.teamId;
+      const teamLabel = teamId ? teamNames[teamId] ?? teamId : null;
+      return teamLabel ? `${name} · ${teamLabel}` : name;
+    },
+    [playerMap, state, teamNames],
+  );
+
+  const resolvePlayerGroupId = useCallback(
+    (playerId: string) => {
+      const teamId = state?.players[playerId]?.teamId;
+      return teamId ?? playerId;
+    },
+    [state],
+  );
+
   useEffect(() => {
     const timer = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -1479,6 +1497,8 @@ export default function GamePage() {
             }}
             onToggleFullscreen={() => setIsMapFullscreen((prev) => !prev)}
             getPlayerColor={resolvePlayerColor}
+            getPlayerLabel={resolvePlayerLabel}
+            getPlayerGroupId={resolvePlayerGroupId}
             battleOverlay={battleOverlay}
             historyEvents={historyEvents}
             activeHistoryEventIndex={activeHistoryEventIndex}

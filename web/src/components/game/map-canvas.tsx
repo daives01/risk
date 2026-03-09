@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { getReadableTextColor } from "@/lib/color-contrast";
 import { Button } from "@/components/ui/button";
 import { NumberStepper } from "@/components/ui/number-stepper";
+import { TerritoryTooltip } from "@/components/game/territory-tooltip";
 import { useMapPanZoomInteraction } from "@/lib/game/use-map-pan-zoom-interaction";
 
 interface GraphMapLike {
@@ -52,6 +53,8 @@ interface MapCanvasProps {
   onClearSelection?: () => void;
   onImageRectChange?: (rect: { width: number; height: number }) => void;
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
+  getPlayerLabel?: (playerId: string) => string;
+  getPlayerGroupId?: (playerId: string) => string;
   battleOverlay?:
   | {
     mode: "attack";
@@ -138,8 +141,12 @@ export function MapCanvas({
   onClearSelection,
   onImageRectChange,
   getPlayerColor,
+  getPlayerLabel,
+  getPlayerGroupId,
   battleOverlay,
 }: MapCanvasProps) {
+  const [rawHoveredTerritoryId, setHoveredTerritoryId] = useState<string | null>(null);
+  const hoveredTerritoryId = infoOverlayEnabled ? null : rawHoveredTerritoryId;
   const [floatingDeltas, setFloatingDeltas] = useState<FloatingTroopDelta[]>([]);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [overlayDragState, setOverlayDragState] = useState<{ key: string; x: number; y: number }>({
@@ -180,10 +187,28 @@ export function MapCanvas({
       ? containerSize.width / containerSize.height
       : 4 / 3;
   const imageAspect = visual.imageWidth / visual.imageHeight;
-  const highlightActive = highlightedTerritoryIds.size > 0;
   const explicitActionEdges = actionEdgeIds !== undefined && actionEdgeIds.size > 0;
   const supportsHover =
     typeof window !== "undefined" && window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
+
+  const infoFocusTerritoryId = infoOverlayEnabled ? infoPinnedTerritoryId : null;
+  const infoHighlightIds = useMemo(() => {
+    if (!infoFocusTerritoryId || !getPlayerGroupId) return null;
+    const focusOwner = territories[infoFocusTerritoryId]?.ownerId;
+    if (!focusOwner) return null;
+    const groupId = getPlayerGroupId(focusOwner);
+    const ids = new Set<string>();
+    for (const [tid, ts] of Object.entries(territories)) {
+      if (getPlayerGroupId(ts.ownerId) === groupId) ids.add(tid);
+    }
+    return ids;
+  }, [infoFocusTerritoryId, territories, getPlayerGroupId]);
+
+  const infoFocusOwnerColor = infoFocusTerritoryId
+    ? getPlayerColor(territories[infoFocusTerritoryId]?.ownerId ?? "neutral", turnOrder)
+    : null;
+  const effectiveHighlightIds = infoHighlightIds ?? highlightedTerritoryIds;
+  const highlightActive = effectiveHighlightIds.size > 0;
 
   const withAlpha = (color: string, alpha: number) => {
     if (color.startsWith("#") && color.length === 7) {
@@ -658,8 +683,10 @@ export function MapCanvas({
                 if (!fromAnchor || !toAnchor) return null;
 
                 const touchesFrom = selectedFrom === from || selectedFrom === to;
+                const touchesInfoFocus =
+                  !!infoFocusTerritoryId && (from === infoFocusTerritoryId || to === infoFocusTerritoryId);
                 const touchesHighlight =
-                  highlightedTerritoryIds.has(from) || highlightedTerritoryIds.has(to);
+                  effectiveHighlightIds.has(from) || effectiveHighlightIds.has(to);
                 const edgeKey = from < to ? `${from}|${to}` : `${to}|${from}`;
                 const hasExplicitEdge = !!actionEdgeIds?.has(edgeKey);
                 const isCandidate =
@@ -689,11 +716,19 @@ export function MapCanvas({
                   ? withAlpha(actionEdgeBase, 0.95)
                   : touchesFrom || isCandidate || showActionEdge
                     ? actionEdgeColor
-                    : highlightActive
-                      ? touchesHighlight
-                        ? "rgba(255,255,255,0.24)"
-                        : "rgba(255,255,255,0.09)"
-                      : "rgba(255,255,255,0.24)";
+                    : touchesInfoFocus && infoFocusOwnerColor
+                      ? withAlpha(infoFocusOwnerColor, 0.8)
+                      : highlightActive
+                        ? touchesHighlight
+                          ? "rgba(255,255,255,0.24)"
+                          : "rgba(255,255,255,0.09)"
+                        : "rgba(255,255,255,0.24)";
+
+                const edgeWidth = touchesFrom || isCandidate || isSelectedPair || showActionEdge
+                  ? 3
+                  : touchesInfoFocus
+                    ? 2.5
+                    : 1.5;
 
                 return (
                   <line
@@ -703,7 +738,7 @@ export function MapCanvas({
                     x2={`${toAnchor.x * 100}%`}
                     y2={`${toAnchor.y * 100}%`}
                     stroke={edgeStroke}
-                    strokeWidth={touchesFrom || isCandidate || isSelectedPair || showActionEdge ? 3 : 1.5}
+                    strokeWidth={edgeWidth}
                   />
                 );
               })}
@@ -720,7 +755,7 @@ export function MapCanvas({
             const isValidTo = validToIds.has(territoryId);
             const rightClickable = rightClickableTerritoryIds?.has(territoryId) ?? false;
             const selectable = interactive && (isValidFrom || isValidTo);
-            const isHighlighted = !highlightActive || highlightedTerritoryIds.has(territoryId);
+            const isHighlighted = !highlightActive || effectiveHighlightIds.has(territoryId);
             const shouldDeEmphasize = highlightActive && !isHighlighted && !isFrom && !isTo;
             const ownerColor = getPlayerColor(territoryState.ownerId, turnOrder);
             const actionOutline = withAlpha(ownerColor, 0.9);
@@ -729,7 +764,9 @@ export function MapCanvas({
             const outlineWidth = isFrom || isTo ? 2.5 : isActionable ? 1.5 : 0;
             const outlineColor = isFrom || isTo ? actionOutline : isActionable ? actionEdge : "transparent";
 
-            const showInfo = infoOverlayEnabled && infoPinnedTerritoryId === territoryId;
+            const showInfo = infoOverlayEnabled
+              ? infoPinnedTerritoryId === territoryId
+              : supportsHover && hoveredTerritoryId === territoryId;
             const markerBackgroundColor = getPlayerColor(territoryState.ownerId, turnOrder);
             const markerTextColor = getReadableTextColor(markerBackgroundColor);
 
@@ -740,6 +777,22 @@ export function MapCanvas({
                 style={{
                   left: `${anchor.x * 100}%`,
                   top: `${anchor.y * 100}%`,
+                }}
+                onMouseEnter={() => {
+                  if (!supportsHover) return;
+                  if (infoOverlayEnabled) {
+                    onSetInfoPinnedTerritoryId(territoryId);
+                  } else {
+                    setHoveredTerritoryId(territoryId);
+                  }
+                }}
+                onMouseLeave={() => {
+                  if (!supportsHover) return;
+                  if (infoOverlayEnabled) {
+                    onSetInfoPinnedTerritoryId(infoPinnedTerritoryId === territoryId ? null : infoPinnedTerritoryId);
+                  } else {
+                    setHoveredTerritoryId((prev) => (prev === territoryId ? null : prev));
+                  }
                 }}
               >
                 <button
@@ -760,17 +813,6 @@ export function MapCanvas({
                     onRightClickTerritory(territoryId);
                   }}
                   disabled={!selectable && !infoOverlayEnabled && !rightClickable}
-                  title={territory.name ?? territoryId}
-                  onMouseEnter={() => {
-                    if (infoOverlayEnabled && supportsHover) {
-                      onSetInfoPinnedTerritoryId(territoryId);
-                    }
-                  }}
-                  onMouseLeave={() => {
-                    if (infoOverlayEnabled && supportsHover) {
-                      onSetInfoPinnedTerritoryId(infoPinnedTerritoryId === territoryId ? null : infoPinnedTerritoryId);
-                    }
-                  }}
                   className={cn(
                     "flex items-center justify-center rounded-full border-2 px-0 py-0 font-bold shadow-sm transition-opacity",
                     selectable || infoOverlayEnabled || rightClickable ? "cursor-pointer" : "cursor-default opacity-80",
@@ -793,14 +835,12 @@ export function MapCanvas({
                   {territoryState.armies}
                 </button>
                 {showInfo && (
-                  <div
-                    className="pointer-events-none absolute left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-md border border-border/70 bg-background/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-foreground shadow-sm"
-                    style={{
-                      top: `calc(-100% - ${markerSize * 0.6}px)`,
-                    }}
-                  >
-                    {territory.name ?? territoryId}
-                  </div>
+                  <TerritoryTooltip
+                    territoryName={territory.name ?? territoryId}
+                    playerLabel={getPlayerLabel?.(territoryState.ownerId)}
+                    markerSize={markerSize}
+                    delayed={!infoOverlayEnabled}
+                  />
                 )}
               </div>
             );
