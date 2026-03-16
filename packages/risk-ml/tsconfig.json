@@ -9,13 +9,13 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "composite": true
+    "composite": true,
+    "outDir": "./dist",
+    "rootDir": "./engine"
   },
+  "include": ["engine"],
   "references": [
-    { "path": "packages/risk-engine" },
-    { "path": "packages/maps" },
-    { "path": "packages/risk-ml" },
-    { "path": "web" }
-  ],
-  "files": []
+    { "path": "../risk-engine" },
+    { "path": "../maps" }
+  ]
 }

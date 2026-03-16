@@ -1,0 +1,14 @@
+{
+  "name": "risk-ml",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "engine": "bun run engine/subprocess.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "risk-engine": "workspace:*",
+    "risk-maps": "workspace:*"
+  }
+}
