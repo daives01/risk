@@ -6,3 +6,4 @@ bun.lockb
 __pycache__/
 *.py[cod]
 .venv/
+checkpoints/
