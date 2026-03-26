@@ -83,12 +83,14 @@ function getGameRuleset(game: {
   return resolveEffectiveRuleset(game);
 }
 
-function resolveTurnTimingPatch(args: {
+export function resolveTurnTimingPatch(args: {
   timingMode: GameTimingMode;
   excludeWeekends: boolean;
   previousState: GameState;
   nextState: GameState;
   now: number;
+  currentTurnStartedAt?: number;
+  currentTurnDeadlineAt?: number;
 }) {
   const isGameOver = args.nextState.turn.phase === "GameOver";
   if (!isAsyncTimingMode(args.timingMode) || isGameOver) {
@@ -100,8 +102,8 @@ function resolveTurnTimingPatch(args: {
   }
   if (!didTurnAdvance(args.previousState, args.nextState)) {
     return {
-      turnStartedAt: undefined as number | undefined,
-      turnDeadlineAt: undefined as number | undefined,
+      turnStartedAt: args.currentTurnStartedAt,
+      turnDeadlineAt: args.currentTurnDeadlineAt,
       shouldNotify: false,
     };
   }
@@ -255,6 +257,8 @@ export const submitAction = mutation({
       previousState: state,
       nextState: result.state,
       now,
+      currentTurnStartedAt: game.turnStartedAt ?? undefined,
+      currentTurnDeadlineAt: game.turnDeadlineAt ?? undefined,
     });
     const turnTimeoutJobId = await scheduleTurnTimeout({
       scheduler: ctx.scheduler,
@@ -415,6 +419,8 @@ export const submitReinforcementPlacements = mutation({
       previousState: state,
       nextState,
       now,
+      currentTurnStartedAt: game.turnStartedAt ?? undefined,
+      currentTurnDeadlineAt: game.turnDeadlineAt ?? undefined,
     });
     const turnTimeoutJobId = await scheduleTurnTimeout({
       scheduler: ctx.scheduler,
@@ -610,6 +616,8 @@ export const resign = mutation({
       previousState: state,
       nextState: newState,
       now,
+      currentTurnStartedAt: game.turnStartedAt ?? undefined,
+      currentTurnDeadlineAt: game.turnDeadlineAt ?? undefined,
     });
     const turnTimeoutJobId = await scheduleTurnTimeout({
       scheduler: ctx.scheduler,
