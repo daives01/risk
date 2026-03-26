@@ -39,6 +39,7 @@ import type * as slackNotifications from "../slackNotifications.js";
 import type * as slackValidation from "../slackValidation.js";
 import type * as teamTurnOrder from "../teamTurnOrder.js";
 import type * as turnNotifications from "../turnNotifications.js";
+import type * as turnTimeoutScheduling from "../turnTimeoutScheduling.js";
 import type * as typeAdapters from "../typeAdapters.js";
 import type * as userSettings from "../userSettings.js";
 
@@ -80,6 +81,7 @@ declare const fullApi: ApiFromModules<{
   slackValidation: typeof slackValidation;
   teamTurnOrder: typeof teamTurnOrder;
   turnNotifications: typeof turnNotifications;
+  turnTimeoutScheduling: typeof turnTimeoutScheduling;
   typeAdapters: typeof typeAdapters;
   userSettings: typeof userSettings;
 }>;

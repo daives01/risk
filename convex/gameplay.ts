@@ -17,6 +17,7 @@ import { computeTurnDeadlineAt, didTurnAdvance, isAsyncTimingMode, type GameTimi
 import { readGameState, readGraphMap } from "./typeAdapters";
 import { distributeInitialArmiesCappedRandom } from "./initialPlacement";
 import { createTeamAwareTurnOrder } from "./teamTurnOrder";
+import { scheduleTurnTimeout } from "./turnTimeoutScheduling";
 
 const actionValidator = v.union(
   v.object({
@@ -255,6 +256,14 @@ export const submitAction = mutation({
       nextState: result.state,
       now,
     });
+    const turnTimeoutJobId = await scheduleTurnTimeout({
+      scheduler: ctx.scheduler,
+      currentJobId: game.turnTimeoutJobId,
+      gameId: args.gameId,
+      turnDeadlineAt: timingPatch.turnDeadlineAt,
+      turnStartedAt: timingPatch.turnStartedAt,
+      expectedPlayerId: timingPatch.turnStartedAt ? result.state.turn.currentPlayerId : undefined,
+    });
 
     // Persist new state
     await ctx.db.patch(args.gameId, {
@@ -262,6 +271,7 @@ export const submitAction = mutation({
       stateVersion: result.state.stateVersion,
       turnStartedAt: timingPatch.turnStartedAt,
       turnDeadlineAt: timingPatch.turnDeadlineAt,
+      turnTimeoutJobId,
       ...(isGameOver
         ? {
             status: "finished" as const,
@@ -406,12 +416,21 @@ export const submitReinforcementPlacements = mutation({
       nextState,
       now,
     });
+    const turnTimeoutJobId = await scheduleTurnTimeout({
+      scheduler: ctx.scheduler,
+      currentJobId: game.turnTimeoutJobId,
+      gameId: args.gameId,
+      turnDeadlineAt: timingPatch.turnDeadlineAt,
+      turnStartedAt: timingPatch.turnStartedAt,
+      expectedPlayerId: timingPatch.turnStartedAt ? nextState.turn.currentPlayerId : undefined,
+    });
 
     await ctx.db.patch(args.gameId, {
       state: nextState,
       stateVersion: nextState.stateVersion,
       turnStartedAt: timingPatch.turnStartedAt,
       turnDeadlineAt: timingPatch.turnDeadlineAt,
+      turnTimeoutJobId,
       ...(isGameOver
         ? {
             status: "finished" as const,
@@ -592,6 +611,14 @@ export const resign = mutation({
       nextState: newState,
       now,
     });
+    const turnTimeoutJobId = await scheduleTurnTimeout({
+      scheduler: ctx.scheduler,
+      currentJobId: game.turnTimeoutJobId,
+      gameId,
+      turnDeadlineAt: timingPatch.turnDeadlineAt,
+      turnStartedAt: timingPatch.turnStartedAt,
+      expectedPlayerId: timingPatch.turnStartedAt ? newState.turn.currentPlayerId : undefined,
+    });
 
     await ctx.db.insert("gameActions", {
       gameId,
@@ -609,6 +636,7 @@ export const resign = mutation({
       stateVersion: newState.stateVersion,
       turnStartedAt: timingPatch.turnStartedAt,
       turnDeadlineAt: timingPatch.turnDeadlineAt,
+      turnTimeoutJobId,
       ...(isGameOver
         ? {
             status: "finished" as const,

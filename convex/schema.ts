@@ -80,6 +80,7 @@ export default defineSchema({
     stateVersion: v.optional(v.number()),
     turnStartedAt: v.optional(v.number()),
     turnDeadlineAt: v.optional(v.number()),
+    turnTimeoutJobId: v.optional(v.id("_scheduled_functions")),
     slackTeamId: v.optional(v.string()),
     slackNotificationsEnabled: v.optional(v.boolean()),
   })

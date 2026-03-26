@@ -45,6 +45,7 @@ import {
 } from "./playerColors";
 import { distributeInitialArmiesCappedRandom } from "./initialPlacement";
 import { computeTurnDeadlineAt, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
+import { scheduleTurnTimeout } from "./turnTimeoutScheduling";
 import { readGraphMap } from "./typeAdapters";
 import { generateUniqueInviteCode } from "./inviteCodes";
 import { createTeamAwareTurnOrder } from "./teamTurnOrder";
@@ -951,6 +952,15 @@ export const startGame = mutation({
       (game.timingMode ?? "realtime") as GameTimingMode,
       game.excludeWeekends ?? false,
     );
+    const turnTimeoutJobId = await scheduleTurnTimeout({
+      scheduler: ctx.scheduler,
+      gameId,
+      turnDeadlineAt: turnDeadlineAt ?? undefined,
+      turnStartedAt,
+      expectedPlayerId: isAsyncTimingMode((game.timingMode ?? "realtime") as GameTimingMode)
+        ? engineState.turn.currentPlayerId
+        : undefined,
+    });
     await ctx.db.patch(gameId, {
       status: "active",
       startedAt: Date.now(),
@@ -960,6 +970,7 @@ export const startGame = mutation({
       effectiveRuleset: toStoredRuleset(effectiveRuleset),
       turnStartedAt,
       turnDeadlineAt: turnDeadlineAt ?? undefined,
+      turnTimeoutJobId,
     });
 
     if (isAsyncTimingMode((game.timingMode ?? "realtime") as GameTimingMode)) {

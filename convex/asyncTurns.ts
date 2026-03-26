@@ -2,10 +2,12 @@ import { internalAction, internalMutation, internalQuery } from "./_generated/se
 import { v } from "convex/values";
 import { applyAction, type Action, type GameState, type GraphMap, type PlayerId, type RulesetConfig, type TerritoryId } from "risk-engine";
 import { internal, components } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { resolveEffectiveRuleset, type RulesetOverrides } from "./rulesets";
 import { computeTurnDeadlineAt, didTurnAdvance, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
 import { yourTurnEmailHtml } from "./emails";
 import { readGameStateNullable, readGraphMap } from "./typeAdapters";
+import { scheduleTurnTimeout } from "./turnTimeoutScheduling";
 
 function getGameRuleset(game: {
   teamModeEnabled?: boolean;
@@ -163,128 +165,131 @@ export function applyTimeoutTurnResolution(args: {
   return { nextState: workingState, actionLogs };
 }
 
-export const processExpiredTurns = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    const now = Date.now();
-    const [async1dGames, async3dGames] = await Promise.all([
-      ctx.db
-        .query("games")
-        .withIndex("by_status_timingMode_turnDeadlineAt", (q) =>
-          q
-            .eq("status", "active")
-            .eq("timingMode", "async_1d")
-            .lte("turnDeadlineAt", now),
-        )
-        .collect(),
-      ctx.db
-        .query("games")
-        .withIndex("by_status_timingMode_turnDeadlineAt", (q) =>
-          q
-            .eq("status", "active")
-            .eq("timingMode", "async_3d")
-            .lte("turnDeadlineAt", now),
-        )
-        .collect(),
-    ]);
-    const games = [...async1dGames, ...async3dGames];
+async function processExpiredTurnForGame(ctx: any, args: {
+  gameId: Id<"games">;
+  expectedPlayerId: string;
+  expectedTurnStartedAt: number;
+}) {
+  const now = Date.now();
+  const game = await ctx.db.get(args.gameId);
+  if (
+    !game ||
+    game.status !== "active" ||
+    !isAsyncTimingMode((game.timingMode ?? "realtime") as GameTimingMode) ||
+    !game.turnDeadlineAt ||
+    game.turnDeadlineAt > now ||
+    game.turnStartedAt !== args.expectedTurnStartedAt
+  ) {
+    return { processed: false, reason: "stale_or_inactive" as const };
+  }
 
-    let processed = 0;
+  const state = readGameStateNullable(game.state);
+  if (!state || state.turn.phase === "GameOver") {
+    return { processed: false, reason: "game_over" as const };
+  }
 
-    for (const game of games) {
-      if (
-        game.status !== "active" ||
-        !isAsyncTimingMode((game.timingMode ?? "realtime") as GameTimingMode) ||
-        !game.turnDeadlineAt ||
-        game.turnDeadlineAt > now
-      ) {
-        continue;
-      }
+  const timedOutPlayerId = state.turn.currentPlayerId as PlayerId;
+  if (timedOutPlayerId !== args.expectedPlayerId) {
+    return { processed: false, reason: "player_changed" as const };
+  }
 
-      const state = readGameStateNullable(game.state);
-      if (!state || state.turn.phase === "GameOver") continue;
+  const mapDoc = await ctx.db
+    .query("maps")
+    .withIndex("by_mapId", (q: any) => q.eq("mapId", game.mapId))
+    .unique();
+  if (!mapDoc) return { processed: false, reason: "map_missing" as const };
 
-      const timedOutPlayerId = state.turn.currentPlayerId as PlayerId;
-      const mapDoc = await ctx.db
-        .query("maps")
-        .withIndex("by_mapId", (q) => q.eq("mapId", game.mapId))
-        .unique();
-      if (!mapDoc) continue;
+  const ruleset = getGameRuleset({
+    teamModeEnabled: game.teamModeEnabled,
+    rulesetOverrides: game.rulesetOverrides as RulesetOverrides | undefined,
+    effectiveRuleset: game.effectiveRuleset as RulesetConfig | undefined,
+  });
+  const resolution = applyTimeoutTurnResolution({
+    state,
+    playerId: timedOutPlayerId,
+    graphMap: readGraphMap(mapDoc.graphMap),
+    ruleset,
+  });
+  if (!resolution) return { processed: false, reason: "no_resolution" as const };
 
-      const ruleset = getGameRuleset({
-        teamModeEnabled: game.teamModeEnabled,
-        rulesetOverrides: game.rulesetOverrides as RulesetOverrides | undefined,
-        effectiveRuleset: game.effectiveRuleset as RulesetConfig | undefined,
-      });
-      const resolution = applyTimeoutTurnResolution({
-        state,
-        playerId: timedOutPlayerId,
-        graphMap: readGraphMap(mapDoc.graphMap),
-        ruleset,
-      });
-      if (!resolution) continue;
+  const actionHead = await ctx.db
+    .query("gameActions")
+    .withIndex("by_gameId_index", (q: any) => q.eq("gameId", game._id))
+    .order("desc")
+    .first();
+  let actionIndex = actionHead ? actionHead.index + 1 : 0;
 
-      const actionHead = await ctx.db
-        .query("gameActions")
-        .withIndex("by_gameId_index", (q) => q.eq("gameId", game._id))
-        .order("desc")
-        .first();
-      let actionIndex = actionHead ? actionHead.index + 1 : 0;
+  for (let idx = 0; idx < resolution.actionLogs.length; idx++) {
+    const actionLog = resolution.actionLogs[idx]!;
+    const events = idx === 0
+      ? [{ type: "TurnTimedOut", playerId: timedOutPlayerId }, ...actionLog.events]
+      : actionLog.events;
+    await ctx.db.insert("gameActions", {
+      gameId: game._id,
+      index: actionIndex,
+      playerId: timedOutPlayerId,
+      action: actionLog.action,
+      events,
+      stateVersionBefore: actionLog.beforeVersion,
+      stateVersionAfter: actionLog.afterVersion,
+      createdAt: now,
+    });
+    actionIndex += 1;
+  }
 
-      for (let idx = 0; idx < resolution.actionLogs.length; idx++) {
-        const actionLog = resolution.actionLogs[idx]!;
-        const events = idx === 0
-          ? [{ type: "TurnTimedOut", playerId: timedOutPlayerId }, ...actionLog.events]
-          : actionLog.events;
-        await ctx.db.insert("gameActions", {
-          gameId: game._id,
-          index: actionIndex,
-          playerId: timedOutPlayerId,
-          action: actionLog.action,
-          events,
-          stateVersionBefore: actionLog.beforeVersion,
-          stateVersionAfter: actionLog.afterVersion,
-          createdAt: now,
-        });
-        actionIndex += 1;
-      }
+  const isGameOver = resolution.nextState.turn.phase === "GameOver";
+  const winner = isGameOver
+    ? extractGameWinner(
+        resolution.actionLogs.flatMap((actionLog) => actionLog.events),
+      )
+    : {};
+  const rollover = resolveTurnRolloverPatch({
+    timingMode: (game.timingMode ?? "realtime") as GameTimingMode,
+    excludeWeekends: game.excludeWeekends ?? false,
+    previousState: state,
+    nextState: resolution.nextState,
+    now,
+  });
+  const turnTimeoutJobId = await scheduleTurnTimeout({
+    scheduler: ctx.scheduler,
+    gameId: game._id,
+    turnDeadlineAt: rollover.turnDeadlineAt,
+    turnStartedAt: rollover.turnStartedAt,
+    expectedPlayerId: rollover.turnStartedAt
+      ? resolution.nextState.turn.currentPlayerId
+      : undefined,
+  });
 
-      const isGameOver = resolution.nextState.turn.phase === "GameOver";
-      const winner = isGameOver
-        ? extractGameWinner(
-            resolution.actionLogs.flatMap((actionLog) => actionLog.events),
-          )
-        : {};
-      const rollover = resolveTurnRolloverPatch({
-        timingMode: (game.timingMode ?? "realtime") as GameTimingMode,
-        excludeWeekends: game.excludeWeekends ?? false,
-        previousState: state,
-        nextState: resolution.nextState,
-        now,
-      });
+  await ctx.db.patch(game._id, {
+    state: resolution.nextState,
+    stateVersion: resolution.nextState.stateVersion,
+    ...(isGameOver
+      ? { status: "finished" as const, finishedAt: now, ...winner }
+      : {}),
+    turnStartedAt: rollover.turnStartedAt,
+    turnDeadlineAt: rollover.turnDeadlineAt,
+    turnTimeoutJobId,
+  });
 
-      await ctx.db.patch(game._id, {
-        state: resolution.nextState,
-        stateVersion: resolution.nextState.stateVersion,
-        ...(isGameOver
-          ? { status: "finished" as const, finishedAt: now, ...winner }
-          : {}),
-        turnStartedAt: rollover.turnStartedAt,
-        turnDeadlineAt: rollover.turnDeadlineAt,
-      });
+  if (rollover.shouldNotify && rollover.turnStartedAt) {
+    await ctx.scheduler.runAfter(0, (internal as any).turnNotifications.sendTurnNotifications, {
+      gameId: game._id,
+      expectedPlayerId: resolution.nextState.turn.currentPlayerId,
+      turnStartedAt: rollover.turnStartedAt,
+    });
+  }
 
-      if (rollover.shouldNotify && rollover.turnStartedAt) {
-        await ctx.scheduler.runAfter(0, (internal as any).turnNotifications.sendTurnNotifications, {
-          gameId: game._id,
-          expectedPlayerId: resolution.nextState.turn.currentPlayerId,
-          turnStartedAt: rollover.turnStartedAt,
-        });
-      }
+  return { processed: true as const };
+}
 
-      processed += 1;
-    }
-
-    return { processed };
+export const processExpiredTurn = internalMutation({
+  args: {
+    gameId: v.id("games"),
+    expectedPlayerId: v.string(),
+    expectedTurnStartedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    return await processExpiredTurnForGame(ctx as any, args);
   },
 });
 
