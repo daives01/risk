@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { defaultRuleset } from "risk-engine";
-import type { GameState, GraphMap, PlayerId, RulesetConfig, TeamId } from "risk-engine";
+import type { CardId, GameState, GraphMap, PlayerId, RulesetConfig, TeamId } from "risk-engine";
 import { applyTimeoutTurnResolution } from "./asyncTurns";
 
 const P1 = "p1" as PlayerId;
@@ -8,6 +8,11 @@ const P2 = "p2" as PlayerId;
 const P3 = "p3" as PlayerId;
 const TEAM_1 = "team-1" as TeamId;
 const TEAM_2 = "team-2" as TeamId;
+const C1 = "c1" as CardId;
+const C2 = "c2" as CardId;
+const C3 = "c3" as CardId;
+const C4 = "c4" as CardId;
+const C5 = "c5" as CardId;
 
 const teamRuleset: RulesetConfig = {
   ...defaultRuleset,
@@ -85,6 +90,29 @@ describe("team timeout behavior", () => {
       expect(log.action.territoryId).not.toBe("t3");
     }
 
+    expect(resolution?.nextState.turn.currentPlayerId).toBe(P2);
+    expect(resolution?.nextState.turn.phase).toBe("Reinforcement");
+  });
+
+  test("timed-out reinforcement resolution ignores forced trade when player is at threshold", () => {
+    const resolution = applyTimeoutTurnResolution({
+      state: {
+        ...makeState(),
+        hands: {
+          [P1]: [C1, C2, C3, C4, C5],
+          [P2]: [],
+          [P3]: [],
+        },
+      },
+      playerId: P1,
+      graphMap: map,
+      ruleset: teamRuleset,
+    });
+
+    expect(resolution).not.toBeNull();
+    expect(
+      (resolution?.actionLogs ?? []).some((log) => log.action.type === "PlaceReinforcements"),
+    ).toBe(true);
     expect(resolution?.nextState.turn.currentPlayerId).toBe(P2);
     expect(resolution?.nextState.turn.phase).toBe("Reinforcement");
   });

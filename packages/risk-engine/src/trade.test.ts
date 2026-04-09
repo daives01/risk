@@ -453,6 +453,24 @@ describe("Forced trade enforcement", () => {
     expect(result.state.territories[T1]!.armies).toBe(4);
   });
 
+  test("allows timeout-style PlaceReinforcements at forced-trade threshold when explicitly bypassed", () => {
+    const state = makeState({
+      hands: { [P1]: [C1, C2, C3, C4, C5] }, // 5 cards, threshold is 5
+    });
+    const result = applyAction(
+      state,
+      P1,
+      place(T1, 1),
+      undefined,
+      undefined,
+      undefined,
+      cardsConfig,
+      undefined,
+      { allowPlacementWithoutForcedTrade: true },
+    );
+    expect(result.state.territories[T1]!.armies).toBe(4);
+  });
+
   test("allows PlaceReinforcements after trading down below threshold", () => {
     const state = makeState({
       hands: { [P1]: [C1, C2, C3, C4, C5] }, // 5 cards
@@ -470,6 +488,26 @@ describe("Forced trade enforcement", () => {
       undefined, undefined, undefined, cardsConfig,
     );
     expect(afterPlace.state.territories[T1]!.armies).toBe(4);
+  });
+
+  test("allows timeout-style EndAttackPhase at forced-trade threshold when explicitly bypassed", () => {
+    const state = makeState({
+      turn: { currentPlayerId: P1, phase: "Attack", round: 1 },
+      reinforcements: undefined,
+      hands: { [P1]: [C1, C2, C3, C4, C5] }, // 5 cards, threshold is 5
+    });
+    const result = applyAction(
+      state,
+      P1,
+      { type: "EndAttackPhase" },
+      undefined,
+      undefined,
+      undefined,
+      cardsConfig,
+      undefined,
+      { allowTurnAdvanceWithoutForcedTrade: true },
+    );
+    expect(result.state.turn.phase).toBe("Fortify");
   });
 
   test("no forced trade check when cardsConfig not provided", () => {

@@ -101,6 +101,16 @@ export function applyTimeoutTurnResolution(args: {
       args.ruleset.fortify,
       args.ruleset.cards,
       args.ruleset.teams,
+      action.type === "PlaceReinforcements" || action.type === "EndAttackPhase"
+        ? {
+          ...(action.type === "PlaceReinforcements"
+            ? { allowPlacementWithoutForcedTrade: true }
+            : {}),
+          ...(action.type === "EndAttackPhase"
+            ? { allowTurnAdvanceWithoutForcedTrade: true }
+            : {}),
+        }
+        : undefined,
     );
     actionLogs.push({
       action,

@@ -91,6 +91,7 @@ function handlePlaceReinforcements(
   action: PlaceReinforcements,
   cardsConfig?: CardsConfig,
   teamsConfig?: TeamsConfig,
+  options?: ApplyActionOptions,
 ): ActionResult {
   // Phase check
   if (state.turn.phase !== "Reinforcement" && state.turn.phase !== "Attack") {
@@ -134,7 +135,7 @@ function handlePlaceReinforcements(
   }
 
   // Forced trade check: must trade cards before placing if hand is too large
-  if (cardsConfig) {
+  if (cardsConfig && !options?.allowPlacementWithoutForcedTrade) {
     const hand = state.hands[playerId] ?? [];
     if (hand.length >= cardsConfig.forcedTradeHandSize) {
       throw new ActionError(
@@ -505,6 +506,7 @@ function handleEndAttackPhase(
   state: GameState,
   playerId: PlayerId,
   cardsConfig?: CardsConfig,
+  options?: ApplyActionOptions,
 ): ActionResult {
   // Phase check
   if (state.turn.phase !== "Attack") {
@@ -528,7 +530,7 @@ function handleEndAttackPhase(
   }
 
   // Forced elimination trade check
-  if (cardsConfig) {
+  if (cardsConfig && !options?.allowTurnAdvanceWithoutForcedTrade) {
     const hand = state.hands[playerId] ?? [];
     if (hand.length >= cardsConfig.forcedTradeHandSize) {
       throw new ActionError(
@@ -994,10 +996,11 @@ export function applyAction(
   fortifyConfig?: FortifyConfig,
   cardsConfig?: CardsConfig,
   teamsConfig?: TeamsConfig,
+  options?: ApplyActionOptions,
 ): ActionResult {
   switch (action.type) {
     case "PlaceReinforcements":
-      return handlePlaceReinforcements(state, playerId, action, cardsConfig, teamsConfig);
+      return handlePlaceReinforcements(state, playerId, action, cardsConfig, teamsConfig, options);
     case "Attack":
       if (!map) throw new ActionError("GraphMap is required for Attack actions");
       if (!combat) throw new ActionError("CombatConfig is required for Attack actions");
@@ -1005,7 +1008,7 @@ export function applyAction(
     case "Occupy":
       return handleOccupy(state, playerId, action);
     case "EndAttackPhase":
-      return handleEndAttackPhase(state, playerId, cardsConfig);
+      return handleEndAttackPhase(state, playerId, cardsConfig, options);
     case "Fortify":
       if (!map) throw new ActionError("GraphMap is required for Fortify actions");
       if (!fortifyConfig) throw new ActionError("FortifyConfig is required for Fortify actions");
@@ -1017,4 +1020,9 @@ export function applyAction(
       if (!cardsConfig) throw new ActionError("CardsConfig is required for TradeCards actions");
       return handleTradeCards(state, playerId, action, cardsConfig);
   }
+}
+
+export interface ApplyActionOptions {
+  readonly allowPlacementWithoutForcedTrade?: boolean;
+  readonly allowTurnAdvanceWithoutForcedTrade?: boolean;
 }

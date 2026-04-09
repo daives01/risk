@@ -22,7 +22,7 @@ export type { RulesetConfig, SetupConfig, CombatConfig, FortifyConfig, CardsConf
 export { calculateReinforcements } from "./reinforcements.js";
 export type { ReinforcementResult } from "./reinforcements.js";
 export { applyAction, ActionError } from "./engine.js";
-export type { ActionResult } from "./engine.js";
+export type { ActionResult, ApplyActionOptions } from "./engine.js";
 export { createDeck, drawCard } from "./cards.js";
 export type { DeckCreationResult, DrawResult } from "./cards.js";
 export { canPlace, canAttack, canFortifyFrom, canFortifyTo, canTraverse } from "./permissions.js";
