@@ -7,8 +7,6 @@ import { cn } from "@/lib/utils";
 interface GameMapSectionProps {
   mapPanelRef: RefObject<HTMLDivElement | null>;
   mapPanelHeight: number | null;
-  mapPanelWidth: number | null;
-  mapImageWidth: number | null;
   mapMaxHeight: string;
   graphMap: {
     territories: Record<string, { name?: string }>;
@@ -58,8 +56,6 @@ interface GameMapSectionProps {
 export function GameMapSection({
   mapPanelRef,
   mapPanelHeight,
-  mapPanelWidth,
-  mapImageWidth,
   mapMaxHeight,
   graphMap,
   mapVisual,
@@ -171,19 +167,7 @@ export function GameMapSection({
       </div>
 
       {!isMapFullscreen && (
-        <div
-          className="mx-auto grid w-full gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
-          style={{
-            maxWidth:
-              mapImageWidth && mapPanelWidth
-                ? `${Math.min(mapImageWidth, mapPanelWidth)}px`
-                : mapImageWidth
-                  ? `${mapImageWidth}px`
-                  : mapPanelWidth
-                    ? `${mapPanelWidth}px`
-                    : undefined,
-          }}
-        >
+        <div className="grid w-full gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           {historyOpen && (
             <div className="h-[25vh] min-h-0 overflow-hidden [@media(orientation:landscape)]:hidden">
               <GameEventsCard

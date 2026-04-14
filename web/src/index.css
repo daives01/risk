@@ -396,7 +396,7 @@
   .game-body-widescreen {
     flex-direction: row;
     align-items: start;
-    justify-content: center;
+    justify-content: flex-start;
   }
 
   .game-body-widescreen > .game-map-col {
@@ -410,7 +410,6 @@
     flex-direction: column;
     flex: 1 1 0%;
     min-width: 18rem;
-    max-width: 28rem !important;
     margin: 0;
     gap: 1rem;
   }

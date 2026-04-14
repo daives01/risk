@@ -59,7 +59,7 @@ export function GamePlayersCard({
   onResign,
 }: PlayersCardProps) {
   const [resignOpen, setResignOpen] = useState(false);
-  const tableMinWidthClass = teamModeEnabled ? "min-w-[31rem]" : "min-w-[23rem]";
+  const tableMinWidthClass = teamModeEnabled ? "min-w-[28.5rem]" : "min-w-[21.5rem]";
   const toTitleCase = (value: string) => value.slice(0, 1).toUpperCase() + value.slice(1).toLowerCase();
 
   const handleRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, playerId: string) => {
@@ -69,23 +69,23 @@ export function GamePlayersCard({
   };
 
   return (
-    <Card className="glass-panel border-0 py-0" data-player-highlight-zone="true">
-      <CardHeader className="flex flex-row items-center justify-between py-2.5">
+    <Card className="glass-panel gap-2 border-0 py-0" data-player-highlight-zone="true">
+      <CardHeader className="flex flex-row items-center justify-between px-3 py-2.5 xl:px-4">
         <CardTitle className="flex items-center gap-2 text-base">
           <Users className="size-4" />
           Players
         </CardTitle>
       </CardHeader>
-      <CardContent className="min-w-0 space-y-2 pb-3">
+      <CardContent className="min-w-0 space-y-2 px-2.5 pb-3 xl:px-3">
         <div className="min-w-0 overflow-x-auto game-scrollbar">
           <table className={`w-full table-auto border-separate border-spacing-y-2 ${tableMinWidthClass}`}>
             <colgroup>
               <col className="w-[2rem]" />
               <col />
               <col className="w-[1.6rem]" />
+              <col className="w-[4.75rem]" />
+              {teamModeEnabled && <col className="w-[5.75rem]" />}
               <col className="w-[5.25rem]" />
-              {teamModeEnabled && <col className="w-[7rem]" />}
-              <col className="w-[6rem]" />
               <col className="w-[3.25rem]" />
             </colgroup>
             <thead>
@@ -93,10 +93,10 @@ export function GamePlayersCard({
                 <th className="rounded-l-md border-y border-l border-border/70 bg-background/70 px-1 py-1.5 text-center [@media(max-width:420px)]:py-1" />
                 <th className="border-y border-border/70 bg-background/70 px-1 py-1.5 text-left [@media(max-width:420px)]:py-1">Player</th>
                 <th className="border-y border-border/70 bg-background/70 px-1 py-1.5 text-center [@media(max-width:420px)]:py-1" />
-                <th className="border-y border-border/70 bg-background/70 px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1"><span className="sm:hidden">Stat</span><span className="hidden sm:inline">Status</span></th>
-                {teamModeEnabled && <th className="border-y border-border/70 bg-background/70 px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1">Team</th>}
-                <th className="border-y border-border/70 bg-background/70 px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1"><span className="sm:hidden">R/T</span><span className="hidden sm:inline">Res/Troops</span></th>
-                <th className="rounded-r-md border-y border-r border-border/70 bg-background/70 px-3 py-1.5 text-center [@media(max-width:420px)]:px-2.5 [@media(max-width:420px)]:py-1">Cards</th>
+                <th className="border-y border-border/70 bg-background/70 px-2 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1"><span className="sm:hidden">Stat</span><span className="hidden sm:inline">Status</span></th>
+                {teamModeEnabled && <th className="border-y border-border/70 bg-background/70 px-2 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1">Team</th>}
+                <th className="border-y border-border/70 bg-background/70 px-2 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1"><span className="sm:hidden">R/T</span><span className="hidden sm:inline">Res/Troops</span></th>
+                <th className="rounded-r-md border-y border-r border-border/70 bg-background/70 px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2.5 [@media(max-width:420px)]:py-1">Cards</th>
               </tr>
             </thead>
             <tbody>
@@ -204,7 +204,7 @@ export function GamePlayersCard({
                         </Popover>
                       )}
                     </td>
-                    <td className={`border-y px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
+                    <td className={`border-y px-2 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
                       <span
                         className={`truncate text-xs font-medium ${
                           showTurnTimer && isCurrent
@@ -218,7 +218,7 @@ export function GamePlayersCard({
                       </span>
                     </td>
                     {teamModeEnabled && (
-                      <td className={`border-y px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
+                      <td className={`border-y px-2 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
                         {teamId ? (
                           <button
                             type="button"
@@ -239,10 +239,10 @@ export function GamePlayersCard({
                         )}
                       </td>
                     )}
-                    <td className={`border-y px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
+                    <td className={`border-y px-2 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
                       <span className="text-xs tabular-nums">{player.reserveTroops} / {player.armies}</span>
                     </td>
-                    <td className={`rounded-r-lg border-y border-r px-3 py-1.5 text-center [@media(max-width:420px)]:px-2.5 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
+                    <td className={`rounded-r-lg border-y border-r px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2.5 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
                       <span className="text-xs tabular-nums">{player.cards}</span>
                     </td>
                   </tr>

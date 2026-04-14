@@ -54,8 +54,7 @@ export default function GamePage() {
     return (window as { __RISK_HISTORY_DEBUG?: boolean }).__RISK_HISTORY_DEBUG === true;
   }, [location.search]);
   const { data: session, isPending: sessionPending } = authClient.useSession();
-  const { mapPanelRef, mapPanelHeight, mapPanelWidth } = useMapPanelSize();
-  const [mapImageWidth, setMapImageWidth] = useState<number | null>(null);
+  const { mapPanelRef, mapPanelHeight } = useMapPanelSize();
 
   const typedGameId = gameId as Id<"games"> | undefined;
   const { playerView, publicView } = useGameViewQueries(session, typedGameId);
@@ -1459,8 +1458,6 @@ export default function GamePage() {
           <GameMapSection
             mapPanelRef={mapPanelRef}
             mapPanelHeight={mapPanelHeight}
-            mapPanelWidth={mapPanelWidth}
-            mapImageWidth={mapImageWidth}
             mapMaxHeight={isMapFullscreen ? MAP_FULLSCREEN_MAX_HEIGHT : MAP_MAX_HEIGHT}
             graphMap={graphMap}
             mapVisual={mapVisual}
@@ -1487,9 +1484,7 @@ export default function GamePage() {
             onTerritoryClick={handleTerritoryClick}
             onTerritoryRightClick={handleTerritoryRightClick}
             rightClickableTerritoryIds={reinforcementDraftTerritoryIds}
-            onMapImageRectChange={(rect) => {
-              setMapImageWidth(rect.width > 0 ? rect.width : null);
-            }}
+            onMapImageRectChange={() => undefined}
             onClearSelection={() => {
               stopAutoAttack();
               setSelectedFrom(null);
@@ -1506,19 +1501,7 @@ export default function GamePage() {
           />
         </div>
         {!isMapFullscreen && (
-          <div
-            className="mx-auto grid w-full min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] game-side-col"
-            style={{
-              maxWidth:
-                mapImageWidth && mapPanelWidth
-                  ? `${Math.min(mapImageWidth, mapPanelWidth)}px`
-                  : mapImageWidth
-                    ? `${mapImageWidth}px`
-                    : mapPanelWidth
-                      ? `${mapPanelWidth}px`
-                      : undefined,
-            }}
-          >
+          <div className="grid w-full min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] game-side-col">
             <GameSidePanels
               playerStats={playerStats}
               resolvedDisplayState={resolvedDisplayState}

@@ -622,7 +622,9 @@ export function MapCanvas({
         ref={containerRef}
         className={cn(
           "relative w-full max-w-full overflow-hidden bg-[var(--app-bg)] select-none",
-          fullscreen ? "h-full rounded-none border-0" : "mx-auto aspect-[4/3] rounded-xl border border-border/70",
+          fullscreen
+            ? "h-full rounded-none border-0"
+            : "mx-auto aspect-[4/3] rounded-xl border border-border/70 [@media(min-width:1800px)_and_(orientation:landscape)]:mx-0",
           panZoomEnabled && "game-map-viewport-touch",
           panZoomEnabled && isGestureActive && "cursor-grabbing",
         )}
