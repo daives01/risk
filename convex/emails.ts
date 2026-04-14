@@ -88,3 +88,20 @@ export function yourTurnEmailHtml(args: {
     footer: "You can disable turn emails from your account settings.",
   });
 }
+
+export function eliminationEmailHtml(args: {
+  gameName: string;
+  gameUrl: string;
+  eliminatedByName: string | null;
+}): string {
+  return appEmailHtml({
+    title: `Eliminated from ${args.gameName}`,
+    intro: args.eliminatedByName
+      ? `${args.eliminatedByName} eliminated you from the game.`
+      : "You have been eliminated from the game.",
+    ctaLabel: "View Game",
+    ctaUrl: args.gameUrl,
+    detailRows: [{ label: "Status", value: "Eliminated" }],
+    footer: "You can disable elimination emails from your account settings.",
+  });
+}

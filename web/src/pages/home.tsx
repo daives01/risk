@@ -789,7 +789,7 @@ export default function HomePage() {
                   <div className="space-y-3 rounded-lg border bg-background/75 p-3">
                     <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Notifications</p>
                     <label className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-muted-foreground">Email me when it's my turn</span>
+                      <span className="text-sm text-muted-foreground">Email notifications</span>
                       <Switch
                         checked={settings?.emailTurnNotificationsEnabled ?? false}
                         onCheckedChange={(checked) => {

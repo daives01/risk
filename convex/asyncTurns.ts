@@ -327,7 +327,9 @@ export const sendYourTurnEmail = internalAction({
       return { sent: false, reason: "player_mismatch" };
     }
 
-    const targetPlayer = game.players.find((player) => player.enginePlayerId === args.expectedPlayerId);
+    const targetPlayer = game.players.find(
+      (player: { enginePlayerId?: string }) => player.enginePlayerId === args.expectedPlayerId,
+    );
     if (!targetPlayer) return { sent: false, reason: "target_missing" };
 
     const settings = await ctx.runQuery(internal.asyncTurns.getUserTurnEmailSetting, {

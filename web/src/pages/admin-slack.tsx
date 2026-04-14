@@ -327,7 +327,7 @@ export default function AdminSlackPage() {
                       />
                       {showUserSearchDropdown && mappingUserSearchDebounced.length >= 2 && (
                         <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto border border-border/80 bg-popover shadow-md">
-                          {(userSearchResults ?? []).map((user) => (
+                          {(userSearchResults ?? []).map((user: UserSearchResultsQuery[number]) => (
                             <button
                               key={user.userId}
                               type="button"

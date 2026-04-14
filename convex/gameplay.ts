@@ -152,6 +152,27 @@ function extractGameWinner(events: unknown[]): {
   };
 }
 
+function extractEliminationNotificationData(events: unknown[]): {
+  eliminatedPlayerIds: string[];
+  byPlayerId?: string;
+} {
+  const eliminationEvents = events.filter(
+    (event): event is { type: "PlayerEliminated"; eliminatedId?: unknown; byId?: unknown } =>
+      typeof event === "object" &&
+      event !== null &&
+      "type" in event &&
+      (event as { type?: unknown }).type === "PlayerEliminated" &&
+      typeof (event as { eliminatedId?: unknown }).eliminatedId === "string",
+  );
+
+  return {
+    eliminatedPlayerIds: eliminationEvents.map((event) => event.eliminatedId as string),
+    ...(typeof eliminationEvents[0]?.byId === "string"
+      ? { byPlayerId: eliminationEvents[0].byId as string }
+      : {}),
+  };
+}
+
 export const submitAction = mutation({
   args: {
     gameId: v.id("games"),
@@ -290,6 +311,15 @@ export const submitAction = mutation({
         gameId: args.gameId,
         expectedPlayerId: result.state.turn.currentPlayerId,
         turnStartedAt: timingPatch.turnStartedAt,
+      });
+    }
+
+    const eliminationNotification = extractEliminationNotificationData(result.events as unknown[]);
+    if (eliminationNotification.eliminatedPlayerIds.length > 0) {
+      await ctx.scheduler.runAfter(0, (internal as any).eliminationNotifications.sendEliminationNotifications, {
+        gameId: args.gameId,
+        eliminatedPlayerIds: eliminationNotification.eliminatedPlayerIds,
+        byPlayerId: eliminationNotification.byPlayerId,
       });
     }
 
@@ -451,6 +481,15 @@ export const submitReinforcementPlacements = mutation({
         gameId: args.gameId,
         expectedPlayerId: nextState.turn.currentPlayerId,
         turnStartedAt: timingPatch.turnStartedAt,
+      });
+    }
+
+    const eliminationNotification = extractEliminationNotificationData(events);
+    if (eliminationNotification.eliminatedPlayerIds.length > 0) {
+      await ctx.scheduler.runAfter(0, (internal as any).eliminationNotifications.sendEliminationNotifications, {
+        gameId: args.gameId,
+        eliminatedPlayerIds: eliminationNotification.eliminatedPlayerIds,
+        byPlayerId: eliminationNotification.byPlayerId,
       });
     }
 
@@ -661,6 +700,12 @@ export const resign = mutation({
         turnStartedAt: timingPatch.turnStartedAt,
       });
     }
+
+    await ctx.scheduler.runAfter(0, (internal as any).eliminationNotifications.sendEliminationNotifications, {
+      gameId,
+      eliminatedPlayerIds: [playerId],
+      byPlayerId: playerId,
+    });
 
     return { events, newVersion: newState.stateVersion };
   },

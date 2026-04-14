@@ -13,6 +13,7 @@ import type * as adminMaps from "../adminMaps.js";
 import type * as asyncTurns from "../asyncTurns.js";
 import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
+import type * as eliminationNotifications from "../eliminationNotifications.js";
 import type * as emails from "../emails.js";
 import type * as gameChat from "../gameChat.js";
 import type * as gameTeams from "../gameTeams.js";
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   asyncTurns: typeof asyncTurns;
   auth: typeof auth;
   crons: typeof crons;
+  eliminationNotifications: typeof eliminationNotifications;
   emails: typeof emails;
   gameChat: typeof gameChat;
   gameTeams: typeof gameTeams;
