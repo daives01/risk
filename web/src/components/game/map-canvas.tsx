@@ -169,6 +169,7 @@ export function MapCanvas({
   const {
     containerRef,
     scale,
+    pan,
     transformStyle,
     isGestureActive,
     zoomIn,
@@ -304,6 +305,36 @@ export function MapCanvas({
       markerRadius,
     });
   }, [battleOverlay, containerSize.height, containerSize.width, markerSize, overlayPanelSize.height, overlayPanelSize.width, projectedAnchors]);
+  const activeTooltipTerritoryId = infoOverlayEnabled ? infoPinnedTerritoryId : hoveredTerritoryId;
+  const detachedTooltip = useMemo(() => {
+    if (!fullscreen || !activeTooltipTerritoryId) return null;
+    const anchor = projectedAnchors[activeTooltipTerritoryId];
+    const territoryState = territories[activeTooltipTerritoryId];
+    if (!anchor || !territoryState || !containerSize.width || !containerSize.height) return null;
+
+    return {
+      absolutePosition: {
+        x: anchor.x * containerSize.width * scale + pan.x,
+        y: anchor.y * containerSize.height * scale + pan.y,
+      },
+      markerSize: markerSize * scale,
+      territoryName: map.territories[activeTooltipTerritoryId]?.name ?? activeTooltipTerritoryId,
+      playerLabel: getPlayerLabel?.(territoryState.ownerId),
+    };
+  }, [
+    activeTooltipTerritoryId,
+    containerSize.height,
+    containerSize.width,
+    fullscreen,
+    getPlayerLabel,
+    map.territories,
+    markerSize,
+    pan.x,
+    pan.y,
+    projectedAnchors,
+    scale,
+    territories,
+  ]);
   const overlayDragKey = battleOverlay
     ? `${battleOverlay.mode}:${battleOverlay.fromTerritoryId}:${battleOverlay.toTerritoryId}`
     : "none";
@@ -852,7 +883,7 @@ export function MapCanvas({
                 >
                   {territoryState.armies}
                 </button>
-                {showInfo && (
+                {!fullscreen && showInfo && (
                   <TerritoryTooltip
                     territoryName={territory.name ?? territoryId}
                     playerLabel={getPlayerLabel?.(territoryState.ownerId)}
@@ -909,10 +940,19 @@ export function MapCanvas({
             )}
           </div>
         </div>
+        {detachedTooltip && (
+          <TerritoryTooltip
+            territoryName={detachedTooltip.territoryName}
+            playerLabel={detachedTooltip.playerLabel}
+            markerSize={detachedTooltip.markerSize}
+            delayed={!infoOverlayEnabled}
+            absolutePosition={detachedTooltip.absolutePosition}
+          />
+        )}
         {fullscreen && battleOverlay && battleOverlayContent && (
-          <div className="pointer-events-none absolute inset-x-0 top-3 z-20 flex justify-center px-3 pt-[max(env(safe-area-inset-top),0.25rem)]">
+          <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex justify-center px-3 pt-[calc(env(safe-area-inset-top)+5.5rem)] sm:absolute sm:inset-x-0 sm:top-3 sm:z-20 sm:px-3 sm:pt-[max(env(safe-area-inset-top),0.25rem)]">
             <div
-              className="pointer-events-auto w-[min(340px,100%)] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm"
+              className="pointer-events-auto w-[min(340px,calc(100vw-1.5rem))] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm sm:w-[min(340px,100%)]"
               onPointerDown={(event) => {
                 if (panZoomEnabled) markInteractiveTargetPointerDown(event.pointerId);
                 event.stopPropagation();

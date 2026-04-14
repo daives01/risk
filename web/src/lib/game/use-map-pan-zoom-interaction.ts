@@ -535,6 +535,7 @@ export function useMapPanZoomInteraction({
   return {
     containerRef,
     scale: viewState.scale,
+    pan: viewState.pan,
     transformStyle,
     isGestureActive,
     zoomIn: handleZoomIn,
