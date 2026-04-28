@@ -1,6 +1,8 @@
+import { measureLineStats, prepareWithSegments } from "@chenglou/pretext";
+import type { PreparedTextWithSegments } from "@chenglou/pretext";
 import { ArrowUp, Check, Flag, Pencil, Trash2, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, KeyboardEvent } from "react";
+import type { CSSProperties, FormEvent, KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,6 +23,16 @@ interface PlayerSummary {
 interface PlayerRef {
   displayName: string;
   enginePlayerId: string | null;
+}
+
+const CHAT_MESSAGE_FONT = '13px "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace';
+const CHAT_TEAM_MESSAGE_FONT = 'italic 13px "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace';
+const CHAT_BUBBLE_HORIZONTAL_PADDING = 20;
+
+function measureChatBubbleWidth(prepared: PreparedTextWithSegments, maxBubbleWidth: number, hasBorder: boolean): number {
+  const maxTextWidth = Math.max(1, maxBubbleWidth - CHAT_BUBBLE_HORIZONTAL_PADDING);
+  const { maxLineWidth } = measureLineStats(prepared, maxTextWidth);
+  return Math.ceil(maxLineWidth + CHAT_BUBBLE_HORIZONTAL_PADDING + (hasBorder ? 2 : 0));
 }
 
 interface PlayersCardProps {
@@ -340,6 +352,7 @@ export function GameChatCard({
 }: GameChatCardProps) {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [messagesContainerWidth, setMessagesContainerWidth] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -409,61 +422,104 @@ export function GameChatCard({
     container.scrollTop = container.scrollHeight;
   }, [messages.length]);
 
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const updateWidth = () => setMessagesContainerWidth(container.clientWidth);
+    updateWidth();
+
+    const resizeObserver = new ResizeObserver(updateWidth);
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  const preparedChatMessages = useMemo(() => (
+    new Map(
+      messages.map((message) => [
+        message._id,
+        prepareWithSegments(
+          message.text,
+          message.channel === "team" ? CHAT_TEAM_MESSAGE_FONT : CHAT_MESSAGE_FONT,
+        ),
+      ]),
+    )
+  ), [messages]);
+
+  const chatBubbleWidths = useMemo(() => {
+    const maxBubbleWidth = Math.floor(messagesContainerWidth * 0.9);
+    if (maxBubbleWidth <= 0) return new Map<string, number>();
+
+    return new Map(messages.flatMap((message) => {
+      const prepared = preparedChatMessages.get(message._id);
+      if (!prepared) return [];
+      return [[
+        message._id,
+        measureChatBubbleWidth(prepared, maxBubbleWidth, message.channel === "team"),
+      ]];
+    }));
+  }, [messages, messagesContainerWidth, preparedChatMessages]);
+
   return (
-    <Card className="glass-panel h-[22rem] gap-2 border-0 py-0 xl:h-[24rem]">
-      <CardHeader className="flex flex-row items-center gap-2 pb-1 pt-3">
+    <Card className="glass-panel h-[min(30rem,50vh)] gap-2 border-0 py-0 xl:h-[min(34rem,50vh)]">
+      <CardHeader className="flex flex-row items-center gap-2 pb-0 pt-3">
         <CardTitle className="text-base">Chat</CardTitle>
       </CardHeader>
-      <CardContent className="flex h-[calc(100%-3.25rem)] flex-col space-y-2 pb-4 pt-0">
+      <CardContent className="flex h-[calc(100%-3rem)] flex-col space-y-1.5 pb-3 pt-0">
         <div
           ref={messagesContainerRef}
           className="game-scrollbar flex-1 overflow-y-auto rounded-md border bg-background/45 p-2 pt-2.5 text-sm"
         >
-          <div className="mt-auto space-y-2">
+          <div className="mt-auto space-y-1.5">
             {messages.length === 0 && <p className="text-muted-foreground">No messages yet.</p>}
             {messagesWithTimestamps.map((message) => {
               const timestampLabel = message.timestampLabel;
               const isTeamMessage = message.channel === "team";
+              const bubbleWidth = chatBubbleWidths.get(message._id);
+              const bubbleStyle = bubbleWidth
+                ? ({ width: `${bubbleWidth}px`, maxWidth: "100%" } satisfies CSSProperties)
+                : undefined;
               return (
                 <div key={message._id} className={`group flex ${message.isMine ? "justify-end" : "justify-start"}`}>
-                  <div className={`flex max-w-[85%] flex-col gap-1 ${message.isMine ? "items-end" : "items-start"}`}>
-                    <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
-                      <span>{message.isMine ? "You" : message.senderDisplayName}</span>
+                  <div className={`flex max-w-[90%] flex-col gap-0.5 ${message.isMine ? "items-end" : "items-start"}`}>
+                    <div className={`flex flex-wrap items-center gap-1.5 text-[0.7rem] text-muted-foreground ${message.isMine ? "justify-end" : ""}`}>
+                      {message.isMine && canSend && (
+                        <span className="inline-flex items-center gap-0.5 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+                          <Button
+                            type="button"
+                            size="icon-xs"
+                            variant={editingMessageId === message._id ? "default" : "ghost"}
+                            aria-label="Edit message"
+                            onClick={() => onStartEditMessage(message)}
+                          >
+                            <Pencil className="size-3" />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon-xs"
+                            variant="ghost"
+                            aria-label="Delete message"
+                            onClick={() => onDeleteMessage(message._id)}
+                          >
+                            <Trash2 className="size-3" />
+                          </Button>
+                        </span>
+                      )}
                       {isTeamMessage ? <span className="italic">(team)</span> : null}
+                      <span>{message.isMine ? "You" : message.senderDisplayName}</span>
                       {timestampLabel ? <span className="text-[0.7rem] tracking-wide">{timestampLabel}</span> : null}
                       {message.editedAt ? <span className="text-[0.7rem] tracking-wide">edited</span> : null}
                     </div>
                   <div
-                    className={`rounded-none px-3 py-2 ${
+                    style={bubbleStyle}
+                    className={`rounded-none px-2.5 py-1.5 ${
                       message.isMine
                         ? "bg-primary text-primary-foreground"
                         : "bg-background/80"
                     } ${isTeamMessage ? "border border-primary/25" : ""}`}
                   >
-                    <p className={`break-words text-sm leading-tight ${isTeamMessage ? "italic" : ""}`}>{message.text}</p>
+                    <p className={`break-normal [overflow-wrap:break-word] text-[0.8125rem] leading-snug ${isTeamMessage ? "italic" : ""}`}>{message.text}</p>
                   </div>
-                  {message.isMine && canSend && (
-                    <div className="flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant={editingMessageId === message._id ? "default" : "ghost"}
-                        aria-label="Edit message"
-                        onClick={() => onStartEditMessage(message)}
-                      >
-                        <Pencil className="size-3.5" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label="Delete message"
-                        onClick={() => onDeleteMessage(message._id)}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                  )}
                   </div>
                 </div>
               );
@@ -515,13 +571,13 @@ export function GameChatCard({
             onKeyDown={handleInputKeyDown}
           />
           {editingMessageId && (
-            <Button type="button" size="xs" variant="outline" disabled={!canSend} onClick={onCancelEditMessage}>
+            <Button type="button" size="icon" variant="outline" disabled={!canSend} onClick={onCancelEditMessage}>
               <X className="size-3.5" />
             </Button>
           )}
           <Button
             type="submit"
-            size="xs"
+            size="icon"
             className="inline-flex items-center justify-center"
             disabled={!canSend || !draftText.trim()}
           >
