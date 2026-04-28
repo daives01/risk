@@ -62,11 +62,11 @@ export default function GamePage() {
   const [chatChannel, setChatChannel] = useState<ChatChannel>("global");
   const [chatDraft, setChatDraft] = useState("");
   const [chatEditingMessageId, setChatEditingMessageId] = useState<string | null>(null);
+  const [chatEditingChannel, setChatEditingChannel] = useState<ChatChannel | null>(null);
   const { mapDoc, historyTimeline, timelineActions, chatMessages } = useGameRuntimeQueries(
     typedGameId,
     !!session,
     view?.mapId,
-    chatChannel,
   );
   const { graphMap, mapVisual, mapImageUrl } = adaptMapDoc(mapDoc);
   const {
@@ -862,6 +862,7 @@ export default function GamePage() {
       if (isEditing) {
         setChatDraft("");
         setChatEditingMessageId(null);
+        setChatEditingChannel(null);
       }
     } catch (error) {
       if (!isEditing) {
@@ -880,11 +881,13 @@ export default function GamePage() {
 
   const handleStartEditChatMessage = useCallback((message: ChatMessage) => {
     setChatEditingMessageId(message._id);
+    setChatEditingChannel(message.channel);
     setChatDraft(message.text);
   }, []);
 
   const handleCancelEditChatMessage = useCallback(() => {
     setChatEditingMessageId(null);
+    setChatEditingChannel(null);
     setChatDraft("");
   }, []);
 
@@ -965,6 +968,7 @@ export default function GamePage() {
     const messageStillExists = (chatMessages ?? []).some((message) => message._id === chatEditingMessageId);
     if (!messageStillExists) {
       setChatEditingMessageId(null);
+      setChatEditingChannel(null);
       setChatDraft("");
     }
   }, [chatEditingMessageId, chatMessages]);
@@ -1525,11 +1529,16 @@ export default function GamePage() {
               canSendChat={canSendChat}
               chatDraft={chatDraft}
               chatEditingMessageId={chatEditingMessageId}
+              chatEditingChannel={chatEditingChannel}
               onSetChatDraft={setChatDraft}
               onSelectChannel={(nextChannel) => {
                 setChatChannel(nextChannel);
                 setChatEditingMessageId(null);
+                setChatEditingChannel(null);
                 setChatDraft("");
+              }}
+              onToggleChannel={() => {
+                setChatChannel((currentChannel) => currentChannel === "team" ? "global" : "team");
               }}
               onStartEditMessage={handleStartEditChatMessage}
               onCancelEditMessage={handleCancelEditChatMessage}

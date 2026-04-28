@@ -1,7 +1,7 @@
 import { useQuery } from "convex/react";
 import { api } from "@backend/_generated/api";
 import type { Id } from "@backend/_generated/dataModel";
-import type { ChatChannel, ChatMessage, GameAction, HistoryFrame } from "@/lib/game/types";
+import type { ChatMessage, GameAction, HistoryFrame } from "@/lib/game/types";
 
 export function useGameViewQueries(session: unknown, typedGameId: Id<"games"> | undefined) {
   const playerView = useQuery(
@@ -20,7 +20,6 @@ export function useGameRuntimeQueries(
   typedGameId: Id<"games"> | undefined,
   isAuthenticated: boolean,
   mapId?: string,
-  chatChannel: ChatChannel = "global",
 ) {
   const mapDoc = useQuery(api.maps.getByMapId, mapId ? { mapId } : "skip");
 
@@ -35,11 +34,10 @@ export function useGameRuntimeQueries(
   ) as GameAction[] | undefined;
 
   const chatMessages = useQuery(
-    api.gameChat.listMessages,
+    api.gameChat.listVisibleMessages,
     typedGameId && isAuthenticated
       ? {
           gameId: typedGameId,
-          channel: chatChannel,
           limit: 60,
         }
       : "skip",

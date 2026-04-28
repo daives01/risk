@@ -3,3 +3,6 @@ dist/
 bun.lockb
 *.tsbuildinfo
 .env.local
+
+.agents/
+skills-lock.json

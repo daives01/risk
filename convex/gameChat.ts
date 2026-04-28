@@ -109,6 +109,67 @@ export const listMessages = query({
   },
 });
 
+function formatMessageForClient(message: {
+  _id: Id<"gameChatMessages">;
+  channel: ChatChannel;
+  teamId?: string;
+  text: string;
+  createdAt: number;
+  editedAt?: number;
+  senderUserId: string;
+  senderDisplayName: string;
+  senderEnginePlayerId?: string;
+}, callerId: string) {
+  return {
+    _id: message._id,
+    channel: message.channel,
+    teamId: message.teamId ?? null,
+    text: message.text,
+    createdAt: message.createdAt,
+    editedAt: message.editedAt ?? null,
+    senderUserId: message.senderUserId,
+    senderDisplayName: message.senderDisplayName,
+    senderEnginePlayerId: message.senderEnginePlayerId ?? null,
+    isMine: message.senderUserId === callerId,
+  };
+}
+
+export const listVisibleMessages = query({
+  args: {
+    gameId: v.id("games"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { game, callerId, membership } = await getMembershipContext(ctx, args.gameId);
+    const teamId =
+      game.teamModeEnabled && membership.teamId
+        ? membership.teamId
+        : null;
+    const limit = Math.max(1, Math.min(MAX_MESSAGE_LIMIT, Math.trunc(args.limit ?? DEFAULT_MESSAGE_LIMIT)));
+
+    const globalMessages = await ctx.db
+      .query("gameChatMessages")
+      .withIndex("by_gameId_channel_createdAt", (q) => q.eq("gameId", args.gameId).eq("channel", "global"))
+      .order("desc")
+      .take(limit);
+    const teamMessages = teamId
+      ? await ctx.db
+          .query("gameChatMessages")
+          .withIndex("by_gameId_channel_teamId_createdAt", (q) =>
+            q.eq("gameId", args.gameId).eq("channel", "team").eq("teamId", teamId),
+          )
+          .order("desc")
+          .take(limit)
+      : [];
+
+    return [...globalMessages, ...teamMessages]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit)
+      .reverse()
+      .map((message) => formatMessageForClient(message, callerId));
+  },
+});
+
 export const sendMessage = mutation({
   args: {
     gameId: v.id("games"),

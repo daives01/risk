@@ -310,8 +310,10 @@ interface GameChatCardProps {
   canSend: boolean;
   draftText: string;
   editingMessageId: string | null;
+  editingChannel: ChatChannel | null;
   onSetDraftText: (value: string) => void;
   onSelectChannel: (channel: ChatChannel) => void;
+  onToggleChannel: () => void;
   onStartEditMessage: (message: ChatMessage) => void;
   onCancelEditMessage: () => void;
   onDeleteMessage: (messageId: string) => void;
@@ -327,8 +329,10 @@ export function GameChatCard({
   canSend,
   draftText,
   editingMessageId,
+  editingChannel,
   onSetDraftText,
   onSelectChannel,
+  onToggleChannel,
   onStartEditMessage,
   onCancelEditMessage,
   onDeleteMessage,
@@ -383,9 +387,16 @@ export function GameChatCard({
     event.preventDefault();
     onSend();
   };
-  const showChannelPicker = teamGameEnabled;
+  const showTargetPicker = teamGameEnabled && teamAvailable && !editingMessageId;
+  const currentInputChannel = editingChannel ?? activeChannel;
+  const isTeamTarget = currentInputChannel === "team" && teamAvailable;
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Tab" && teamAvailable && !editingMessageId && !event.shiftKey) {
+      event.preventDefault();
+      onToggleChannel();
+      return;
+    }
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       onSend();
@@ -396,34 +407,12 @@ export function GameChatCard({
     const container = messagesContainerRef.current;
     if (!container) return;
     container.scrollTop = container.scrollHeight;
-  }, [activeChannel, messages.length]);
+  }, [messages.length]);
 
   return (
     <Card className="glass-panel h-[22rem] gap-2 border-0 py-0 xl:h-[24rem]">
       <CardHeader className="flex flex-row items-center gap-2 pb-1 pt-3">
         <CardTitle className="text-base">Chat</CardTitle>
-        {showChannelPicker && (
-          <div className="ml-auto flex gap-1.5">
-            <Button
-              type="button"
-              size="xs"
-              variant={activeChannel === "global" ? "default" : "outline"}
-              onClick={() => onSelectChannel("global")}
-            >
-              Global
-            </Button>
-            {teamAvailable && (
-              <Button
-                type="button"
-                size="xs"
-                variant={activeChannel === "team" ? "default" : "outline"}
-                onClick={() => onSelectChannel("team")}
-              >
-                {activeTeamName ?? "Team"}
-              </Button>
-            )}
-          </div>
-        )}
       </CardHeader>
       <CardContent className="flex h-[calc(100%-3.25rem)] flex-col space-y-2 pb-4 pt-0">
         <div
@@ -434,11 +423,13 @@ export function GameChatCard({
             {messages.length === 0 && <p className="text-muted-foreground">No messages yet.</p>}
             {messagesWithTimestamps.map((message) => {
               const timestampLabel = message.timestampLabel;
+              const isTeamMessage = message.channel === "team";
               return (
                 <div key={message._id} className={`group flex ${message.isMine ? "justify-end" : "justify-start"}`}>
                   <div className={`flex max-w-[85%] flex-col gap-1 ${message.isMine ? "items-end" : "items-start"}`}>
                     <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
                       <span>{message.isMine ? "You" : message.senderDisplayName}</span>
+                      {isTeamMessage ? <span className="italic">(team)</span> : null}
                       {timestampLabel ? <span className="text-[0.7rem] tracking-wide">{timestampLabel}</span> : null}
                       {message.editedAt ? <span className="text-[0.7rem] tracking-wide">edited</span> : null}
                     </div>
@@ -447,9 +438,9 @@ export function GameChatCard({
                       message.isMine
                         ? "bg-primary text-primary-foreground"
                         : "bg-background/80"
-                    }`}
+                    } ${isTeamMessage ? "border border-primary/25" : ""}`}
                   >
-                    <p className="break-words text-sm leading-tight">{message.text}</p>
+                    <p className={`break-words text-sm leading-tight ${isTeamMessage ? "italic" : ""}`}>{message.text}</p>
                   </div>
                   {message.isMine && canSend && (
                     <div className="flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
@@ -480,6 +471,31 @@ export function GameChatCard({
           </div>
         </div>
 
+        {showTargetPicker && (
+          <div className="flex text-xs text-muted-foreground">
+            <div className="flex border border-border/75 bg-background/45">
+              <Button
+                type="button"
+                size="xs"
+                variant={activeChannel === "global" ? "secondary" : "ghost"}
+                className="h-7"
+                onClick={() => onSelectChannel("global")}
+              >
+                Global
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant={activeChannel === "team" ? "secondary" : "ghost"}
+                className="h-7 italic"
+                onClick={() => onSelectChannel("team")}
+              >
+                {activeTeamName ?? "Team"}
+              </Button>
+            </div>
+          </div>
+        )}
+
         <form className="flex gap-2" onSubmit={handleSubmit}>
           <Input
             value={draftText}
@@ -489,9 +505,12 @@ export function GameChatCard({
               canSend
                 ? editingMessageId
                   ? "Edit your message and press Enter..."
-                  : "Send a message..."
+                  : isTeamTarget
+                    ? "(team) Send a message..."
+                    : "Send a message..."
                 : "Chat is read-only"
             }
+            className={isTeamTarget ? "italic" : undefined}
             onChange={(event) => onSetDraftText(event.target.value)}
             onKeyDown={handleInputKeyDown}
           />

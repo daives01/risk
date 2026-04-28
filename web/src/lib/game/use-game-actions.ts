@@ -131,10 +131,9 @@ export function useGameActions() {
     (localStore, args) => {
       const queryArgs = {
         gameId: args.gameId,
-        channel: args.channel,
         limit: 60,
       } as const;
-      const existing = localStore.getQuery(api.gameChat.listMessages, queryArgs);
+      const existing = localStore.getQuery(api.gameChat.listVisibleMessages, queryArgs);
       if (!existing) return;
       const lastCreatedAt = existing[existing.length - 1]?.createdAt ?? 0;
       const optimisticSuffix = `${args.channel}:${existing.length}:${args.text.slice(0, 20)}`;
@@ -151,7 +150,7 @@ export function useGameActions() {
         senderEnginePlayerId: null,
         isMine: true,
       };
-      localStore.setQuery(api.gameChat.listMessages, queryArgs, [...existing, optimisticMessage].slice(-60));
+      localStore.setQuery(api.gameChat.listVisibleMessages, queryArgs, [...existing, optimisticMessage].slice(-60));
     },
   );
   const editGameChatMessageMutation = useMutation(api.gameChat.editMessage);

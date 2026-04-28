@@ -33,8 +33,10 @@ interface GameSidePanelsProps {
   canSendChat: boolean;
   chatDraft: string;
   chatEditingMessageId: string | null;
+  chatEditingChannel: ChatChannel | null;
   onSetChatDraft: (value: string) => void;
   onSelectChannel: (channel: ChatChannel) => void;
+  onToggleChannel: () => void;
   onStartEditMessage: (message: ChatMessage) => void;
   onCancelEditMessage: () => void;
   onDeleteMessage: (messageId: string) => void;
@@ -64,8 +66,10 @@ export function GameSidePanels({
   canSendChat,
   chatDraft,
   chatEditingMessageId,
+  chatEditingChannel,
   onSetChatDraft,
   onSelectChannel,
+  onToggleChannel,
   onStartEditMessage,
   onCancelEditMessage,
   onDeleteMessage,
@@ -102,8 +106,10 @@ export function GameSidePanels({
           canSend={canSendChat}
           draftText={chatDraft}
           editingMessageId={chatEditingMessageId}
+          editingChannel={chatEditingChannel}
           onSetDraftText={onSetChatDraft}
           onSelectChannel={onSelectChannel}
+          onToggleChannel={onToggleChannel}
           onStartEditMessage={onStartEditMessage}
           onCancelEditMessage={onCancelEditMessage}
           onDeleteMessage={onDeleteMessage}
