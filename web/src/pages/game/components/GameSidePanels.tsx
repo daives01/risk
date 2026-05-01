@@ -75,6 +75,10 @@ export function GameSidePanels({
   onDeleteMessage,
   onSendMessage,
 }: GameSidePanelsProps) {
+  const visibleChatMessages = chatChannel === "team"
+    ? chatMessages.filter((message) => message.channel === "team")
+    : chatMessages;
+
   return (
     <>
       <div className="min-w-0 space-y-4">
@@ -98,7 +102,7 @@ export function GameSidePanels({
       </div>
       <div className="min-w-0 xl:order-last">
         <GameChatCard
-          messages={chatMessages}
+          messages={visibleChatMessages}
           activeChannel={chatChannel}
           teamGameEnabled={teamModeEnabled}
           teamAvailable={canUseTeamChat}

@@ -104,7 +104,6 @@ export default function GamePage() {
   const actionInFlightRef = useRef(false);
   const troopDeltaResumeTimeoutRef = useRef<number | null>(null);
   const historyDebugRef = useRef<{ framePos: number; signature: string; staleRun: number } | null>(null);
-  const teamChatDefaultAppliedRef = useRef(false);
   const actionButtonCooldownTimeoutRef = useRef<number | null>(null);
   const stopAutoAttackRef = useRef<() => void>(() => undefined);
   const setOccupyMoveRef = useRef<Dispatch<SetStateAction<number>>>(() => undefined);
@@ -945,17 +944,6 @@ export default function GamePage() {
     setSelectedFrom(null);
     setSelectedTo(null);
   }, [historyOpen, stopAutoAttack]);
-
-  useEffect(() => {
-    if (canUseTeamChat && !teamChatDefaultAppliedRef.current) {
-      setChatChannel("team");
-      teamChatDefaultAppliedRef.current = true;
-      return;
-    }
-    if (!canUseTeamChat) {
-      teamChatDefaultAppliedRef.current = false;
-    }
-  }, [canUseTeamChat]);
 
   useEffect(() => {
     if (chatChannel === "team" && !canUseTeamChat) {

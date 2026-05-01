@@ -537,7 +537,7 @@ export function GameChatCard({
                 className="h-7"
                 onClick={() => onSelectChannel("global")}
               >
-                Global
+                All
               </Button>
               <Button
                 type="button"
