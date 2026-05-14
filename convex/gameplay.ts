@@ -174,6 +174,58 @@ function extractEliminationNotificationData(events: unknown[]): {
   };
 }
 
+type DelegationPlayerDoc = {
+  enginePlayerId?: string;
+  teamId?: string;
+};
+
+export function resolveActingPlayerFromDocs(args: {
+  requestedPlayerId?: string;
+  callerId: string;
+  callerPlayer: DelegationPlayerDoc | null;
+  targetPlayer?: DelegationPlayerDoc | null;
+  targetAllowsDelegation?: boolean;
+  game: { teamModeEnabled?: boolean };
+  state: GameState;
+}) {
+  if (!args.callerPlayer?.enginePlayerId) {
+    throw new Error("You are not a player in this game");
+  }
+
+  const requestedPlayerId = args.requestedPlayerId ?? args.callerPlayer.enginePlayerId;
+  if (requestedPlayerId === args.callerPlayer.enginePlayerId) {
+    return {
+      playerId: args.callerPlayer.enginePlayerId as PlayerId,
+      actingUserId: args.callerId,
+      wasDelegated: false,
+    };
+  }
+
+  if (!args.game.teamModeEnabled) throw new Error("Turn delegation is only available in team games");
+  if (args.state.turn.currentPlayerId !== requestedPlayerId) {
+    throw new Error("You can only play for the active turn owner");
+  }
+  if (args.state.players[requestedPlayerId]?.status !== "alive") {
+    throw new Error("You can only play for an alive teammate");
+  }
+  if (!args.callerPlayer.teamId) throw new Error("You are not assigned to a team");
+  if (!args.targetPlayer?.enginePlayerId) {
+    throw new Error("Delegated player not found");
+  }
+  if (args.targetAllowsDelegation !== true) {
+    throw new Error("This teammate has not allowed delegated turns");
+  }
+  if (!args.targetPlayer.teamId || args.targetPlayer.teamId !== args.callerPlayer.teamId) {
+    throw new Error("You can only play for a teammate");
+  }
+
+  return {
+    playerId: args.targetPlayer.enginePlayerId as PlayerId,
+    actingUserId: args.callerId,
+    wasDelegated: true,
+  };
+}
+
 async function resolveActingPlayer(ctx: MutationCtx, args: {
   gameId: Id<"games">;
   requestedPlayerId?: string;
@@ -187,52 +239,30 @@ async function resolveActingPlayer(ctx: MutationCtx, args: {
       q.eq("gameId", args.gameId).eq("userId", args.callerId),
     )
     .unique();
-  if (!callerPlayer || !callerPlayer.enginePlayerId) {
-    throw new Error("You are not a player in this game");
-  }
+  const requestedPlayerId = args.requestedPlayerId ?? callerPlayer?.enginePlayerId;
+  const targetPlayer = requestedPlayerId && requestedPlayerId !== callerPlayer?.enginePlayerId
+    ? await ctx.db
+      .query("gamePlayers")
+      .withIndex("by_gameId", (q) => q.eq("gameId", args.gameId))
+      .filter((q) => q.eq(q.field("enginePlayerId"), requestedPlayerId))
+      .unique()
+    : null;
+  const targetSettings = targetPlayer
+    ? await ctx.db
+      .query("userSettings")
+      .withIndex("by_userId", (q) => q.eq("userId", targetPlayer.userId))
+      .unique()
+    : null;
 
-  const requestedPlayerId = args.requestedPlayerId ?? callerPlayer.enginePlayerId;
-  if (requestedPlayerId === callerPlayer.enginePlayerId) {
-    return {
-      playerId: callerPlayer.enginePlayerId as PlayerId,
-      actingUserId: args.callerId,
-      wasDelegated: false,
-    };
-  }
-
-  if (!args.game.teamModeEnabled) throw new Error("Turn delegation is only available in team games");
-  if (args.state.turn.currentPlayerId !== requestedPlayerId) {
-    throw new Error("You can only play for the active turn owner");
-  }
-  if (args.state.players[requestedPlayerId]?.status !== "alive") {
-    throw new Error("You can only play for an alive teammate");
-  }
-  if (!callerPlayer.teamId) throw new Error("You are not assigned to a team");
-
-  const targetPlayer = await ctx.db
-    .query("gamePlayers")
-    .withIndex("by_gameId", (q) => q.eq("gameId", args.gameId))
-    .filter((q) => q.eq(q.field("enginePlayerId"), requestedPlayerId))
-    .unique();
-  if (!targetPlayer || !targetPlayer.enginePlayerId) {
-    throw new Error("Delegated player not found");
-  }
-  const targetSettings = await ctx.db
-    .query("userSettings")
-    .withIndex("by_userId", (q) => q.eq("userId", targetPlayer.userId))
-    .unique();
-  if (targetSettings?.allowTeammatesToAct !== true) {
-    throw new Error("This teammate has not allowed delegated turns");
-  }
-  if (!targetPlayer.teamId || targetPlayer.teamId !== callerPlayer.teamId) {
-    throw new Error("You can only play for a teammate");
-  }
-
-  return {
-    playerId: targetPlayer.enginePlayerId as PlayerId,
-    actingUserId: args.callerId,
-    wasDelegated: true,
-  };
+  return resolveActingPlayerFromDocs({
+    requestedPlayerId: args.requestedPlayerId,
+    callerId: args.callerId,
+    callerPlayer,
+    targetPlayer,
+    targetAllowsDelegation: targetSettings?.allowTeammatesToAct,
+    game: args.game,
+    state: args.state,
+  });
 }
 
 export const submitAction = mutation({

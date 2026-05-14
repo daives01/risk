@@ -104,7 +104,6 @@ export default defineSchema({
     joinedAt: v.number(),
     enginePlayerId: v.optional(v.string()),
     teamId: v.optional(v.string()),
-    allowTeammatesToAct: v.optional(v.boolean()),
   })
     .index("by_gameId", ["gameId"])
     .index("by_userId", ["userId"])

@@ -851,6 +851,7 @@ export default function GamePage() {
       setSelectedFrom(null);
       setSelectedTo(null);
       setReinforcementDrafts([]);
+      setSelectedCardIds(new Set());
     }
   }, [delegatedPlayerId, historyOpen, isDelegationEligible, stopAutoAttack]);
 
@@ -949,6 +950,7 @@ export default function GamePage() {
     setSelectedFrom(null);
     setSelectedTo(null);
     setReinforcementDrafts([]);
+    setSelectedCardIds(new Set());
   }, []);
 
   const handleStopDelegation = useCallback(() => {
@@ -957,6 +959,7 @@ export default function GamePage() {
     setSelectedFrom(null);
     setSelectedTo(null);
     setReinforcementDrafts([]);
+    setSelectedCardIds(new Set());
   }, [stopAutoAttack]);
 
   const handleSendChatMessage = useCallback(async () => {
