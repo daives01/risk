@@ -67,6 +67,8 @@ interface GameHeaderProps {
   onEndAttackPhase: () => void;
   actionButtonsDisabled: boolean;
   onEndTurn: () => void;
+  delegatedPlayerName?: string | null;
+  onStopDelegation?: () => void;
 }
 
 export function GameHeader({
@@ -114,6 +116,8 @@ export function GameHeader({
   onEndAttackPhase,
   actionButtonsDisabled,
   onEndTurn,
+  delegatedPlayerName,
+  onStopDelegation,
 }: GameHeaderProps) {
   const showPhaseTitle = historyOpen || !["Reinforcement", "Attack", "Fortify"].includes(displayPhase);
   const isPlacementMode =
@@ -121,32 +125,45 @@ export function GameHeader({
     (phase === "Attack" && (uncommittedReinforcements > 0 || reinforcementDraftCount > 0));
 
   return (
-    <div className="game-header glass-panel relative flex min-h-12 flex-nowrap items-center gap-1.5 px-2 py-1.5 md:gap-2">
-      {showBackHome && (
-        <Button asChild size="sm" type="button" variant="outline" title="Back to home" className="hidden md:inline-flex">
-          <Link to="/" aria-label="Back to home">
-            <ArrowLeft className="size-4" />
-          </Link>
-        </Button>
+    <div className="game-header glass-panel relative overflow-hidden">
+      {delegatedPlayerName && (
+        <div className="flex min-h-8 items-center justify-center gap-2 border-b border-amber-500/60 bg-amber-500 px-3 py-1 text-sm font-bold text-amber-950">
+          <span className="min-w-0 truncate">Playing for {delegatedPlayerName}</span>
+          <button
+            type="button"
+            className="shrink-0 rounded border border-amber-900/30 px-2 py-0.5 text-xs uppercase tracking-wide hover:bg-amber-400"
+            onClick={onStopDelegation}
+          >
+            Stop
+          </button>
+        </div>
       )}
-      <div className="flex min-w-0 flex-col">
-        {showPhaseTitle && (
-          <span className="shrink-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            {phaseTitle}
-          </span>
+      <div className="relative flex min-h-12 flex-nowrap items-center gap-1.5 px-2 py-1.5 md:gap-2">
+        {showBackHome && (
+          <Button asChild size="sm" type="button" variant="outline" title="Back to home" className="hidden md:inline-flex">
+            <Link to="/" aria-label="Back to home">
+              <ArrowLeft className="size-4" />
+            </Link>
+          </Button>
         )}
-        {actionHint && (
-          <span className="turn-hint max-w-[min(52vw,260px)] truncate text-xs font-semibold uppercase tracking-wide">
-            {actionHint}
-          </span>
-        )}
-        {!historyOpen && isMyTurn && isPlacementMode && (
-          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{uncommittedReinforcements} left</span>
-        )}
-        {!historyOpen && isMyTurn && phase === "Fortify" && (
-          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{fortifyRemainingLabel}</span>
-        )}
-      </div>
+        <div className="flex min-w-0 flex-col">
+          {showPhaseTitle && (
+            <span className="shrink-0 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              {phaseTitle}
+            </span>
+          )}
+          {actionHint && (
+            <span className="turn-hint max-w-[min(52vw,260px)] truncate text-xs font-semibold uppercase tracking-wide">
+              {actionHint}
+            </span>
+          )}
+          {!historyOpen && isMyTurn && isPlacementMode && (
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{uncommittedReinforcements} left</span>
+          )}
+          {!historyOpen && isMyTurn && phase === "Fortify" && (
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{fortifyRemainingLabel}</span>
+          )}
+        </div>
 
       {!historyOpen && !isMyTurn && displayPhase !== "GameOver" && (
         <div className="flex shrink-0 items-center gap-2">
@@ -388,6 +405,7 @@ export function GameHeader({
             </Tooltip>
           )}
         </TooltipProvider>
+      </div>
       </div>
     </div>
   );

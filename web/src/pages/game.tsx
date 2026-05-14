@@ -1445,21 +1445,8 @@ export default function GamePage() {
       className={cn(
         "page-shell soft-grid game-shell overflow-x-hidden md:overflow-x-visible",
         isMapFullscreen && "game-map-fullscreen-shell flex h-dvh flex-col overflow-hidden md:overflow-hidden",
-        isDelegationEligible && "ring-4 ring-amber-500 ring-inset",
       )}
     >
-      {isDelegationEligible && delegatedPlayerName && (
-        <div className="sticky top-0 z-50 border-b border-amber-500/70 bg-amber-500 px-4 py-2 text-center text-sm font-bold text-amber-950 shadow-md">
-          Playing for {delegatedPlayerName}
-          <button
-            type="button"
-            className="ml-3 rounded border border-amber-900/30 px-2 py-0.5 text-xs uppercase tracking-wide hover:bg-amber-400"
-            onClick={handleStopDelegation}
-          >
-            Stop
-          </button>
-        </div>
-      )}
       <GameHeader
         phaseTitle={phaseCopy.title}
         actionHint={actionHint}
@@ -1529,6 +1516,8 @@ export default function GamePage() {
         onEndAttackPhase={handleEndAttackPhase}
         actionButtonsDisabled={actionButtonCooldownActive}
         onEndTurn={handleEndTurn}
+        delegatedPlayerName={isDelegationEligible ? delegatedPlayerName : null}
+        onStopDelegation={handleStopDelegation}
       />
 
       <div
