@@ -1,4 +1,5 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { authComponent } from "./auth.js";
@@ -173,11 +174,69 @@ function extractEliminationNotificationData(events: unknown[]): {
   };
 }
 
+async function resolveActingPlayer(ctx: MutationCtx, args: {
+  gameId: Id<"games">;
+  requestedPlayerId?: string;
+  callerId: string;
+  game: { teamModeEnabled?: boolean };
+  state: GameState;
+}) {
+  const callerPlayer = await ctx.db
+    .query("gamePlayers")
+    .withIndex("by_gameId_userId", (q) =>
+      q.eq("gameId", args.gameId).eq("userId", args.callerId),
+    )
+    .unique();
+  if (!callerPlayer || !callerPlayer.enginePlayerId) {
+    throw new Error("You are not a player in this game");
+  }
+
+  const requestedPlayerId = args.requestedPlayerId ?? callerPlayer.enginePlayerId;
+  if (requestedPlayerId === callerPlayer.enginePlayerId) {
+    return {
+      playerId: callerPlayer.enginePlayerId as PlayerId,
+      actingUserId: args.callerId,
+      wasDelegated: false,
+    };
+  }
+
+  if (!args.game.teamModeEnabled) throw new Error("Turn delegation is only available in team games");
+  if (args.state.turn.currentPlayerId !== requestedPlayerId) {
+    throw new Error("You can only play for the active turn owner");
+  }
+  if (args.state.players[requestedPlayerId]?.status !== "alive") {
+    throw new Error("You can only play for an alive teammate");
+  }
+  if (!callerPlayer.teamId) throw new Error("You are not assigned to a team");
+
+  const targetPlayer = await ctx.db
+    .query("gamePlayers")
+    .withIndex("by_gameId", (q) => q.eq("gameId", args.gameId))
+    .filter((q) => q.eq(q.field("enginePlayerId"), requestedPlayerId))
+    .unique();
+  if (!targetPlayer || !targetPlayer.enginePlayerId) {
+    throw new Error("Delegated player not found");
+  }
+  if (!targetPlayer.allowTeammatesToAct) {
+    throw new Error("This teammate has not allowed delegated turns");
+  }
+  if (!targetPlayer.teamId || targetPlayer.teamId !== callerPlayer.teamId) {
+    throw new Error("You can only play for a teammate");
+  }
+
+  return {
+    playerId: targetPlayer.enginePlayerId as PlayerId,
+    actingUserId: args.callerId,
+    wasDelegated: true,
+  };
+}
+
 export const submitAction = mutation({
   args: {
     gameId: v.id("games"),
     expectedVersion: v.number(),
     action: actionValidator,
+    delegatedPlayerId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await authComponent.safeGetAuthUser(ctx);
@@ -206,18 +265,15 @@ export const submitAction = mutation({
       );
     }
 
-    // Map caller to engine player ID
     const callerId = String(user._id);
-    const playerDoc = await ctx.db
-      .query("gamePlayers")
-      .withIndex("by_gameId_userId", (q) =>
-        q.eq("gameId", args.gameId).eq("userId", callerId),
-      )
-      .unique();
-    if (!playerDoc || !playerDoc.enginePlayerId) {
-      throw new Error("You are not a player in this game");
-    }
-    const playerId = playerDoc.enginePlayerId as PlayerId;
+    const actingPlayer = await resolveActingPlayer(ctx, {
+      gameId: args.gameId,
+      requestedPlayerId: args.delegatedPlayerId,
+      callerId,
+      game,
+      state,
+    });
+    const playerId = actingPlayer.playerId;
 
     // Fetch map for actions that need it
     const mapDoc = await ctx.db
@@ -260,9 +316,11 @@ export const submitAction = mutation({
     await ctx.db.insert("gameActions", {
       gameId: args.gameId,
       index: nextIndex,
-      playerId: playerDoc.enginePlayerId,
+      playerId,
       action: args.action,
       events: result.events,
+      actingUserId: actingPlayer.actingUserId,
+      wasDelegated: actingPlayer.wasDelegated,
       stateVersionBefore: state.stateVersion,
       stateVersionAfter: result.state.stateVersion,
       createdAt: Date.now(),
@@ -334,6 +392,7 @@ export const submitReinforcementPlacements = mutation({
   args: {
     gameId: v.id("games"),
     expectedVersion: v.number(),
+    delegatedPlayerId: v.optional(v.string()),
     placements: v.array(v.object({
       territoryId: v.string(),
       count: v.number(),
@@ -366,16 +425,14 @@ export const submitReinforcementPlacements = mutation({
     }
 
     const callerId = String(user._id);
-    const playerDoc = await ctx.db
-      .query("gamePlayers")
-      .withIndex("by_gameId_userId", (q) =>
-        q.eq("gameId", args.gameId).eq("userId", callerId),
-      )
-      .unique();
-    if (!playerDoc || !playerDoc.enginePlayerId) {
-      throw new Error("You are not a player in this game");
-    }
-    const playerId = playerDoc.enginePlayerId as PlayerId;
+    const actingPlayer = await resolveActingPlayer(ctx, {
+      gameId: args.gameId,
+      requestedPlayerId: args.delegatedPlayerId,
+      callerId,
+      game,
+      state,
+    });
+    const playerId = actingPlayer.playerId;
 
     const mapDoc = await ctx.db
       .query("maps")
@@ -432,9 +489,11 @@ export const submitReinforcementPlacements = mutation({
     await ctx.db.insert("gameActions", {
       gameId: args.gameId,
       index: nextIndex,
-      playerId: playerDoc.enginePlayerId,
+      playerId,
       action: { type: "PlaceReinforcementsBatch", placements: args.placements },
       events,
+      actingUserId: actingPlayer.actingUserId,
+      wasDelegated: actingPlayer.wasDelegated,
       stateVersionBefore: state.stateVersion,
       stateVersionAfter: nextState.stateVersion,
       createdAt: Date.now(),

@@ -104,6 +104,7 @@ export default defineSchema({
     joinedAt: v.number(),
     enginePlayerId: v.optional(v.string()),
     teamId: v.optional(v.string()),
+    allowTeammatesToAct: v.optional(v.boolean()),
   })
     .index("by_gameId", ["gameId"])
     .index("by_userId", ["userId"])
@@ -122,6 +123,8 @@ export default defineSchema({
     playerId: v.string(),
     action: v.any(),
     events: v.any(),
+    actingUserId: v.optional(v.string()),
+    wasDelegated: v.optional(v.boolean()),
     stateVersionBefore: v.optional(v.number()),
     stateVersionAfter: v.optional(v.number()),
     createdAt: v.number(),

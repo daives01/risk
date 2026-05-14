@@ -1,4 +1,4 @@
-import { query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ENGINE_VERSION } from "risk-engine";
 import type { GameState, PlayerId } from "risk-engine";
@@ -61,6 +61,7 @@ export const getGameView = query({
       role: p.role,
       enginePlayerId: p.enginePlayerId ?? null,
       teamId: p.teamId ?? null,
+      allowTeammatesToAct: p.allowTeammatesToAct ?? false,
     }));
     const teamCount = game.teamModeEnabled ? Math.max(2, Math.min(game.teamCount ?? 2, Math.max(2, players.length))) : null;
     const teamIds = teamCount ? getTeamIds(teamCount) : [];
@@ -150,6 +151,7 @@ export const getGameViewAsPlayer = query({
       role: p.role,
       enginePlayerId: p.enginePlayerId ?? null,
       teamId: p.teamId ?? null,
+      allowTeammatesToAct: p.allowTeammatesToAct ?? false,
     }));
     const teamCount = game.teamModeEnabled ? Math.max(2, Math.min(game.teamCount ?? 2, Math.max(2, players.length))) : null;
     const teamIds = teamCount ? getTeamIds(teamCount) : [];
@@ -211,6 +213,39 @@ export const getGameViewAsPlayer = query({
       });
     }
 
+    let delegatableTurnHand: Array<{
+      cardId: string;
+      kind: string;
+      territoryId?: string;
+    }> | null = null;
+    const currentTurnPlayerId = state?.turn.currentPlayerId;
+    const currentTurnPlayer = currentTurnPlayerId
+      ? players.find((p) => p.enginePlayerId === currentTurnPlayerId)
+      : undefined;
+    if (
+      state &&
+      game.status === "active" &&
+      game.teamModeEnabled &&
+      enginePlayerId &&
+      currentTurnPlayerId &&
+      currentTurnPlayer &&
+      currentTurnPlayer.enginePlayerId !== enginePlayerId &&
+      currentTurnPlayer.allowTeammatesToAct === true &&
+      state.players[currentTurnPlayerId]?.status === "alive" &&
+      currentTurnPlayer.teamId &&
+      callerPlayer?.teamId === currentTurnPlayer.teamId &&
+      state.hands[currentTurnPlayerId as PlayerId]
+    ) {
+      delegatableTurnHand = state.hands[currentTurnPlayerId as PlayerId]!.map((cardId) => {
+        const card = state.cardsById[cardId];
+        return {
+          cardId: cardId as string,
+          kind: card?.kind ?? "W",
+          territoryId: card?.territoryId as string | undefined,
+        };
+      });
+    }
+
     return {
       _id: game._id,
       name: game.name,
@@ -236,8 +271,39 @@ export const getGameViewAsPlayer = query({
       players: playerMap,
       state: state ? publicProjection(state) : null,
       myHand,
+      delegatableTurnHand,
       myEnginePlayerId: enginePlayerId ?? null,
     };
+  },
+});
+
+export const setAllowTeammatesToAct = mutation({
+  args: {
+    gameId: v.id("games"),
+    allow: v.boolean(),
+  },
+  handler: async (ctx, { gameId, allow }) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+
+    const game = await ctx.db.get(gameId);
+    if (!game) throw new Error("Game not found");
+    if (!game.teamModeEnabled) throw new Error("Turn delegation is only available in team games");
+    if (game.status !== "active") throw new Error("Turn delegation is only available in active games");
+
+    const callerId = String(user._id);
+    const playerDoc = await ctx.db
+      .query("gamePlayers")
+      .withIndex("by_gameId_userId", (q) =>
+        q.eq("gameId", gameId).eq("userId", callerId),
+      )
+      .unique();
+    if (!playerDoc || !playerDoc.enginePlayerId) {
+      throw new Error("You are not a player in this game");
+    }
+
+    await ctx.db.patch(playerDoc._id, { allowTeammatesToAct: allow });
+    return { allowTeammatesToAct: allow };
   },
 });
 
