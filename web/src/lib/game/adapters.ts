@@ -1,8 +1,8 @@
 import type { GraphMap } from "risk-engine";
-import type { HandCard, MapVisual, PublicState } from "@/lib/game/types";
+import type { HandCard, MapVisual, PlayerRef, PublicState } from "@/lib/game/types";
 
 type ViewLike = {
-  players?: Array<{ displayName: string; enginePlayerId: string | null; color?: string | null }>;
+  players?: PlayerRef[];
   state?: unknown;
   mapId?: string;
   status?: string;
@@ -17,6 +17,7 @@ type ViewLike = {
 type PlayerViewLike = ViewLike & {
   myEnginePlayerId?: string | null;
   myHand?: HandCard[] | null;
+  delegatableTurnHand?: HandCard[] | null;
 };
 
 type MapDocLike = {
@@ -34,6 +35,7 @@ export function adaptView(playerView: unknown, publicView: unknown) {
     view,
     myEnginePlayerId: resolvedPlayerView?.myEnginePlayerId ?? null,
     myHand: resolvedPlayerView?.myHand ?? null,
+    delegatableTurnHand: resolvedPlayerView?.delegatableTurnHand ?? null,
     playerMap: view?.players ?? [],
     state: (view?.state ?? null) as PublicState | null,
   };

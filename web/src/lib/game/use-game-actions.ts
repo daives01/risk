@@ -127,6 +127,7 @@ export function useGameActions() {
     });
   });
   const resignMutation = useMutation(api.gameplay.resign);
+  const setAllowTeammatesToActMutation = useMutation(api.games.setAllowTeammatesToAct);
   const sendGameChatMessageMutation = useMutation(api.gameChat.sendMessage).withOptimisticUpdate(
     (localStore, args) => {
       const queryArgs = {
@@ -160,6 +161,7 @@ export function useGameActions() {
     submitActionMutation,
     submitReinforcementPlacementsMutation,
     resignMutation,
+    setAllowTeammatesToActMutation,
     sendGameChatMessageMutation,
     editGameChatMessageMutation,
     deleteGameChatMessageMutation,

@@ -58,7 +58,7 @@ export default function GamePage() {
 
   const typedGameId = gameId as Id<"games"> | undefined;
   const { playerView, publicView } = useGameViewQueries(session, typedGameId);
-  const { view, myEnginePlayerId, myHand, playerMap, state } = adaptView(playerView, publicView);
+  const { view, myEnginePlayerId, myHand, delegatableTurnHand, playerMap, state } = adaptView(playerView, publicView);
   const [chatChannel, setChatChannel] = useState<ChatChannel>("global");
   const [chatDraft, setChatDraft] = useState("");
   const [chatEditingMessageId, setChatEditingMessageId] = useState<string | null>(null);
@@ -73,6 +73,7 @@ export default function GamePage() {
     submitActionMutation,
     submitReinforcementPlacementsMutation,
     resignMutation,
+    setAllowTeammatesToActMutation,
     sendGameChatMessageMutation,
     editGameChatMessageMutation,
     deleteGameChatMessageMutation,
@@ -99,6 +100,8 @@ export default function GamePage() {
   const [isMapFullscreen, setIsMapFullscreen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [actionButtonCooldownActive, setActionButtonCooldownActive] = useState(false);
+  const [delegatedPlayerId, setDelegatedPlayerId] = useState<string | null>(null);
+  const [delegationUpdating, setDelegationUpdating] = useState(false);
   const autoEndFortifyVersionRef = useRef<number | null>(null);
   const optionalTradeAutoOpenRef = useRef<number | null>(null);
   const actionInFlightRef = useRef(false);
@@ -110,7 +113,27 @@ export default function GamePage() {
 
   const phase = state?.turn.phase ?? "GameOver";
   const isSpectator = !myEnginePlayerId;
-  const isMyTurn = !!myEnginePlayerId && !!state && state.turn.currentPlayerId === myEnginePlayerId;
+  const ownPlayerRef = myEnginePlayerId
+    ? playerMap.find((player) => player.enginePlayerId === myEnginePlayerId)
+    : undefined;
+  const currentTurnPlayerRef = state
+    ? playerMap.find((player) => player.enginePlayerId === state.turn.currentPlayerId)
+    : undefined;
+  const isDelegationEligible =
+    !!state &&
+    !!view?.teamModeEnabled &&
+    view.status === "active" &&
+    !!myEnginePlayerId &&
+    !!delegatedPlayerId &&
+    state.turn.currentPlayerId === delegatedPlayerId &&
+    state.players[delegatedPlayerId]?.status === "alive" &&
+    currentTurnPlayerRef?.allowTeammatesToAct === true &&
+    delegatedPlayerId !== myEnginePlayerId &&
+    !!ownPlayerRef?.teamId &&
+    ownPlayerRef.teamId === currentTurnPlayerRef?.teamId;
+  const effectiveEnginePlayerId = isDelegationEligible ? delegatedPlayerId : myEnginePlayerId;
+  const effectiveHand = isDelegationEligible ? delegatableTurnHand : myHand;
+  const isMyTurn = !!effectiveEnginePlayerId && !!state && state.turn.currentPlayerId === effectiveEnginePlayerId;
   const {
     historyOpen,
     setHistoryOpen,
@@ -197,19 +220,23 @@ export default function GamePage() {
   const allowFortifyThroughTeammates = effectiveTeams?.allowFortifyThroughTeammates ?? true;
   const teamsEnabled = effectiveTeams?.teamsEnabled ?? false;
   const preventAttackingTeammates = effectiveTeams?.preventAttackingTeammates ?? false;
-  const teamNames = (view?.teamNames as Record<string, string> | null) ?? {};
+  const teamNames = useMemo(
+    () => (view?.teamNames as Record<string, string> | null) ?? {},
+    [view?.teamNames],
+  );
   const myTeamId = myEnginePlayerId && state ? state.players[myEnginePlayerId]?.teamId : undefined;
+  const effectiveTeamId = effectiveEnginePlayerId && state ? state.players[effectiveEnginePlayerId]?.teamId : undefined;
   const myTeamName = myTeamId ? teamNames[myTeamId] ?? myTeamId : null;
   const canUseTeamChat = !!view?.teamModeEnabled && !!myTeamId;
   const canSendChat = !isSpectator && !historyOpen && view?.status === "active";
-  const myCardCount = myHand?.length ?? 0;
+  const myCardCount = effectiveHand?.length ?? 0;
   const mustTradeNow =
     !historyOpen &&
     isMyTurn &&
     (phase === "Reinforcement" || phase === "Attack") &&
     myCardCount >= forcedTradeHandSize;
   const canTradeInCurrentState = phase === "Reinforcement" || (phase === "Attack" && mustTradeNow);
-  const autoTradeCardIds = findAutoTradeSet(myHand ?? [], tradeSets);
+  const autoTradeCardIds = findAutoTradeSet(effectiveHand ?? [], tradeSets);
   const timingMode = (view as { timingMode?: "realtime" | "async_1d" | "async_3d" } | null)?.timingMode ?? "realtime";
   const turnDeadlineAt = (view as { turnDeadlineAt?: number | null } | null)?.turnDeadlineAt ?? null;
   const remainingTurnMs = turnDeadlineAt ? Math.max(0, turnDeadlineAt - nowMs) : null;
@@ -238,11 +265,26 @@ export default function GamePage() {
       ? "0hr"
       : formatTurnTimer(remainingTurnMs ?? 0)
     : null;
+  const ownDelegationAllowed = ownPlayerRef?.allowTeammatesToAct ?? false;
+  const delegatablePlayerId =
+    !!state &&
+    !!view?.teamModeEnabled &&
+    view.status === "active" &&
+    !!myEnginePlayerId &&
+    !!currentTurnPlayerRef?.enginePlayerId &&
+    currentTurnPlayerRef.enginePlayerId !== myEnginePlayerId &&
+    currentTurnPlayerRef.allowTeammatesToAct === true &&
+    state.players[currentTurnPlayerRef.enginePlayerId]?.status === "alive" &&
+    !!ownPlayerRef?.teamId &&
+    ownPlayerRef.teamId === currentTurnPlayerRef.teamId
+      ? currentTurnPlayerRef.enginePlayerId
+      : null;
+  const delegatedPlayerName = delegatedPlayerId ? getPlayerName(delegatedPlayerId, playerMap) : null;
   const isTeammateOwner = useCallback((ownerId: string) => {
-    if (!state || !myEnginePlayerId || !myTeamId) return false;
-    if (ownerId === myEnginePlayerId || ownerId === "neutral") return false;
-    return state.players[ownerId]?.teamId === myTeamId;
-  }, [myEnginePlayerId, myTeamId, state]);
+    if (!state || !effectiveEnginePlayerId || !effectiveTeamId) return false;
+    if (ownerId === effectiveEnginePlayerId || ownerId === "neutral") return false;
+    return state.players[ownerId]?.teamId === effectiveTeamId;
+  }, [effectiveEnginePlayerId, effectiveTeamId, state]);
 
   const displayedTerritories = useMemo(() => {
     if (!state) return {};
@@ -264,13 +306,13 @@ export default function GamePage() {
 
   const validFromIds = useMemo(() => {
     const ids = new Set<string>();
-    if (!state || !myEnginePlayerId || !graphMap) return ids;
+    if (!state || !effectiveEnginePlayerId || !graphMap) return ids;
 
     if (isPlacementPhase) {
       if (uncommittedReinforcements <= 0) return ids;
       for (const [territoryId, territory] of Object.entries(state.territories)) {
         if (
-          territory.ownerId === myEnginePlayerId ||
+          territory.ownerId === effectiveEnginePlayerId ||
           (allowPlaceOnTeammate && isTeammateOwner(territory.ownerId))
         ) {
           ids.add(territoryId);
@@ -280,13 +322,13 @@ export default function GamePage() {
 
     if (state.turn.phase === "Attack") {
       for (const [territoryId, territory] of Object.entries(state.territories)) {
-        if (territory.ownerId === myEnginePlayerId && territory.armies >= 2) ids.add(territoryId);
+        if (territory.ownerId === effectiveEnginePlayerId && territory.armies >= 2) ids.add(territoryId);
       }
     }
 
     if (state.turn.phase === "Fortify") {
       for (const [territoryId, territory] of Object.entries(state.territories)) {
-        if (territory.ownerId === myEnginePlayerId && territory.armies >= 2) {
+        if (territory.ownerId === effectiveEnginePlayerId && territory.armies >= 2) {
           ids.add(territoryId);
         }
       }
@@ -298,21 +340,21 @@ export default function GamePage() {
     graphMap,
     isPlacementPhase,
     isTeammateOwner,
-    myEnginePlayerId,
+    effectiveEnginePlayerId,
     state,
     uncommittedReinforcements,
   ]);
 
   const validToIds = useMemo(() => {
     const ids = new Set<string>();
-    if (!state || !myEnginePlayerId || !graphMap || !selectedFrom) return ids;
+    if (!state || !effectiveEnginePlayerId || !graphMap || !selectedFrom) return ids;
 
     if (state.turn.phase === "Attack") {
       const neighbors = graphMap.adjacency[selectedFrom] ?? [];
       for (const neighborId of neighbors) {
         const territory = state.territories[neighborId];
         if (!territory) continue;
-        if (territory.ownerId === myEnginePlayerId) continue;
+        if (territory.ownerId === effectiveEnginePlayerId) continue;
         if (preventAttackingTeammates && isTeammateOwner(territory.ownerId)) continue;
         ids.add(neighborId);
       }
@@ -320,7 +362,7 @@ export default function GamePage() {
 
     if (state.turn.phase === "Fortify") {
       const canFortifyTo = (ownerId: string) => {
-        if (ownerId === myEnginePlayerId) return true;
+        if (ownerId === effectiveEnginePlayerId) return true;
         if (!teamsEnabled) return false;
         if (!allowFortifyWithTeammate) return false;
         return isTeammateOwner(ownerId);
@@ -337,7 +379,7 @@ export default function GamePage() {
         }
       } else {
         const canTraverse = (ownerId: string) => {
-          if (ownerId === myEnginePlayerId) return true;
+          if (ownerId === effectiveEnginePlayerId) return true;
           if (!teamsEnabled) return false;
           if (!allowFortifyThroughTeammates) return false;
           return isTeammateOwner(ownerId);
@@ -378,7 +420,7 @@ export default function GamePage() {
     fortifyMode,
     graphMap,
     isTeammateOwner,
-    myEnginePlayerId,
+    effectiveEnginePlayerId,
     preventAttackingTeammates,
     selectedFrom,
     state,
@@ -393,7 +435,7 @@ export default function GamePage() {
     if (!validFromIds.has(selectedFrom)) return undefined;
 
     const canTraverse = (ownerId: string) => {
-      if (ownerId === myEnginePlayerId) return true;
+      if (ownerId === effectiveEnginePlayerId) return true;
       if (!teamsEnabled) return false;
       if (!allowFortifyThroughTeammates) return false;
       return isTeammateOwner(ownerId);
@@ -435,7 +477,7 @@ export default function GamePage() {
     historyOpen,
     isMyTurn,
     isTeammateOwner,
-    myEnginePlayerId,
+    effectiveEnginePlayerId,
     phase,
     selectedFrom,
     state,
@@ -490,6 +532,7 @@ export default function GamePage() {
           gameId: typedGameId,
           expectedVersion: state.stateVersion,
           action: mutationAction,
+          delegatedPlayerId: isDelegationEligible ? delegatedPlayerId : undefined,
         });
         if (!isOptimisticAction) {
           resetAfterAction();
@@ -505,7 +548,7 @@ export default function GamePage() {
         }
       }
     },
-    [state, submitActionMutation, typedGameId],
+    [delegatedPlayerId, isDelegationEligible, state, submitActionMutation, typedGameId],
   );
 
   const {
@@ -666,6 +709,7 @@ export default function GamePage() {
       await submitReinforcementPlacementsMutation({
         gameId: typedGameId,
         expectedVersion: state.stateVersion,
+        delegatedPlayerId: isDelegationEligible ? delegatedPlayerId : undefined,
         placements: previousDrafts,
       });
     } catch (error) {
@@ -674,6 +718,8 @@ export default function GamePage() {
     }
   }, [
     actionButtonCooldownActive,
+    delegatedPlayerId,
+    isDelegationEligible,
     mustTradeNow,
     reinforcementDrafts,
     state,
@@ -743,6 +789,17 @@ export default function GamePage() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!delegatedPlayerId) return;
+    if (!isDelegationEligible || historyOpen) {
+      setDelegatedPlayerId(null);
+      stopAutoAttack();
+      setSelectedFrom(null);
+      setSelectedTo(null);
+      setReinforcementDrafts([]);
+    }
+  }, [delegatedPlayerId, historyOpen, isDelegationEligible, stopAutoAttack]);
 
   useEffect(() => {
     if (!state || !isMyTurn || historyOpen) return;
@@ -833,6 +890,33 @@ export default function GamePage() {
       toast.error(error instanceof Error ? error.message : "Could not resign");
     }
   }, [resignMutation, typedGameId]);
+
+  const handleSetDelegationAllowed = useCallback(async (allow: boolean) => {
+    if (!typedGameId) return;
+    setDelegationUpdating(true);
+    try {
+      await setAllowTeammatesToActMutation({ gameId: typedGameId, allow });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update turn delegation");
+    } finally {
+      setDelegationUpdating(false);
+    }
+  }, [setAllowTeammatesToActMutation, typedGameId]);
+
+  const handleStartDelegation = useCallback((playerId: string) => {
+    setDelegatedPlayerId(playerId);
+    setSelectedFrom(null);
+    setSelectedTo(null);
+    setReinforcementDrafts([]);
+  }, []);
+
+  const handleStopDelegation = useCallback(() => {
+    stopAutoAttack();
+    setDelegatedPlayerId(null);
+    setSelectedFrom(null);
+    setSelectedTo(null);
+    setReinforcementDrafts([]);
+  }, [stopAutoAttack]);
 
   const handleSendChatMessage = useCallback(async () => {
     if (!typedGameId) return;
@@ -1361,8 +1445,21 @@ export default function GamePage() {
       className={cn(
         "page-shell soft-grid game-shell overflow-x-hidden md:overflow-x-visible",
         isMapFullscreen && "game-map-fullscreen-shell flex h-dvh flex-col overflow-hidden md:overflow-hidden",
+        isDelegationEligible && "ring-4 ring-amber-500 ring-inset",
       )}
     >
+      {isDelegationEligible && delegatedPlayerName && (
+        <div className="sticky top-0 z-50 border-b border-amber-500/70 bg-amber-500 px-4 py-2 text-center text-sm font-bold text-amber-950 shadow-md">
+          Playing for {delegatedPlayerName}
+          <button
+            type="button"
+            className="ml-3 rounded border border-amber-900/30 px-2 py-0.5 text-xs uppercase tracking-wide hover:bg-amber-400"
+            onClick={handleStopDelegation}
+          >
+            Stop
+          </button>
+        </div>
+      )}
       <GameHeader
         phaseTitle={phaseCopy.title}
         actionHint={actionHint}
@@ -1510,6 +1607,14 @@ export default function GamePage() {
               myEnginePlayerId={myEnginePlayerId ?? undefined}
               canResign={!isSpectator && !historyOpen}
               onResign={handleResign}
+              delegationToggleVisible={!!view.teamModeEnabled && view.status === "active" && !isSpectator}
+              delegationAllowed={ownDelegationAllowed}
+              delegationUpdating={delegationUpdating}
+              onSetDelegationAllowed={handleSetDelegationAllowed}
+              delegatablePlayerId={!historyOpen ? delegatablePlayerId : null}
+              delegatedPlayerId={isDelegationEligible ? delegatedPlayerId : null}
+              onStartDelegation={handleStartDelegation}
+              onStopDelegation={handleStopDelegation}
               chatMessages={chatMessages ?? []}
               chatChannel={chatChannel}
               canUseTeamChat={canUseTeamChat}
@@ -1545,7 +1650,7 @@ export default function GamePage() {
         onToggleShortcuts={() => setShortcutsOpen((prev) => !prev)}
         onCloseShortcuts={() => setShortcutsOpen(false)}
         cardsOpen={cardsOpen}
-        myHand={myHand}
+        myHand={effectiveHand}
         myCardCount={myCardCount}
         selectedCardIds={selectedCardIds}
         onToggleCard={toggleCard}
