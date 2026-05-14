@@ -217,7 +217,11 @@ async function resolveActingPlayer(ctx: MutationCtx, args: {
   if (!targetPlayer || !targetPlayer.enginePlayerId) {
     throw new Error("Delegated player not found");
   }
-  if (!targetPlayer.allowTeammatesToAct) {
+  const targetSettings = await ctx.db
+    .query("userSettings")
+    .withIndex("by_userId", (q) => q.eq("userId", targetPlayer.userId))
+    .unique();
+  if (targetSettings?.allowTeammatesToAct !== true) {
     throw new Error("This teammate has not allowed delegated turns");
   }
   if (!targetPlayer.teamId || targetPlayer.teamId !== callerPlayer.teamId) {

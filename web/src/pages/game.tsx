@@ -73,7 +73,6 @@ export default function GamePage() {
     submitActionMutation,
     submitReinforcementPlacementsMutation,
     resignMutation,
-    setAllowTeammatesToActMutation,
     sendGameChatMessageMutation,
     editGameChatMessageMutation,
     deleteGameChatMessageMutation,
@@ -101,7 +100,6 @@ export default function GamePage() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [actionButtonCooldownActive, setActionButtonCooldownActive] = useState(false);
   const [delegatedPlayerId, setDelegatedPlayerId] = useState<string | null>(null);
-  const [delegationUpdating, setDelegationUpdating] = useState(false);
   const autoEndFortifyVersionRef = useRef<number | null>(null);
   const optionalTradeAutoOpenRef = useRef<number | null>(null);
   const actionInFlightRef = useRef(false);
@@ -265,7 +263,6 @@ export default function GamePage() {
       ? "0hr"
       : formatTurnTimer(remainingTurnMs ?? 0)
     : null;
-  const ownDelegationAllowed = ownPlayerRef?.allowTeammatesToAct ?? false;
   const delegatablePlayerId =
     !!state &&
     !!view?.teamModeEnabled &&
@@ -890,18 +887,6 @@ export default function GamePage() {
       toast.error(error instanceof Error ? error.message : "Could not resign");
     }
   }, [resignMutation, typedGameId]);
-
-  const handleSetDelegationAllowed = useCallback(async (allow: boolean) => {
-    if (!typedGameId) return;
-    setDelegationUpdating(true);
-    try {
-      await setAllowTeammatesToActMutation({ gameId: typedGameId, allow });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not update turn delegation");
-    } finally {
-      setDelegationUpdating(false);
-    }
-  }, [setAllowTeammatesToActMutation, typedGameId]);
 
   const handleStartDelegation = useCallback((playerId: string) => {
     setDelegatedPlayerId(playerId);
@@ -1596,10 +1581,6 @@ export default function GamePage() {
               myEnginePlayerId={myEnginePlayerId ?? undefined}
               canResign={!isSpectator && !historyOpen}
               onResign={handleResign}
-              delegationToggleVisible={!!view.teamModeEnabled && view.status === "active" && !isSpectator}
-              delegationAllowed={ownDelegationAllowed}
-              delegationUpdating={delegationUpdating}
-              onSetDelegationAllowed={handleSetDelegationAllowed}
               delegatablePlayerId={!historyOpen ? delegatablePlayerId : null}
               delegatedPlayerId={isDelegationEligible ? delegatedPlayerId : null}
               onStartDelegation={handleStartDelegation}

@@ -1,4 +1,5 @@
-import { mutation, query } from "./_generated/server";
+import { query } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { ENGINE_VERSION } from "risk-engine";
 import type { GameState, PlayerId } from "risk-engine";
@@ -38,6 +39,22 @@ function publicProjection(state: GameState) {
   };
 }
 
+async function getDelegationSettingsByUserId(
+  ctx: QueryCtx,
+  userIds: string[],
+) {
+  const entries = await Promise.all(
+    [...new Set(userIds)].map(async (userId) => {
+      const settings = await ctx.db
+        .query("userSettings")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .unique();
+      return [userId, settings?.allowTeammatesToAct ?? false] as const;
+    }),
+  );
+  return new Map(entries);
+}
+
 /**
  * Public game view — safe for spectators. Never exposes RNG seed,
  * card hands, or deck order.
@@ -53,6 +70,7 @@ export const getGameView = query({
       .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
       .collect();
     const playerColors = resolvePlayerColors(players);
+    const delegationSettings = await getDelegationSettingsByUserId(ctx, players.map((p) => p.userId));
 
     const playerMap = players.map((p) => ({
       userId: p.userId,
@@ -61,7 +79,7 @@ export const getGameView = query({
       role: p.role,
       enginePlayerId: p.enginePlayerId ?? null,
       teamId: p.teamId ?? null,
-      allowTeammatesToAct: p.allowTeammatesToAct ?? false,
+      allowTeammatesToAct: delegationSettings.get(p.userId) ?? false,
     }));
     const teamCount = game.teamModeEnabled ? Math.max(2, Math.min(game.teamCount ?? 2, Math.max(2, players.length))) : null;
     const teamIds = teamCount ? getTeamIds(teamCount) : [];
@@ -143,6 +161,7 @@ export const getGameViewAsPlayer = query({
       .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
       .collect();
     const playerColors = resolvePlayerColors(players);
+    const delegationSettings = await getDelegationSettingsByUserId(ctx, players.map((p) => p.userId));
 
     const playerMap = players.map((p) => ({
       userId: p.userId,
@@ -151,7 +170,7 @@ export const getGameViewAsPlayer = query({
       role: p.role,
       enginePlayerId: p.enginePlayerId ?? null,
       teamId: p.teamId ?? null,
-      allowTeammatesToAct: p.allowTeammatesToAct ?? false,
+      allowTeammatesToAct: delegationSettings.get(p.userId) ?? false,
     }));
     const teamCount = game.teamModeEnabled ? Math.max(2, Math.min(game.teamCount ?? 2, Math.max(2, players.length))) : null;
     const teamIds = teamCount ? getTeamIds(teamCount) : [];
@@ -230,7 +249,7 @@ export const getGameViewAsPlayer = query({
       currentTurnPlayerId &&
       currentTurnPlayer &&
       currentTurnPlayer.enginePlayerId !== enginePlayerId &&
-      currentTurnPlayer.allowTeammatesToAct === true &&
+      delegationSettings.get(currentTurnPlayer.userId) === true &&
       state.players[currentTurnPlayerId]?.status === "alive" &&
       currentTurnPlayer.teamId &&
       callerPlayer?.teamId === currentTurnPlayer.teamId &&
@@ -274,36 +293,6 @@ export const getGameViewAsPlayer = query({
       delegatableTurnHand,
       myEnginePlayerId: enginePlayerId ?? null,
     };
-  },
-});
-
-export const setAllowTeammatesToAct = mutation({
-  args: {
-    gameId: v.id("games"),
-    allow: v.boolean(),
-  },
-  handler: async (ctx, { gameId, allow }) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) throw new Error("Not authenticated");
-
-    const game = await ctx.db.get(gameId);
-    if (!game) throw new Error("Game not found");
-    if (!game.teamModeEnabled) throw new Error("Turn delegation is only available in team games");
-    if (game.status !== "active") throw new Error("Turn delegation is only available in active games");
-
-    const callerId = String(user._id);
-    const playerDoc = await ctx.db
-      .query("gamePlayers")
-      .withIndex("by_gameId_userId", (q) =>
-        q.eq("gameId", gameId).eq("userId", callerId),
-      )
-      .unique();
-    if (!playerDoc || !playerDoc.enginePlayerId) {
-      throw new Error("You are not a player in this game");
-    }
-
-    await ctx.db.patch(playerDoc._id, { allowTeammatesToAct: allow });
-    return { allowTeammatesToAct: allow };
   },
 });
 

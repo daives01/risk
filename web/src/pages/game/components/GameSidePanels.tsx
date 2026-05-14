@@ -26,10 +26,6 @@ interface GameSidePanelsProps {
   myEnginePlayerId: string | undefined;
   canResign: boolean;
   onResign: () => void;
-  delegationToggleVisible: boolean;
-  delegationAllowed: boolean;
-  delegationUpdating: boolean;
-  onSetDelegationAllowed: (allow: boolean) => void;
   delegatablePlayerId: string | null;
   delegatedPlayerId: string | null;
   onStartDelegation: (playerId: string) => void;
@@ -67,10 +63,6 @@ export function GameSidePanels({
   myEnginePlayerId,
   canResign,
   onResign,
-  delegationToggleVisible,
-  delegationAllowed,
-  delegationUpdating,
-  onSetDelegationAllowed,
   delegatablePlayerId,
   delegatedPlayerId,
   onStartDelegation,
@@ -114,10 +106,6 @@ export function GameSidePanels({
           myPlayerId={myEnginePlayerId}
           canResign={canResign}
           onResign={onResign}
-          delegationToggleVisible={delegationToggleVisible}
-          delegationAllowed={delegationAllowed}
-          delegationUpdating={delegationUpdating}
-          onSetDelegationAllowed={onSetDelegationAllowed}
           delegatablePlayerId={delegatablePlayerId}
           delegatedPlayerId={delegatedPlayerId}
           onStartDelegation={onStartDelegation}

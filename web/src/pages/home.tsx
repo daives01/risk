@@ -66,6 +66,7 @@ export default function HomePage() {
   const isAdmin = useQuery(api.adminMaps.isCurrentUserAdmin, isAuthenticated ? {} : "skip");
   const settings = useQuery(api.userSettings.getMySettings, isAuthenticated ? {} : "skip");
   const setTurnEmailSetting = useMutation(api.userSettings.setEmailTurnNotificationsEnabled);
+  const setTurnDelegationSetting = useMutation(api.userSettings.setAllowTeammatesToAct);
 
   const isGamesLoading = games === undefined;
 
@@ -90,6 +91,8 @@ export default function HomePage() {
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [emailSettingSaving, setEmailSettingSaving] = useState(false);
   const [emailSettingError, setEmailSettingError] = useState<string | null>(null);
+  const [delegationSettingSaving, setDelegationSettingSaving] = useState(false);
+  const [delegationSettingError, setDelegationSettingError] = useState<string | null>(null);
 
   const joinRef = useRef<HTMLInputElement>(null);
   const archiveFilterRef = useRef<HTMLInputElement>(null);
@@ -361,6 +364,18 @@ export default function HomePage() {
       setEmailSettingError(error instanceof Error ? error.message : "Unable to update notifications.");
     } finally {
       setEmailSettingSaving(false);
+    }
+  }
+
+  async function toggleTurnDelegation(allow: boolean) {
+    setDelegationSettingError(null);
+    setDelegationSettingSaving(true);
+    try {
+      await setTurnDelegationSetting({ allow });
+    } catch (error) {
+      setDelegationSettingError(error instanceof Error ? error.message : "Unable to update turn delegation.");
+    } finally {
+      setDelegationSettingSaving(false);
     }
   }
 
@@ -799,6 +814,24 @@ export default function HomePage() {
                       />
                     </label>
                     {emailSettingError && <p className="text-sm text-red-400">{emailSettingError}</p>}
+                  </div>
+
+                  <div className="space-y-3 rounded-lg border bg-background/75 p-3">
+                    <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Team Games</p>
+                    <label className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-muted-foreground">Allow teammates to play my turns</span>
+                      <Switch
+                        checked={settings?.allowTeammatesToAct ?? false}
+                        onCheckedChange={(checked) => {
+                          void toggleTurnDelegation(checked);
+                        }}
+                        disabled={delegationSettingSaving || settings === undefined}
+                      />
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      Applies to all active and future team games.
+                    </p>
+                    {delegationSettingError && <p className="text-sm text-red-400">{delegationSettingError}</p>}
                   </div>
 
                   <div className="space-y-3 rounded-lg border bg-background/75 p-3">

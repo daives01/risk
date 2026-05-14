@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { HighlightFilter } from "@/lib/game/highlighting";
 import type { ChatChannel, ChatMessage, PublicState } from "@/lib/game/types";
 
@@ -52,10 +52,6 @@ interface PlayersCardProps {
   myPlayerId?: string | null;
   canResign?: boolean;
   onResign?: () => void;
-  delegationToggleVisible?: boolean;
-  delegationAllowed?: boolean;
-  delegationUpdating?: boolean;
-  onSetDelegationAllowed?: (allow: boolean) => void;
   delegatablePlayerId?: string | null;
   delegatedPlayerId?: string | null;
   onStartDelegation?: (playerId: string) => void;
@@ -78,10 +74,6 @@ export function GamePlayersCard({
   myPlayerId,
   canResign = false,
   onResign,
-  delegationToggleVisible = false,
-  delegationAllowed = false,
-  delegationUpdating = false,
-  onSetDelegationAllowed,
   delegatablePlayerId,
   delegatedPlayerId,
   onStartDelegation,
@@ -106,20 +98,6 @@ export function GamePlayersCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="min-w-0 space-y-2 px-2.5 pb-3 xl:px-3">
-        {delegationToggleVisible && (
-          <div className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-background/75 px-2.5 py-2">
-            <div className="min-w-0">
-              <div className="truncate text-xs font-semibold">Allow teammates to play my turns</div>
-              <div className="truncate text-[11px] text-muted-foreground">This game only</div>
-            </div>
-            <Switch
-              checked={delegationAllowed}
-              disabled={delegationUpdating}
-              onCheckedChange={(checked) => onSetDelegationAllowed?.(checked)}
-              aria-label="Allow teammates to play my turns"
-            />
-          </div>
-        )}
         <div className="min-w-0 overflow-x-auto game-scrollbar">
           <table className={`w-full table-auto border-separate border-spacing-y-2 ${tableMinWidthClass}`}>
             <colgroup>
@@ -172,6 +150,7 @@ export function GamePlayersCard({
                   player.playerId === myPlayerId;
                 const canPlayForPlayer = delegatablePlayerId === player.playerId && !delegatedPlayerId;
                 const isDelegatedPlayer = delegatedPlayerId === player.playerId;
+                const playerName = getPlayerName(player.playerId, playerMap);
                 const rowToneClass = isPlayerHighlighted
                   ? "border-primary/70 bg-primary/10"
                   : "border-border/70 bg-background/80 group-hover:border-primary/50";
@@ -191,7 +170,7 @@ export function GamePlayersCard({
                     <td className={`border-y px-1 py-1.5 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
                       <div className="min-w-0 text-sm [@media(max-width:420px)]:text-[0.72rem]">
                         <span className={`block min-w-0 truncate font-semibold ${isDefeated ? "line-through" : ""}`}>
-                          {getPlayerName(player.playerId, playerMap)}
+                          {playerName}
                         </span>
                       </div>
                     </td>
@@ -249,36 +228,48 @@ export function GamePlayersCard({
                         </Popover>
                       )}
                       {canPlayForPlayer && (
-                        <Button
-                          type="button"
-                          size="icon-xs"
-                          variant="ghost"
-                          aria-label={`Play for ${getPlayerName(player.playerId, playerMap)}`}
-                          title={`Play for ${getPlayerName(player.playerId, playerMap)}`}
-                          className="text-primary hover:text-primary"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onStartDelegation?.(player.playerId);
-                          }}
-                        >
-                          <Handshake className="size-3" />
-                        </Button>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                size="icon-xs"
+                                variant="ghost"
+                                aria-label={`Play for ${playerName}`}
+                                className="text-primary hover:text-primary"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onStartDelegation?.(player.playerId);
+                                }}
+                              >
+                                <Handshake className="size-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Play for {playerName}</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       )}
                       {isDelegatedPlayer && (
-                        <Button
-                          type="button"
-                          size="icon-xs"
-                          variant="ghost"
-                          aria-label={`Stop playing for ${getPlayerName(player.playerId, playerMap)}`}
-                          title={`Stop playing for ${getPlayerName(player.playerId, playerMap)}`}
-                          className="text-muted-foreground hover:text-foreground"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onStopDelegation?.();
-                          }}
-                        >
-                          <X className="size-3" />
-                        </Button>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                size="icon-xs"
+                                variant="ghost"
+                                aria-label={`Stop playing for ${playerName}`}
+                                className="text-muted-foreground hover:text-foreground"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onStopDelegation?.();
+                                }}
+                              >
+                                <X className="size-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Stop playing for {playerName}</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       )}
                     </td>
                     <td className={`border-y px-2 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>

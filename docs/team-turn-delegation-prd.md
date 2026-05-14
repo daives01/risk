@@ -2,7 +2,7 @@
 
 ## Summary
 
-Add a per-game delegation feature for team games that lets a player opt in to allow teammates to play their turns on their behalf. When it is that player's turn, eligible teammates can explicitly enter a temporary frontend-only "play for X" mode and submit gameplay actions as that engine player. This does not change chat identity, account identity, or core game engine behavior.
+Add a global account setting for team games that lets a player opt in to allow teammates to play their turns on their behalf. When it is that player's turn in any team game, eligible teammates can explicitly enter a temporary frontend-only "play for X" mode and submit gameplay actions as that engine player. This does not change chat identity, account identity, or core game engine behavior.
 
 ## Problem
 
@@ -10,7 +10,7 @@ Team async games can last a long time. A player may be unavailable for days and 
 
 ## Goals
 
-- Let a player opt in per game to allow teammates to take their turns.
+- Let a player opt in from account settings to allow teammates to take their turns across team games.
 - Let eligible teammates explicitly enter and exit a visible "play for Alice" mode only when Alice's turn is active.
 - Keep the core engine model unchanged.
 - Preserve auditability on the backend.
@@ -18,7 +18,7 @@ Team async games can last a long time. A player may be unavailable for days and 
 
 ## Non-Goals
 
-- No global account-level impersonation setting.
+- No per-game delegation preference UI.
 - No delegation outside team games.
 - No delegation for spectators.
 - No delegated chat, profile actions, or account actions.
@@ -28,7 +28,7 @@ Team async games can last a long time. A player may be unavailable for days and 
 
 ## User Stories
 
-- As a player in a team game, I can toggle `Allow teammates to play my turns` for this game.
+- As a player, I can toggle `Allow teammates to play my turns` on my home account page.
 - As a teammate, when it is Alice's turn and Alice has enabled delegation, I can click `Play for Alice`.
 - As a teammate in delegated mode, I can make normal gameplay moves on Alice's behalf.
 - As a teammate in delegated mode, I can stop playing for Alice at any time.
@@ -38,7 +38,7 @@ Team async games can last a long time. A player may be unavailable for days and 
 ## Eligibility Rules
 
 - Applies only in team games.
-- Delegation is configured per game, per player seat.
+- Delegation is configured as a global user setting.
 - A delegated actor must be on the same team as the turn owner.
 - The delegated actor may be dead and still play for an alive teammate.
 - The turn owner must be alive for delegation to matter.
@@ -47,8 +47,8 @@ Team async games can last a long time. A player may be unavailable for days and 
 
 ## UX Requirements
 
-- Each player sees their own per-game toggle in the game UI: `Allow teammates to play my turns`.
-- The toggle only affects that current game.
+- Each player sees their own global toggle on the home account page: `Allow teammates to play my turns`.
+- The toggle affects all active and future team games.
 - The `Play for Alice` button appears only when:
   - it is Alice's turn,
   - Alice has delegation enabled,
@@ -76,7 +76,7 @@ Team async games can last a long time. A player may be unavailable for days and 
 
 ## Backend Requirements
 
-- Store a per-game opt-in flag on the player's game membership record.
+- Store a global opt-in flag on the user's settings record.
 - Extend gameplay authorization so that action submission may be performed by:
   - the active engine player, or
   - an eligible teammate acting for that active engine player when delegation is enabled.
@@ -98,7 +98,7 @@ Team async games can last a long time. A player may be unavailable for days and 
 
 ## Data Model Changes
 
-- `gamePlayers`
+- `userSettings`
   - add `allowTeammatesToAct: boolean` or optional boolean defaulting false.
 - `gameActions`
   - add optional audit fields such as:
@@ -108,7 +108,7 @@ Team async games can last a long time. A player may be unavailable for days and 
 
 ## Acceptance Criteria
 
-1. In an active team game, a player can enable and disable delegation for their own seat.
+1. On the home account page, a player can enable and disable delegation globally.
 2. When it is that player's turn, eligible teammates see `Play for <name>`.
 3. Entering delegated mode enables gameplay actions for that turn only.
 4. Delegated mode is visually obvious and can be exited explicitly.
@@ -131,13 +131,12 @@ Team async games can last a long time. A player may be unavailable for days and 
 
 ## Open Design Decisions
 
-- Whether the per-game delegation toggle belongs in the players panel, header, or a compact personal settings area within the game page.
 - Whether to show any passive hint to the owner that a teammate is currently in delegated mode. This is not required for v1.
 
 ## Recommended V1 Scope
 
 - Include:
-  - per-game toggle,
+  - global account toggle,
   - explicit `Play for X` / `Stop playing for X`,
   - strong visual delegated mode treatment,
   - gameplay-only authorization,
@@ -146,4 +145,4 @@ Team async games can last a long time. A player may be unavailable for days and 
   - delegated resign,
   - delegated chat,
   - history/admin UI for audit display,
-  - cross-game or global settings.
+  - per-game delegation settings.
