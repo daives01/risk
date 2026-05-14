@@ -81,9 +81,11 @@ export default function GamePage() {
   const [chatDraft, setChatDraft] = useState("");
   const [chatEditingMessageId, setChatEditingMessageId] = useState<string | null>(null);
   const [chatEditingChannel, setChatEditingChannel] = useState<ChatChannel | null>(null);
-  const { mapDoc, historyTimeline, timelineActions, chatMessages } = useGameRuntimeQueries(
+  const [historyEnabled, setHistoryEnabled] = useState(false);
+  const { mapDoc, historySummary, historyTimeline, timelineActions, chatMessages } = useGameRuntimeQueries(
     typedGameId,
     !!session,
+    historyEnabled,
     view?.mapId,
   );
   const { graphMap, mapVisual, mapImageUrl } = adaptMapDoc(mapDoc);
@@ -175,6 +177,15 @@ export default function GamePage() {
     myEnginePlayerId: myEnginePlayerId ?? undefined,
     playbackIntervalMs: HISTORY_PLAYBACK_INTERVAL_MS,
   });
+  const toggleHistory = useCallback(() => {
+    if (isMapFullscreen) return;
+    setHistoryOpen((prev) => {
+      const next = !prev;
+      setHistoryEnabled(next);
+      return next;
+    });
+    setHistoryPlaying(false);
+  }, [isMapFullscreen, setHistoryOpen, setHistoryPlaying]);
   const controlsDisabled = !isMyTurn || isSpectator || submitting || placementSubmitting || historyOpen;
   const canSetOccupyShortcut =
     !!state?.pending &&
@@ -1158,10 +1169,7 @@ export default function GamePage() {
     occupyMaxMove: state?.pending?.maxMove ?? 1,
     canSetFortify: canSetFortifyShortcut,
     maxFortifyCount: maxFortifyMove,
-    onToggleHistory: () => {
-      if (isMapFullscreen) return;
-      setHistoryOpen((prev) => !prev);
-    },
+    onToggleHistory: toggleHistory,
     onToggleShortcutCheatSheet: () => setShortcutsOpen((prev) => !prev),
     onSetHistoryPlaying: setHistoryPlaying,
     onSetHistoryFrameIndex: setHistoryFrameIndex,
@@ -1287,6 +1295,7 @@ export default function GamePage() {
     if (!isMapFullscreen) return;
     if (!historyOpen) return;
     setHistoryOpen(false);
+    setHistoryEnabled(false);
     setHistoryPlaying(false);
   }, [historyOpen, isMapFullscreen, setHistoryOpen, setHistoryPlaying]);
 
@@ -1535,12 +1544,8 @@ export default function GamePage() {
             setInfoPinnedTerritoryId(null);
           }
         }}
-        onToggleHistory={() => {
-          if (isMapFullscreen) return;
-          setHistoryOpen((prev) => !prev);
-          setHistoryPlaying(false);
-        }}
-        historyToggleDisabled={historyCount === 0}
+        onToggleHistory={toggleHistory}
+        historyToggleDisabled={historySummary?.latestActionIndex == null}
         isMapFullscreen={isMapFullscreen}
         showBackHome={!isMyTurn}
         renderHistoryScrubber={() => (

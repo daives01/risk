@@ -877,6 +877,23 @@ export const listActions = query({
   },
 });
 
+export const getHistorySummary = query({
+  args: {
+    gameId: v.id("games"),
+  },
+  handler: async (ctx, { gameId }) => {
+    const latestAction = await ctx.db
+      .query("gameActions")
+      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
+      .order("desc")
+      .first();
+
+    return {
+      latestActionIndex: latestAction?.index ?? null,
+    };
+  },
+});
+
 function toTimelinePublicState(state: GameState): TimelinePublicState {
   const handSizes: Record<string, number> = {};
   for (const [playerId, hand] of Object.entries(state.hands)) {

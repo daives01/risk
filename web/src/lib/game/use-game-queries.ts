@@ -19,18 +19,23 @@ export function useGameViewQueries(session: unknown, typedGameId: Id<"games"> | 
 export function useGameRuntimeQueries(
   typedGameId: Id<"games"> | undefined,
   isAuthenticated: boolean,
+  historyEnabled: boolean,
   mapId?: string,
 ) {
   const mapDoc = useQuery(api.maps.getByMapId, mapId ? { mapId } : "skip");
+  const historySummary = useQuery(
+    api.gameplay.getHistorySummary,
+    typedGameId ? { gameId: typedGameId } : "skip",
+  );
 
   const historyTimeline = useQuery(
     api.gameplay.getHistoryTimeline,
-    typedGameId ? { gameId: typedGameId, limit: 500 } : "skip",
+    typedGameId && historyEnabled ? { gameId: typedGameId, limit: 500 } : "skip",
   ) as HistoryFrame[] | undefined;
 
   const timelineActions = useQuery(
     api.gameplay.listActions,
-    typedGameId ? { gameId: typedGameId, limit: 500 } : "skip",
+    typedGameId && historyEnabled ? { gameId: typedGameId, limit: 500 } : "skip",
   ) as GameAction[] | undefined;
 
   const chatMessages = useQuery(
@@ -45,6 +50,7 @@ export function useGameRuntimeQueries(
 
   return {
     mapDoc,
+    historySummary,
     historyTimeline,
     timelineActions,
     chatMessages,
