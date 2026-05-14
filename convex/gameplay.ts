@@ -259,7 +259,7 @@ async function resolveActingPlayer(ctx: MutationCtx, args: {
     callerId: args.callerId,
     callerPlayer,
     targetPlayer,
-    targetAllowsDelegation: targetSettings?.allowTeammatesToAct,
+    targetAllowsDelegation: targetSettings?.allowTeammatesToAct ?? true,
     game: args.game,
     state: args.state,
   });

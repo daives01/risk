@@ -821,7 +821,7 @@ export default function HomePage() {
                     <label className="flex items-center justify-between gap-3">
                       <span className="text-sm text-muted-foreground">Allow teammates to play my turns</span>
                       <Switch
-                        checked={settings?.allowTeammatesToAct ?? false}
+                        checked={settings?.allowTeammatesToAct ?? true}
                         onCheckedChange={(checked) => {
                           void toggleTurnDelegation(checked);
                         }}

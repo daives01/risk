@@ -49,7 +49,7 @@ async function getDelegationSettingsByUserId(
         .query("userSettings")
         .withIndex("by_userId", (q) => q.eq("userId", userId))
         .unique();
-      return [userId, settings?.allowTeammatesToAct ?? false] as const;
+      return [userId, settings?.allowTeammatesToAct ?? true] as const;
     }),
   );
   return new Map(entries);
