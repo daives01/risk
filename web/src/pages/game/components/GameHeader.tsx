@@ -153,11 +153,11 @@ export function GameHeader({
         </div>
 
       {delegatedPlayerName && (
-        <div className="flex min-w-0 shrink items-center gap-2 rounded-md border border-amber-500/60 bg-amber-500 px-2.5 py-1 text-sm font-bold text-amber-950">
+        <div className="flex min-w-0 shrink items-center gap-2 rounded-md bg-background/80 px-2.5 py-1 text-sm font-bold text-foreground">
           <span className="min-w-0 truncate">Playing for {delegatedPlayerName}</span>
           <button
             type="button"
-            className="shrink-0 rounded border border-amber-900/30 px-1.5 py-0.5 text-[11px] uppercase tracking-wide hover:bg-amber-400"
+            className="shrink-0 rounded px-1.5 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground hover:bg-accent hover:text-foreground"
             onClick={onStopDelegation}
           >
             Stop

@@ -271,7 +271,7 @@ export function GamePlayersCard({
                           variant="ghost"
                           aria-label={`Stop playing for ${getPlayerName(player.playerId, playerMap)}`}
                           title={`Stop playing for ${getPlayerName(player.playerId, playerMap)}`}
-                          className="text-amber-600 hover:text-amber-600"
+                          className="text-muted-foreground hover:text-foreground"
                           onClick={(event) => {
                             event.stopPropagation();
                             onStopDelegation?.();
