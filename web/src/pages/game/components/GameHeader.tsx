@@ -125,20 +125,7 @@ export function GameHeader({
     (phase === "Attack" && (uncommittedReinforcements > 0 || reinforcementDraftCount > 0));
 
   return (
-    <div className="game-header glass-panel relative overflow-hidden">
-      {delegatedPlayerName && (
-        <div className="flex min-h-8 items-center justify-center gap-2 border-b border-amber-500/60 bg-amber-500 px-3 py-1 text-sm font-bold text-amber-950">
-          <span className="min-w-0 truncate">Playing for {delegatedPlayerName}</span>
-          <button
-            type="button"
-            className="shrink-0 rounded border border-amber-900/30 px-2 py-0.5 text-xs uppercase tracking-wide hover:bg-amber-400"
-            onClick={onStopDelegation}
-          >
-            Stop
-          </button>
-        </div>
-      )}
-      <div className="relative flex min-h-12 flex-nowrap items-center gap-1.5 px-2 py-1.5 md:gap-2">
+    <div className="game-header glass-panel relative flex min-h-12 flex-nowrap items-center gap-1.5 px-2 py-1.5 md:gap-2">
         {showBackHome && (
           <Button asChild size="sm" type="button" variant="outline" title="Back to home" className="hidden md:inline-flex">
             <Link to="/" aria-label="Back to home">
@@ -164,6 +151,19 @@ export function GameHeader({
             <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{fortifyRemainingLabel}</span>
           )}
         </div>
+
+      {delegatedPlayerName && (
+        <div className="flex min-w-0 shrink items-center gap-2 rounded-md border border-amber-500/60 bg-amber-500 px-2.5 py-1 text-sm font-bold text-amber-950">
+          <span className="min-w-0 truncate">Playing for {delegatedPlayerName}</span>
+          <button
+            type="button"
+            className="shrink-0 rounded border border-amber-900/30 px-1.5 py-0.5 text-[11px] uppercase tracking-wide hover:bg-amber-400"
+            onClick={onStopDelegation}
+          >
+            Stop
+          </button>
+        </div>
+      )}
 
       {!historyOpen && !isMyTurn && displayPhase !== "GameOver" && (
         <div className="flex shrink-0 items-center gap-2">
@@ -405,7 +405,6 @@ export function GameHeader({
             </Tooltip>
           )}
         </TooltipProvider>
-      </div>
       </div>
     </div>
   );
