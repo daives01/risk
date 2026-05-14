@@ -40,6 +40,24 @@ import { cn } from "@/lib/utils";
 
 const HINT_ROTATION_MS = 18000;
 const ACTION_BUTTON_COOLDOWN_MS = 1000;
+function isStalePlacementError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.message.includes("Version mismatch:") ||
+    (error.message.includes("Cannot place") && error.message.includes("remaining"))
+  );
+}
+
+function getActionErrorMessage(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) return fallback;
+  if (error.message.includes("Version mismatch:")) {
+    return "The turn changed before that action was confirmed. The board has been refreshed.";
+  }
+  if (error.message.includes("Cannot place") && error.message.includes("remaining")) {
+    return "Those placements are no longer available. The board has been refreshed.";
+  }
+  return error.message;
+}
 
 export default function GamePage() {
   const HISTORY_PLAYBACK_INTERVAL_MS = 840;
@@ -91,6 +109,7 @@ export default function GamePage() {
   const [infoPinnedTerritoryId, setInfoPinnedTerritoryId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [attackSubmitting, setAttackSubmitting] = useState(false);
+  const [placementSubmitting, setPlacementSubmitting] = useState(false);
   const [recentAttackEdgeIds, setRecentAttackEdgeIds] = useState<Set<string> | null>(null);
   const recentAttackEventRef = useRef<string | null>(null);
   const recentAttackTimeoutRef = useRef<number | null>(null);
@@ -103,6 +122,8 @@ export default function GamePage() {
   const autoEndFortifyVersionRef = useRef<number | null>(null);
   const optionalTradeAutoOpenRef = useRef<number | null>(null);
   const actionInFlightRef = useRef(false);
+  const placementInFlightRef = useRef(false);
+  const reinforcementDraftVersionRef = useRef<number | null>(null);
   const troopDeltaResumeTimeoutRef = useRef<number | null>(null);
   const historyDebugRef = useRef<{ framePos: number; signature: string; staleRun: number } | null>(null);
   const actionButtonCooldownTimeoutRef = useRef<number | null>(null);
@@ -154,7 +175,7 @@ export default function GamePage() {
     myEnginePlayerId: myEnginePlayerId ?? undefined,
     playbackIntervalMs: HISTORY_PLAYBACK_INTERVAL_MS,
   });
-  const controlsDisabled = !isMyTurn || isSpectator || submitting || historyOpen;
+  const controlsDisabled = !isMyTurn || isSpectator || submitting || placementSubmitting || historyOpen;
   const canSetOccupyShortcut =
     !!state?.pending &&
     (phase === "Occupy" || (phase === "Attack" && !!state?.pending)) &&
@@ -536,7 +557,7 @@ export default function GamePage() {
         }
       } catch (error) {
         stopAutoAttackRef.current();
-        toast.error(error instanceof Error ? error.message : "Action failed");
+        toast.error(getActionErrorMessage(error, "Action failed"));
       } finally {
         actionInFlightRef.current = false;
         setSubmitting(false);
@@ -694,10 +715,19 @@ export default function GamePage() {
   );
 
   const handleConfirmPlacements = useCallback(async () => {
-    if (!typedGameId || !state || reinforcementDrafts.length === 0 || mustTradeNow || actionButtonCooldownActive) {
+    if (
+      !typedGameId ||
+      !state ||
+      reinforcementDrafts.length === 0 ||
+      mustTradeNow ||
+      actionButtonCooldownActive ||
+      placementInFlightRef.current
+    ) {
       return;
     }
     const previousDrafts = reinforcementDrafts;
+    placementInFlightRef.current = true;
+    setPlacementSubmitting(true);
     setReinforcementDrafts([]);
     setPlaceCount(1);
     setSelectedFrom(null);
@@ -710,8 +740,15 @@ export default function GamePage() {
         placements: previousDrafts,
       });
     } catch (error) {
-      setReinforcementDrafts(previousDrafts);
-      toast.error(error instanceof Error ? error.message : "Could not confirm placements");
+      if (isStalePlacementError(error)) {
+        toast.error(getActionErrorMessage(error, "Could not confirm placements"));
+      } else {
+        setReinforcementDrafts(previousDrafts);
+        toast.error(getActionErrorMessage(error, "Could not confirm placements"));
+      }
+    } finally {
+      placementInFlightRef.current = false;
+      setPlacementSubmitting(false);
     }
   }, [
     actionButtonCooldownActive,
@@ -728,8 +765,27 @@ export default function GamePage() {
     if (!isPlacementPhase || !isMyTurn) {
       setReinforcementDrafts([]);
       setPlaceCount(1);
+      reinforcementDraftVersionRef.current = null;
     }
   }, [isMyTurn, isPlacementPhase, state?.stateVersion]);
+
+  useEffect(() => {
+    if (reinforcementDrafts.length === 0) {
+      reinforcementDraftVersionRef.current = state?.stateVersion ?? null;
+      return;
+    }
+    if (!state) return;
+    if (reinforcementDraftVersionRef.current === null) {
+      reinforcementDraftVersionRef.current = state.stateVersion;
+      return;
+    }
+    if (state.stateVersion !== reinforcementDraftVersionRef.current && !placementInFlightRef.current) {
+      setReinforcementDrafts([]);
+      setPlaceCount(1);
+      reinforcementDraftVersionRef.current = state.stateVersion;
+      toast.error("The turn changed, so queued placements were cleared.");
+    }
+  }, [reinforcementDrafts.length, state]);
 
   useEffect(() => {
     const maxAllowed = Math.max(1, uncommittedReinforcements);
@@ -1499,7 +1555,7 @@ export default function GamePage() {
           void handleConfirmPlacements();
         }}
         onEndAttackPhase={handleEndAttackPhase}
-        actionButtonsDisabled={actionButtonCooldownActive}
+        actionButtonsDisabled={actionButtonCooldownActive || placementSubmitting}
         onEndTurn={handleEndTurn}
         delegatedPlayerName={isDelegationEligible ? delegatedPlayerName : null}
         onStopDelegation={handleStopDelegation}
