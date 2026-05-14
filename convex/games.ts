@@ -1,4 +1,5 @@
 import { query } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { ENGINE_VERSION } from "risk-engine";
 import type { GameState, PlayerId } from "risk-engine";
@@ -38,6 +39,22 @@ function publicProjection(state: GameState) {
   };
 }
 
+async function getDelegationSettingsByUserId(
+  ctx: QueryCtx,
+  userIds: string[],
+) {
+  const entries = await Promise.all(
+    [...new Set(userIds)].map(async (userId) => {
+      const settings = await ctx.db
+        .query("userSettings")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .unique();
+      return [userId, settings?.allowTeammatesToAct ?? true] as const;
+    }),
+  );
+  return new Map(entries);
+}
+
 /**
  * Public game view — safe for spectators. Never exposes RNG seed,
  * card hands, or deck order.
@@ -53,6 +70,7 @@ export const getGameView = query({
       .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
       .collect();
     const playerColors = resolvePlayerColors(players);
+    const delegationSettings = await getDelegationSettingsByUserId(ctx, players.map((p) => p.userId));
 
     const playerMap = players.map((p) => ({
       userId: p.userId,
@@ -61,6 +79,7 @@ export const getGameView = query({
       role: p.role,
       enginePlayerId: p.enginePlayerId ?? null,
       teamId: p.teamId ?? null,
+      allowTeammatesToAct: delegationSettings.get(p.userId) ?? false,
     }));
     const teamCount = game.teamModeEnabled ? Math.max(2, Math.min(game.teamCount ?? 2, Math.max(2, players.length))) : null;
     const teamIds = teamCount ? getTeamIds(teamCount) : [];
@@ -142,6 +161,7 @@ export const getGameViewAsPlayer = query({
       .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
       .collect();
     const playerColors = resolvePlayerColors(players);
+    const delegationSettings = await getDelegationSettingsByUserId(ctx, players.map((p) => p.userId));
 
     const playerMap = players.map((p) => ({
       userId: p.userId,
@@ -150,6 +170,7 @@ export const getGameViewAsPlayer = query({
       role: p.role,
       enginePlayerId: p.enginePlayerId ?? null,
       teamId: p.teamId ?? null,
+      allowTeammatesToAct: delegationSettings.get(p.userId) ?? false,
     }));
     const teamCount = game.teamModeEnabled ? Math.max(2, Math.min(game.teamCount ?? 2, Math.max(2, players.length))) : null;
     const teamIds = teamCount ? getTeamIds(teamCount) : [];
@@ -211,6 +232,39 @@ export const getGameViewAsPlayer = query({
       });
     }
 
+    let delegatableTurnHand: Array<{
+      cardId: string;
+      kind: string;
+      territoryId?: string;
+    }> | null = null;
+    const currentTurnPlayerId = state?.turn.currentPlayerId;
+    const currentTurnPlayer = currentTurnPlayerId
+      ? players.find((p) => p.enginePlayerId === currentTurnPlayerId)
+      : undefined;
+    if (
+      state &&
+      game.status === "active" &&
+      game.teamModeEnabled &&
+      enginePlayerId &&
+      currentTurnPlayerId &&
+      currentTurnPlayer &&
+      currentTurnPlayer.enginePlayerId !== enginePlayerId &&
+      delegationSettings.get(currentTurnPlayer.userId) === true &&
+      state.players[currentTurnPlayerId]?.status === "alive" &&
+      currentTurnPlayer.teamId &&
+      callerPlayer?.teamId === currentTurnPlayer.teamId &&
+      state.hands[currentTurnPlayerId as PlayerId]
+    ) {
+      delegatableTurnHand = state.hands[currentTurnPlayerId as PlayerId]!.map((cardId) => {
+        const card = state.cardsById[cardId];
+        return {
+          cardId: cardId as string,
+          kind: card?.kind ?? "W",
+          territoryId: card?.territoryId as string | undefined,
+        };
+      });
+    }
+
     return {
       _id: game._id,
       name: game.name,
@@ -236,6 +290,7 @@ export const getGameViewAsPlayer = query({
       players: playerMap,
       state: state ? publicProjection(state) : null,
       myHand,
+      delegatableTurnHand,
       myEnginePlayerId: enginePlayerId ?? null,
     };
   },

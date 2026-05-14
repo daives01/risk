@@ -1,12 +1,13 @@
 import { measureLineStats, prepareWithSegments } from "@chenglou/pretext";
 import type { PreparedTextWithSegments } from "@chenglou/pretext";
-import { ArrowUp, Check, Flag, Pencil, Trash2, Users, X } from "lucide-react";
+import { ArrowUp, Check, Flag, Handshake, Pencil, Trash2, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent, KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { HighlightFilter } from "@/lib/game/highlighting";
 import type { ChatChannel, ChatMessage, PublicState } from "@/lib/game/types";
 
@@ -51,6 +52,10 @@ interface PlayersCardProps {
   myPlayerId?: string | null;
   canResign?: boolean;
   onResign?: () => void;
+  delegatablePlayerId?: string | null;
+  delegatedPlayerId?: string | null;
+  onStartDelegation?: (playerId: string) => void;
+  onStopDelegation?: () => void;
 }
 
 export function GamePlayersCard({
@@ -69,6 +74,10 @@ export function GamePlayersCard({
   myPlayerId,
   canResign = false,
   onResign,
+  delegatablePlayerId,
+  delegatedPlayerId,
+  onStartDelegation,
+  onStopDelegation,
 }: PlayersCardProps) {
   const [resignOpen, setResignOpen] = useState(false);
   const tableMinWidthClass = teamModeEnabled ? "min-w-[28.5rem]" : "min-w-[21.5rem]";
@@ -139,6 +148,9 @@ export function GamePlayersCard({
                   player.status === "alive" &&
                   !!myPlayerId &&
                   player.playerId === myPlayerId;
+                const canPlayForPlayer = delegatablePlayerId === player.playerId && !delegatedPlayerId;
+                const isDelegatedPlayer = delegatedPlayerId === player.playerId;
+                const playerName = getPlayerName(player.playerId, playerMap);
                 const rowToneClass = isPlayerHighlighted
                   ? "border-primary/70 bg-primary/10"
                   : "border-border/70 bg-background/80 group-hover:border-primary/50";
@@ -158,7 +170,7 @@ export function GamePlayersCard({
                     <td className={`border-y px-1 py-1.5 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
                       <div className="min-w-0 text-sm [@media(max-width:420px)]:text-[0.72rem]">
                         <span className={`block min-w-0 truncate font-semibold ${isDefeated ? "line-through" : ""}`}>
-                          {getPlayerName(player.playerId, playerMap)}
+                          {playerName}
                         </span>
                       </div>
                     </td>
@@ -214,6 +226,50 @@ export function GamePlayersCard({
                             </div>
                           </PopoverContent>
                         </Popover>
+                      )}
+                      {canPlayForPlayer && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                size="icon-xs"
+                                variant="ghost"
+                                aria-label={`Play for ${playerName}`}
+                                className="text-primary hover:text-primary"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onStartDelegation?.(player.playerId);
+                                }}
+                              >
+                                <Handshake className="size-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Play for {playerName}</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      {isDelegatedPlayer && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                size="icon-xs"
+                                variant="ghost"
+                                aria-label={`Stop playing for ${playerName}`}
+                                className="text-muted-foreground hover:text-foreground"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onStopDelegation?.();
+                                }}
+                              >
+                                <X className="size-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Stop playing for {playerName}</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       )}
                     </td>
                     <td className={`border-y px-2 py-1.5 text-center [@media(max-width:420px)]:px-2 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>

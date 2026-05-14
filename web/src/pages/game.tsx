@@ -40,6 +40,24 @@ import { cn } from "@/lib/utils";
 
 const HINT_ROTATION_MS = 18000;
 const ACTION_BUTTON_COOLDOWN_MS = 1000;
+function isStalePlacementError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.message.includes("Version mismatch:") ||
+    (error.message.includes("Cannot place") && error.message.includes("remaining"))
+  );
+}
+
+function getActionErrorMessage(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) return fallback;
+  if (error.message.includes("Version mismatch:")) {
+    return "The turn changed before that action was confirmed. The board has been refreshed.";
+  }
+  if (error.message.includes("Cannot place") && error.message.includes("remaining")) {
+    return "Those placements are no longer available. The board has been refreshed.";
+  }
+  return error.message;
+}
 
 export default function GamePage() {
   const HISTORY_PLAYBACK_INTERVAL_MS = 840;
@@ -58,7 +76,7 @@ export default function GamePage() {
 
   const typedGameId = gameId as Id<"games"> | undefined;
   const { playerView, publicView } = useGameViewQueries(session, typedGameId);
-  const { view, myEnginePlayerId, myHand, playerMap, state } = adaptView(playerView, publicView);
+  const { view, myEnginePlayerId, myHand, delegatableTurnHand, playerMap, state } = adaptView(playerView, publicView);
   const [chatChannel, setChatChannel] = useState<ChatChannel>("global");
   const [chatDraft, setChatDraft] = useState("");
   const [chatEditingMessageId, setChatEditingMessageId] = useState<string | null>(null);
@@ -91,6 +109,7 @@ export default function GamePage() {
   const [infoPinnedTerritoryId, setInfoPinnedTerritoryId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [attackSubmitting, setAttackSubmitting] = useState(false);
+  const [placementSubmitting, setPlacementSubmitting] = useState(false);
   const [recentAttackEdgeIds, setRecentAttackEdgeIds] = useState<Set<string> | null>(null);
   const recentAttackEventRef = useRef<string | null>(null);
   const recentAttackTimeoutRef = useRef<number | null>(null);
@@ -99,9 +118,12 @@ export default function GamePage() {
   const [isMapFullscreen, setIsMapFullscreen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [actionButtonCooldownActive, setActionButtonCooldownActive] = useState(false);
+  const [delegatedPlayerId, setDelegatedPlayerId] = useState<string | null>(null);
   const autoEndFortifyVersionRef = useRef<number | null>(null);
   const optionalTradeAutoOpenRef = useRef<number | null>(null);
   const actionInFlightRef = useRef(false);
+  const placementInFlightRef = useRef(false);
+  const reinforcementDraftVersionRef = useRef<number | null>(null);
   const troopDeltaResumeTimeoutRef = useRef<number | null>(null);
   const historyDebugRef = useRef<{ framePos: number; signature: string; staleRun: number } | null>(null);
   const actionButtonCooldownTimeoutRef = useRef<number | null>(null);
@@ -110,7 +132,27 @@ export default function GamePage() {
 
   const phase = state?.turn.phase ?? "GameOver";
   const isSpectator = !myEnginePlayerId;
-  const isMyTurn = !!myEnginePlayerId && !!state && state.turn.currentPlayerId === myEnginePlayerId;
+  const ownPlayerRef = myEnginePlayerId
+    ? playerMap.find((player) => player.enginePlayerId === myEnginePlayerId)
+    : undefined;
+  const currentTurnPlayerRef = state
+    ? playerMap.find((player) => player.enginePlayerId === state.turn.currentPlayerId)
+    : undefined;
+  const isDelegationEligible =
+    !!state &&
+    !!view?.teamModeEnabled &&
+    view.status === "active" &&
+    !!myEnginePlayerId &&
+    !!delegatedPlayerId &&
+    state.turn.currentPlayerId === delegatedPlayerId &&
+    state.players[delegatedPlayerId]?.status === "alive" &&
+    currentTurnPlayerRef?.allowTeammatesToAct === true &&
+    delegatedPlayerId !== myEnginePlayerId &&
+    !!ownPlayerRef?.teamId &&
+    ownPlayerRef.teamId === currentTurnPlayerRef?.teamId;
+  const effectiveEnginePlayerId = isDelegationEligible ? delegatedPlayerId : myEnginePlayerId;
+  const effectiveHand = isDelegationEligible ? delegatableTurnHand : myHand;
+  const isMyTurn = !!effectiveEnginePlayerId && !!state && state.turn.currentPlayerId === effectiveEnginePlayerId;
   const {
     historyOpen,
     setHistoryOpen,
@@ -133,7 +175,7 @@ export default function GamePage() {
     myEnginePlayerId: myEnginePlayerId ?? undefined,
     playbackIntervalMs: HISTORY_PLAYBACK_INTERVAL_MS,
   });
-  const controlsDisabled = !isMyTurn || isSpectator || submitting || historyOpen;
+  const controlsDisabled = !isMyTurn || isSpectator || submitting || placementSubmitting || historyOpen;
   const canSetOccupyShortcut =
     !!state?.pending &&
     (phase === "Occupy" || (phase === "Attack" && !!state?.pending)) &&
@@ -197,19 +239,23 @@ export default function GamePage() {
   const allowFortifyThroughTeammates = effectiveTeams?.allowFortifyThroughTeammates ?? true;
   const teamsEnabled = effectiveTeams?.teamsEnabled ?? false;
   const preventAttackingTeammates = effectiveTeams?.preventAttackingTeammates ?? false;
-  const teamNames = (view?.teamNames as Record<string, string> | null) ?? {};
+  const teamNames = useMemo(
+    () => (view?.teamNames as Record<string, string> | null) ?? {},
+    [view?.teamNames],
+  );
   const myTeamId = myEnginePlayerId && state ? state.players[myEnginePlayerId]?.teamId : undefined;
+  const effectiveTeamId = effectiveEnginePlayerId && state ? state.players[effectiveEnginePlayerId]?.teamId : undefined;
   const myTeamName = myTeamId ? teamNames[myTeamId] ?? myTeamId : null;
   const canUseTeamChat = !!view?.teamModeEnabled && !!myTeamId;
   const canSendChat = !isSpectator && !historyOpen && view?.status === "active";
-  const myCardCount = myHand?.length ?? 0;
+  const myCardCount = effectiveHand?.length ?? 0;
   const mustTradeNow =
     !historyOpen &&
     isMyTurn &&
     (phase === "Reinforcement" || phase === "Attack") &&
     myCardCount >= forcedTradeHandSize;
   const canTradeInCurrentState = phase === "Reinforcement" || (phase === "Attack" && mustTradeNow);
-  const autoTradeCardIds = findAutoTradeSet(myHand ?? [], tradeSets);
+  const autoTradeCardIds = findAutoTradeSet(effectiveHand ?? [], tradeSets);
   const timingMode = (view as { timingMode?: "realtime" | "async_1d" | "async_3d" } | null)?.timingMode ?? "realtime";
   const turnDeadlineAt = (view as { turnDeadlineAt?: number | null } | null)?.turnDeadlineAt ?? null;
   const remainingTurnMs = turnDeadlineAt ? Math.max(0, turnDeadlineAt - nowMs) : null;
@@ -238,11 +284,25 @@ export default function GamePage() {
       ? "0hr"
       : formatTurnTimer(remainingTurnMs ?? 0)
     : null;
+  const delegatablePlayerId =
+    !!state &&
+    !!view?.teamModeEnabled &&
+    view.status === "active" &&
+    !!myEnginePlayerId &&
+    !!currentTurnPlayerRef?.enginePlayerId &&
+    currentTurnPlayerRef.enginePlayerId !== myEnginePlayerId &&
+    currentTurnPlayerRef.allowTeammatesToAct === true &&
+    state.players[currentTurnPlayerRef.enginePlayerId]?.status === "alive" &&
+    !!ownPlayerRef?.teamId &&
+    ownPlayerRef.teamId === currentTurnPlayerRef.teamId
+      ? currentTurnPlayerRef.enginePlayerId
+      : null;
+  const delegatedPlayerName = delegatedPlayerId ? getPlayerName(delegatedPlayerId, playerMap) : null;
   const isTeammateOwner = useCallback((ownerId: string) => {
-    if (!state || !myEnginePlayerId || !myTeamId) return false;
-    if (ownerId === myEnginePlayerId || ownerId === "neutral") return false;
-    return state.players[ownerId]?.teamId === myTeamId;
-  }, [myEnginePlayerId, myTeamId, state]);
+    if (!state || !effectiveEnginePlayerId || !effectiveTeamId) return false;
+    if (ownerId === effectiveEnginePlayerId || ownerId === "neutral") return false;
+    return state.players[ownerId]?.teamId === effectiveTeamId;
+  }, [effectiveEnginePlayerId, effectiveTeamId, state]);
 
   const displayedTerritories = useMemo(() => {
     if (!state) return {};
@@ -264,13 +324,13 @@ export default function GamePage() {
 
   const validFromIds = useMemo(() => {
     const ids = new Set<string>();
-    if (!state || !myEnginePlayerId || !graphMap) return ids;
+    if (!state || !effectiveEnginePlayerId || !graphMap) return ids;
 
     if (isPlacementPhase) {
       if (uncommittedReinforcements <= 0) return ids;
       for (const [territoryId, territory] of Object.entries(state.territories)) {
         if (
-          territory.ownerId === myEnginePlayerId ||
+          territory.ownerId === effectiveEnginePlayerId ||
           (allowPlaceOnTeammate && isTeammateOwner(territory.ownerId))
         ) {
           ids.add(territoryId);
@@ -280,13 +340,13 @@ export default function GamePage() {
 
     if (state.turn.phase === "Attack") {
       for (const [territoryId, territory] of Object.entries(state.territories)) {
-        if (territory.ownerId === myEnginePlayerId && territory.armies >= 2) ids.add(territoryId);
+        if (territory.ownerId === effectiveEnginePlayerId && territory.armies >= 2) ids.add(territoryId);
       }
     }
 
     if (state.turn.phase === "Fortify") {
       for (const [territoryId, territory] of Object.entries(state.territories)) {
-        if (territory.ownerId === myEnginePlayerId && territory.armies >= 2) {
+        if (territory.ownerId === effectiveEnginePlayerId && territory.armies >= 2) {
           ids.add(territoryId);
         }
       }
@@ -298,21 +358,21 @@ export default function GamePage() {
     graphMap,
     isPlacementPhase,
     isTeammateOwner,
-    myEnginePlayerId,
+    effectiveEnginePlayerId,
     state,
     uncommittedReinforcements,
   ]);
 
   const validToIds = useMemo(() => {
     const ids = new Set<string>();
-    if (!state || !myEnginePlayerId || !graphMap || !selectedFrom) return ids;
+    if (!state || !effectiveEnginePlayerId || !graphMap || !selectedFrom) return ids;
 
     if (state.turn.phase === "Attack") {
       const neighbors = graphMap.adjacency[selectedFrom] ?? [];
       for (const neighborId of neighbors) {
         const territory = state.territories[neighborId];
         if (!territory) continue;
-        if (territory.ownerId === myEnginePlayerId) continue;
+        if (territory.ownerId === effectiveEnginePlayerId) continue;
         if (preventAttackingTeammates && isTeammateOwner(territory.ownerId)) continue;
         ids.add(neighborId);
       }
@@ -320,7 +380,7 @@ export default function GamePage() {
 
     if (state.turn.phase === "Fortify") {
       const canFortifyTo = (ownerId: string) => {
-        if (ownerId === myEnginePlayerId) return true;
+        if (ownerId === effectiveEnginePlayerId) return true;
         if (!teamsEnabled) return false;
         if (!allowFortifyWithTeammate) return false;
         return isTeammateOwner(ownerId);
@@ -337,7 +397,7 @@ export default function GamePage() {
         }
       } else {
         const canTraverse = (ownerId: string) => {
-          if (ownerId === myEnginePlayerId) return true;
+          if (ownerId === effectiveEnginePlayerId) return true;
           if (!teamsEnabled) return false;
           if (!allowFortifyThroughTeammates) return false;
           return isTeammateOwner(ownerId);
@@ -378,7 +438,7 @@ export default function GamePage() {
     fortifyMode,
     graphMap,
     isTeammateOwner,
-    myEnginePlayerId,
+    effectiveEnginePlayerId,
     preventAttackingTeammates,
     selectedFrom,
     state,
@@ -393,7 +453,7 @@ export default function GamePage() {
     if (!validFromIds.has(selectedFrom)) return undefined;
 
     const canTraverse = (ownerId: string) => {
-      if (ownerId === myEnginePlayerId) return true;
+      if (ownerId === effectiveEnginePlayerId) return true;
       if (!teamsEnabled) return false;
       if (!allowFortifyThroughTeammates) return false;
       return isTeammateOwner(ownerId);
@@ -435,7 +495,7 @@ export default function GamePage() {
     historyOpen,
     isMyTurn,
     isTeammateOwner,
-    myEnginePlayerId,
+    effectiveEnginePlayerId,
     phase,
     selectedFrom,
     state,
@@ -490,13 +550,14 @@ export default function GamePage() {
           gameId: typedGameId,
           expectedVersion: state.stateVersion,
           action: mutationAction,
+          delegatedPlayerId: isDelegationEligible ? delegatedPlayerId : undefined,
         });
         if (!isOptimisticAction) {
           resetAfterAction();
         }
       } catch (error) {
         stopAutoAttackRef.current();
-        toast.error(error instanceof Error ? error.message : "Action failed");
+        toast.error(getActionErrorMessage(error, "Action failed"));
       } finally {
         actionInFlightRef.current = false;
         setSubmitting(false);
@@ -505,7 +566,7 @@ export default function GamePage() {
         }
       }
     },
-    [state, submitActionMutation, typedGameId],
+    [delegatedPlayerId, isDelegationEligible, state, submitActionMutation, typedGameId],
   );
 
   const {
@@ -654,10 +715,19 @@ export default function GamePage() {
   );
 
   const handleConfirmPlacements = useCallback(async () => {
-    if (!typedGameId || !state || reinforcementDrafts.length === 0 || mustTradeNow || actionButtonCooldownActive) {
+    if (
+      !typedGameId ||
+      !state ||
+      reinforcementDrafts.length === 0 ||
+      mustTradeNow ||
+      actionButtonCooldownActive ||
+      placementInFlightRef.current
+    ) {
       return;
     }
     const previousDrafts = reinforcementDrafts;
+    placementInFlightRef.current = true;
+    setPlacementSubmitting(true);
     setReinforcementDrafts([]);
     setPlaceCount(1);
     setSelectedFrom(null);
@@ -666,14 +736,24 @@ export default function GamePage() {
       await submitReinforcementPlacementsMutation({
         gameId: typedGameId,
         expectedVersion: state.stateVersion,
+        delegatedPlayerId: isDelegationEligible ? delegatedPlayerId : undefined,
         placements: previousDrafts,
       });
     } catch (error) {
-      setReinforcementDrafts(previousDrafts);
-      toast.error(error instanceof Error ? error.message : "Could not confirm placements");
+      if (isStalePlacementError(error)) {
+        toast.error(getActionErrorMessage(error, "Could not confirm placements"));
+      } else {
+        setReinforcementDrafts(previousDrafts);
+        toast.error(getActionErrorMessage(error, "Could not confirm placements"));
+      }
+    } finally {
+      placementInFlightRef.current = false;
+      setPlacementSubmitting(false);
     }
   }, [
     actionButtonCooldownActive,
+    delegatedPlayerId,
+    isDelegationEligible,
     mustTradeNow,
     reinforcementDrafts,
     state,
@@ -685,8 +765,27 @@ export default function GamePage() {
     if (!isPlacementPhase || !isMyTurn) {
       setReinforcementDrafts([]);
       setPlaceCount(1);
+      reinforcementDraftVersionRef.current = null;
     }
   }, [isMyTurn, isPlacementPhase, state?.stateVersion]);
+
+  useEffect(() => {
+    if (reinforcementDrafts.length === 0) {
+      reinforcementDraftVersionRef.current = state?.stateVersion ?? null;
+      return;
+    }
+    if (!state) return;
+    if (reinforcementDraftVersionRef.current === null) {
+      reinforcementDraftVersionRef.current = state.stateVersion;
+      return;
+    }
+    if (state.stateVersion !== reinforcementDraftVersionRef.current && !placementInFlightRef.current) {
+      setReinforcementDrafts([]);
+      setPlaceCount(1);
+      reinforcementDraftVersionRef.current = state.stateVersion;
+      toast.error("The turn changed, so queued placements were cleared.");
+    }
+  }, [reinforcementDrafts.length, state]);
 
   useEffect(() => {
     const maxAllowed = Math.max(1, uncommittedReinforcements);
@@ -743,6 +842,18 @@ export default function GamePage() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!delegatedPlayerId) return;
+    if (!isDelegationEligible || historyOpen) {
+      setDelegatedPlayerId(null);
+      stopAutoAttack();
+      setSelectedFrom(null);
+      setSelectedTo(null);
+      setReinforcementDrafts([]);
+      setSelectedCardIds(new Set());
+    }
+  }, [delegatedPlayerId, historyOpen, isDelegationEligible, stopAutoAttack]);
 
   useEffect(() => {
     if (!state || !isMyTurn || historyOpen) return;
@@ -833,6 +944,23 @@ export default function GamePage() {
       toast.error(error instanceof Error ? error.message : "Could not resign");
     }
   }, [resignMutation, typedGameId]);
+
+  const handleStartDelegation = useCallback((playerId: string) => {
+    setDelegatedPlayerId(playerId);
+    setSelectedFrom(null);
+    setSelectedTo(null);
+    setReinforcementDrafts([]);
+    setSelectedCardIds(new Set());
+  }, []);
+
+  const handleStopDelegation = useCallback(() => {
+    stopAutoAttack();
+    setDelegatedPlayerId(null);
+    setSelectedFrom(null);
+    setSelectedTo(null);
+    setReinforcementDrafts([]);
+    setSelectedCardIds(new Set());
+  }, [stopAutoAttack]);
 
   const handleSendChatMessage = useCallback(async () => {
     if (!typedGameId) return;
@@ -1430,8 +1558,10 @@ export default function GamePage() {
           void handleConfirmPlacements();
         }}
         onEndAttackPhase={handleEndAttackPhase}
-        actionButtonsDisabled={actionButtonCooldownActive}
+        actionButtonsDisabled={actionButtonCooldownActive || placementSubmitting}
         onEndTurn={handleEndTurn}
+        delegatedPlayerName={isDelegationEligible ? delegatedPlayerName : null}
+        onStopDelegation={handleStopDelegation}
       />
 
       <div
@@ -1510,6 +1640,10 @@ export default function GamePage() {
               myEnginePlayerId={myEnginePlayerId ?? undefined}
               canResign={!isSpectator && !historyOpen}
               onResign={handleResign}
+              delegatablePlayerId={!historyOpen ? delegatablePlayerId : null}
+              delegatedPlayerId={isDelegationEligible ? delegatedPlayerId : null}
+              onStartDelegation={handleStartDelegation}
+              onStopDelegation={handleStopDelegation}
               chatMessages={chatMessages ?? []}
               chatChannel={chatChannel}
               canUseTeamChat={canUseTeamChat}
@@ -1545,7 +1679,7 @@ export default function GamePage() {
         onToggleShortcuts={() => setShortcutsOpen((prev) => !prev)}
         onCloseShortcuts={() => setShortcutsOpen(false)}
         cardsOpen={cardsOpen}
-        myHand={myHand}
+        myHand={effectiveHand}
         myCardCount={myCardCount}
         selectedCardIds={selectedCardIds}
         onToggleCard={toggleCard}

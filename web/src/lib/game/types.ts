@@ -24,6 +24,16 @@ export type PublicState = {
 
 export type HandCard = { cardId: string; kind: string; territoryId?: string };
 
+export type PlayerRef = {
+  userId?: string;
+  displayName: string;
+  color?: string | null;
+  role?: string;
+  enginePlayerId: string | null;
+  teamId?: string | null;
+  allowTeammatesToAct?: boolean;
+};
+
 export type MapVisual = {
   imageStorageId: string;
   imageWidth: number;

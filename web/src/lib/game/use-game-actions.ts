@@ -107,13 +107,17 @@ export function useGameActions() {
   const submitActionMutation = useMutation(api.gameplay.submitAction).withOptimisticUpdate(
     (localStore, args) => {
       const action = args.action as Action;
-      updateGameViewState(localStore, args.gameId, (state) => applyOptimisticAction(state, action));
+      updateGameViewState(localStore, args.gameId, (state) => {
+        if (state.stateVersion !== args.expectedVersion) return null;
+        return applyOptimisticAction(state, action);
+      });
     },
   );
   const submitReinforcementPlacementsMutation = useMutation(
     api.gameplay.submitReinforcementPlacements,
   ).withOptimisticUpdate((localStore, args) => {
     updateGameViewState(localStore, args.gameId, (state) => {
+      if (state.stateVersion !== args.expectedVersion) return null;
       let nextState: PublicState | null = state;
       for (const placement of args.placements) {
         if (!nextState) return null;

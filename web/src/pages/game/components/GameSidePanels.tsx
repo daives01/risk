@@ -26,6 +26,10 @@ interface GameSidePanelsProps {
   myEnginePlayerId: string | undefined;
   canResign: boolean;
   onResign: () => void;
+  delegatablePlayerId: string | null;
+  delegatedPlayerId: string | null;
+  onStartDelegation: (playerId: string) => void;
+  onStopDelegation: () => void;
   chatMessages: ChatMessage[];
   chatChannel: ChatChannel;
   canUseTeamChat: boolean;
@@ -59,6 +63,10 @@ export function GameSidePanels({
   myEnginePlayerId,
   canResign,
   onResign,
+  delegatablePlayerId,
+  delegatedPlayerId,
+  onStartDelegation,
+  onStopDelegation,
   chatMessages,
   chatChannel,
   canUseTeamChat,
@@ -98,6 +106,10 @@ export function GameSidePanels({
           myPlayerId={myEnginePlayerId}
           canResign={canResign}
           onResign={onResign}
+          delegatablePlayerId={delegatablePlayerId}
+          delegatedPlayerId={delegatedPlayerId}
+          onStartDelegation={onStartDelegation}
+          onStopDelegation={onStopDelegation}
         />
       </div>
       <div className="min-w-0 xl:order-last">

@@ -122,6 +122,8 @@ export default defineSchema({
     playerId: v.string(),
     action: v.any(),
     events: v.any(),
+    actingUserId: v.optional(v.string()),
+    wasDelegated: v.optional(v.boolean()),
     stateVersionBefore: v.optional(v.number()),
     stateVersionAfter: v.optional(v.number()),
     createdAt: v.number(),
@@ -161,6 +163,7 @@ export default defineSchema({
   userSettings: defineTable({
     userId: v.string(),
     emailTurnNotificationsEnabled: v.boolean(),
+    allowTeammatesToAct: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),
