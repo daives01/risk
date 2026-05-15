@@ -1,13 +1,18 @@
 import { Link } from "react-router-dom";
+import type { ComponentProps } from "react";
 import type { CardId } from "risk-engine";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { RulesetSummary } from "@/components/game/ruleset-summary";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface GameModalsProps {
   shortcutsOpen: boolean;
   onToggleShortcuts: () => void;
   onCloseShortcuts: () => void;
+  settingsOpen: boolean;
+  onCloseSettings: () => void;
+  rulesetSummary: ComponentProps<typeof RulesetSummary>;
   cardsOpen: boolean;
   myHand: Array<{ cardId: string; kind: string }> | null | undefined;
   myCardCount: number;
@@ -33,6 +38,9 @@ export function GameModals({
   shortcutsOpen,
   onToggleShortcuts,
   onCloseShortcuts,
+  settingsOpen,
+  onCloseSettings,
+  rulesetSummary,
   cardsOpen,
   myHand,
   myCardCount,
@@ -109,9 +117,34 @@ export function GameModals({
                 <p><span className="font-semibold">U</span>: Undo last placement</p>
                 <p><span className="font-semibold">C</span>: Open cards</p>
                 <p><span className="font-semibold">I</span>: Toggle map info</p>
+                <p><span className="font-semibold">G</span>: Open game rules</p>
                 <p><span className="font-semibold">F</span>: Toggle fullscreen map</p>
                 <p><span className="font-semibold">?</span>: Toggle this help</p>
                 <p><span className="font-semibold">H</span>: Toggle history</p>
+              </div>
+              <Link to="/faq" className="inline-block text-xs text-muted-foreground transition hover:text-primary">
+                FAQ &amp; How to Play →
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {settingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/65 p-4 backdrop-blur-[1px]">
+          <Card className="glass-panel w-full max-w-lg border border-border/70 py-0 shadow-xl">
+            <CardContent className="space-y-4 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-base font-semibold">Game Rules</p>
+                  <p className="text-sm text-muted-foreground">Current ruleset for this game.</p>
+                </div>
+                <Button size="xs" variant="outline" type="button" onClick={onCloseSettings}>
+                  Close
+                </Button>
+              </div>
+              <div className="rounded-lg border bg-background/75 p-3">
+                <RulesetSummary {...rulesetSummary} />
               </div>
               <Link to="/faq" className="inline-block text-xs text-muted-foreground transition hover:text-primary">
                 FAQ &amp; How to Play →

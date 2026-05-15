@@ -236,7 +236,7 @@ export function GamePlayersCard({
                                 size="icon-xs"
                                 variant="ghost"
                                 aria-label={`Play for ${playerName}`}
-                                className="text-primary hover:text-primary"
+                                className="text-muted-foreground hover:text-foreground"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   onStartDelegation?.(player.playerId);
@@ -258,13 +258,13 @@ export function GamePlayersCard({
                                 size="icon-xs"
                                 variant="ghost"
                                 aria-label={`Stop playing for ${playerName}`}
-                                className="text-muted-foreground hover:text-foreground"
+                                className="text-amber-500 hover:text-amber-400"
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   onStopDelegation?.();
                                 }}
                               >
-                                <X className="size-3" />
+                                <Handshake className="size-3" />
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>Stop playing for {playerName}</TooltipContent>

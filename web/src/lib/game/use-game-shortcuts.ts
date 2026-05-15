@@ -9,6 +9,7 @@ interface UseGameShortcutsOptions {
   isMyTurn: boolean;
   phase: Phase;
   cardsOpen: boolean;
+  settingsOpen: boolean;
   placeCount: number;
   attackDice: number;
   occupyMove: number;
@@ -35,6 +36,8 @@ interface UseGameShortcutsOptions {
   onToggleFullscreen: () => void;
   onToggleCards: () => void;
   onCloseCards: () => void;
+  onToggleSettings: () => void;
+  onCloseSettings: () => void;
   onClearSelection: () => void;
   onUndoPlacement: () => void;
 }
@@ -46,6 +49,7 @@ export function useGameShortcuts({
   isMyTurn,
   phase,
   cardsOpen,
+  settingsOpen,
   placeCount,
   attackDice,
   occupyMove,
@@ -72,6 +76,8 @@ export function useGameShortcuts({
   onToggleFullscreen,
   onToggleCards,
   onCloseCards,
+  onToggleSettings,
+  onCloseSettings,
   onClearSelection,
   onUndoPlacement,
 }: UseGameShortcutsOptions) {
@@ -83,6 +89,11 @@ export function useGameShortcuts({
       const withCommand = hasCommandModifier(event);
 
       if (event.key === "Escape") {
+        if (settingsOpen) {
+          event.preventDefault();
+          onCloseSettings();
+          return;
+        }
         if (cardsOpen) {
           event.preventDefault();
           onCloseCards();
@@ -144,6 +155,12 @@ export function useGameShortcuts({
       if (!historyOpen && key === "i") {
         event.preventDefault();
         onToggleInfoOverlay();
+        return;
+      }
+
+      if (key === "g") {
+        event.preventDefault();
+        onToggleSettings();
         return;
       }
 
@@ -250,6 +267,7 @@ export function useGameShortcuts({
     cardsOpen,
     onClearSelection,
     onCloseCards,
+    onCloseSettings,
     onSetAttackDice,
     onSetFortifyCount,
     onSetHistoryFrameIndex,
@@ -261,9 +279,11 @@ export function useGameShortcuts({
     onToggleShortcutCheatSheet,
     onToggleHistory,
     onToggleCards,
+    onToggleSettings,
     onUndoPlacement,
     phase,
     placeCount,
     reinforcementDraftCount,
+    settingsOpen,
   ]);
 }

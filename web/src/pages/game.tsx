@@ -19,6 +19,7 @@ import type { ChatChannel } from "@/lib/game/types";
 import type { ReinforcementDraft } from "@/lib/game/types";
 import { ROTATING_HINTS } from "@/lib/game/rotating-hints";
 import { territorySignature } from "@/lib/game/history-debug";
+import { formatCardIncrementLabel } from "@/lib/game/ruleset-summary";
 import { findAutoTradeSet, type TradeSetsConfig } from "@/lib/game/trade-cards";
 import { formatTurnTimer } from "@/lib/game/turn-timer";
 import { useGameActions } from "@/lib/game/use-game-actions";
@@ -106,6 +107,7 @@ export default function GamePage() {
   const [reinforcementDrafts, setReinforcementDrafts] = useState<ReinforcementDraft[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
   const [cardsOpen, setCardsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [infoOverlayEnabled, setInfoOverlayEnabled] = useState(false);
   const [infoPinnedTerritoryId, setInfoPinnedTerritoryId] = useState<string | null>(null);
@@ -268,6 +270,7 @@ export default function GamePage() {
   const canTradeInCurrentState = phase === "Reinforcement" || (phase === "Attack" && mustTradeNow);
   const autoTradeCardIds = findAutoTradeSet(effectiveHand ?? [], tradeSets);
   const timingMode = (view as { timingMode?: "realtime" | "async_1d" | "async_3d" } | null)?.timingMode ?? "realtime";
+  const excludeWeekends = (view as { excludeWeekends?: boolean } | null)?.excludeWeekends ?? false;
   const turnDeadlineAt = (view as { turnDeadlineAt?: number | null } | null)?.turnDeadlineAt ?? null;
   const remainingTurnMs = turnDeadlineAt ? Math.max(0, turnDeadlineAt - nowMs) : null;
   const winningPlayerId = (view as { winningPlayerId?: string | null } | null)?.winningPlayerId ?? null;
@@ -295,6 +298,13 @@ export default function GamePage() {
       ? "0hr"
       : formatTurnTimer(remainingTurnMs ?? 0)
     : null;
+  const timingModeLabel =
+    timingMode === "async_1d"
+      ? "Async (1 day / turn)"
+      : timingMode === "async_3d"
+        ? "Async (3 days / turn)"
+        : "Realtime (no turn timer)";
+  const cardIncrementLabel = formatCardIncrementLabel(tradeValues, tradeValueOverflow);
   const delegatablePlayerId =
     !!state &&
     !!view?.teamModeEnabled &&
@@ -1155,6 +1165,7 @@ export default function GamePage() {
     isMyTurn,
     phase,
     cardsOpen,
+    settingsOpen,
     placeCount,
     attackDice,
     occupyMove,
@@ -1184,6 +1195,12 @@ export default function GamePage() {
     },
     onCloseCards: () => {
       setCardsOpen(false);
+    },
+    onToggleSettings: () => {
+      setSettingsOpen((prev) => !prev);
+    },
+    onCloseSettings: () => {
+      setSettingsOpen(false);
     },
     onClearSelection: () => {
       stopAutoAttack();
@@ -1545,9 +1562,10 @@ export default function GamePage() {
           }
         }}
         onToggleHistory={toggleHistory}
+        onOpenSettings={() => setSettingsOpen(true)}
         historyToggleDisabled={historySummary?.latestActionIndex == null}
         isMapFullscreen={isMapFullscreen}
-        showBackHome={!isMyTurn}
+        showBackHome
         renderHistoryScrubber={() => (
           <HistoryScrubber
             min={0}
@@ -1683,6 +1701,21 @@ export default function GamePage() {
         shortcutsOpen={shortcutsOpen}
         onToggleShortcuts={() => setShortcutsOpen((prev) => !prev)}
         onCloseShortcuts={() => setShortcutsOpen(false)}
+        settingsOpen={settingsOpen}
+        onCloseSettings={() => setSettingsOpen(false)}
+        rulesetSummary={{
+          cardIncrementLabel,
+          timingModeLabel,
+          showExcludeWeekends: timingMode !== "realtime",
+          excludeWeekends,
+          fortifyMode,
+          maxFortifiesPerTurn,
+          forcedTradeHandSize,
+          teamModeEnabled: teamsEnabled,
+          allowPlaceOnTeammate,
+          allowFortifyWithTeammate,
+          allowFortifyThroughTeammates,
+        }}
         cardsOpen={cardsOpen}
         myHand={effectiveHand}
         myCardCount={myCardCount}

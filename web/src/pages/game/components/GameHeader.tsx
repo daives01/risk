@@ -14,6 +14,7 @@ import {
   SkipBack,
   SkipForward,
   SlidersHorizontal,
+  Settings,
   Undo2,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -59,6 +60,7 @@ interface GameHeaderProps {
   infoOpen: boolean;
   onToggleInfo: () => void;
   onToggleHistory: () => void;
+  onOpenSettings: () => void;
   historyToggleDisabled: boolean;
   isMapFullscreen: boolean;
   showBackHome: boolean;
@@ -108,6 +110,7 @@ export function GameHeader({
   infoOpen,
   onToggleInfo,
   onToggleHistory,
+  onOpenSettings,
   historyToggleDisabled,
   isMapFullscreen,
   showBackHome,
@@ -407,6 +410,21 @@ export function GameHeader({
               <TooltipContent>Toggle history (H)</TooltipContent>
             </Tooltip>
           )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                type="button"
+                aria-label="Open game rules"
+                onClick={onOpenSettings}
+                className="enabled:cursor-pointer"
+              >
+                <Settings className="size-4" aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Game rules (G)</TooltipContent>
+          </Tooltip>
         </TooltipProvider>
       </div>
       </div>
