@@ -4,6 +4,7 @@ import type { CardId } from "risk-engine";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { RulesetSummary } from "@/components/game/ruleset-summary";
+import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface GameModalsProps {
@@ -13,6 +14,10 @@ interface GameModalsProps {
   settingsOpen: boolean;
   onCloseSettings: () => void;
   rulesetSummary: ComponentProps<typeof RulesetSummary>;
+  showDelegationToggle: boolean;
+  allowTeammatesToAct: boolean;
+  delegationError: string | null;
+  onToggleDelegation: (allow: boolean) => void;
   cardsOpen: boolean;
   myHand: Array<{ cardId: string; kind: string }> | null | undefined;
   myCardCount: number;
@@ -41,6 +46,10 @@ export function GameModals({
   settingsOpen,
   onCloseSettings,
   rulesetSummary,
+  showDelegationToggle,
+  allowTeammatesToAct,
+  delegationError,
+  onToggleDelegation,
   cardsOpen,
   myHand,
   myCardCount,
@@ -146,6 +155,18 @@ export function GameModals({
               <div className="rounded-lg border bg-background/75 p-3">
                 <RulesetSummary {...rulesetSummary} />
               </div>
+              {showDelegationToggle && (
+                <div className="space-y-2 rounded-lg border bg-background/75 p-3">
+                  <label className="flex items-center justify-between gap-3">
+                    <span className="text-sm text-muted-foreground">Allow teammates to play my turns</span>
+                    <Switch
+                      checked={allowTeammatesToAct}
+                      onCheckedChange={onToggleDelegation}
+                    />
+                  </label>
+                  {delegationError && <p className="text-sm text-red-400">{delegationError}</p>}
+                </div>
+              )}
               <Link to="/faq" className="inline-block text-xs text-muted-foreground transition hover:text-primary">
                 FAQ &amp; How to Play →
               </Link>

@@ -183,6 +183,7 @@ export const createGame = mutation({
       color: PLAYER_COLOR_PALETTE[0],
       role: "host",
       joinedAt: Date.now(),
+      allowTeammatesToAct: false,
     });
 
     // Generate invite code
@@ -257,6 +258,7 @@ export const joinGameByInvite = mutation({
       color: nextColor,
       role: "player",
       joinedAt: Date.now(),
+      allowTeammatesToAct: false,
     });
 
     return { gameId: invite.gameId };

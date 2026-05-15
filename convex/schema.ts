@@ -104,6 +104,7 @@ export default defineSchema({
     joinedAt: v.number(),
     enginePlayerId: v.optional(v.string()),
     teamId: v.optional(v.string()),
+    allowTeammatesToAct: v.optional(v.boolean()),
   })
     .index("by_gameId", ["gameId"])
     .index("by_userId", ["userId"])
@@ -163,7 +164,6 @@ export default defineSchema({
   userSettings: defineTable({
     userId: v.string(),
     emailTurnNotificationsEnabled: v.boolean(),
-    allowTeammatesToAct: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),

@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useLocation, useParams } from "react-router-dom";
+import { useMutation } from "convex/react";
+import type { OptimisticLocalStore } from "convex/browser";
+import type { FunctionReturnType } from "convex/server";
 import type { Id } from "@backend/_generated/dataModel";
+import { api } from "@backend/_generated/api";
 import { defaultRuleset } from "risk-engine";
 import type { Action, CardId, TerritoryId } from "risk-engine";
 import { authClient } from "@/lib/auth-client";
@@ -41,6 +45,41 @@ import { cn } from "@/lib/utils";
 
 const HINT_ROTATION_MS = 18000;
 const ACTION_BUTTON_COOLDOWN_MS = 1000;
+
+type GameViewWithPlayers = {
+  players: Array<{
+    userId?: string;
+    allowTeammatesToAct?: boolean;
+  }>;
+};
+
+function updateGameDelegationView<Query extends typeof api.games.getGameView | typeof api.games.getGameViewAsPlayer>(
+  localStore: OptimisticLocalStore,
+  query: Query,
+  args: { gameId: Id<"games">; userId: string; allow: boolean },
+) {
+  const queryArgs = { gameId: args.gameId } as const;
+  const existing = localStore.getQuery(
+    query,
+    queryArgs as unknown as Parameters<typeof localStore.getQuery>[1],
+  ) as unknown as GameViewWithPlayers | null | undefined;
+  if (!existing) return;
+
+  const next = {
+    ...existing,
+    players: existing.players.map((player) =>
+      player.userId === args.userId
+        ? { ...player, allowTeammatesToAct: args.allow }
+        : player,
+    ),
+  };
+  localStore.setQuery(
+    query,
+    queryArgs as unknown as Parameters<typeof localStore.setQuery>[1],
+    next as FunctionReturnType<Query>,
+  );
+}
+
 function isStalePlacementError(error: unknown) {
   if (!(error instanceof Error)) return false;
   return (
@@ -98,6 +137,22 @@ export default function GamePage() {
     editGameChatMessageMutation,
     deleteGameChatMessageMutation,
   } = useGameActions();
+  const currentUserId = session?.user?.id ? String(session.user.id) : null;
+  const setMyGameDelegationMutation = useMutation(api.games.setMyGameDelegation).withOptimisticUpdate(
+    (localStore, args) => {
+      if (!currentUserId) return;
+      updateGameDelegationView(localStore, api.games.getGameView, {
+        gameId: args.gameId,
+        userId: currentUserId,
+        allow: args.allow,
+      });
+      updateGameDelegationView(localStore, api.games.getGameViewAsPlayer, {
+        gameId: args.gameId,
+        userId: currentUserId,
+        allow: args.allow,
+      });
+    },
+  );
 
   const [selectedFrom, setSelectedFrom] = useState<string | null>(null);
   const [selectedTo, setSelectedTo] = useState<string | null>(null);
@@ -123,6 +178,7 @@ export default function GamePage() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [actionButtonCooldownActive, setActionButtonCooldownActive] = useState(false);
   const [delegatedPlayerId, setDelegatedPlayerId] = useState<string | null>(null);
+  const [delegationError, setDelegationError] = useState<string | null>(null);
   const autoEndFortifyVersionRef = useRef<number | null>(null);
   const optionalTradeAutoOpenRef = useRef<number | null>(null);
   const actionInFlightRef = useRef(false);
@@ -157,6 +213,12 @@ export default function GamePage() {
   const effectiveEnginePlayerId = isDelegationEligible ? delegatedPlayerId : myEnginePlayerId;
   const effectiveHand = isDelegationEligible ? delegatableTurnHand : myHand;
   const isMyTurn = !!effectiveEnginePlayerId && !!state && state.turn.currentPlayerId === effectiveEnginePlayerId;
+  const myGameDelegationEnabled = ownPlayerRef?.allowTeammatesToAct === true;
+  const showDelegationToggle =
+    !!typedGameId &&
+    !!view?.teamModeEnabled &&
+    view.status !== "finished" &&
+    !!myEnginePlayerId;
   const {
     historyOpen,
     setHistoryOpen,
@@ -188,6 +250,16 @@ export default function GamePage() {
     });
     setHistoryPlaying(false);
   }, [isMapFullscreen, setHistoryOpen, setHistoryPlaying]);
+
+  const handleToggleGameDelegation = useCallback(async (allow: boolean) => {
+    if (!typedGameId) return;
+    setDelegationError(null);
+    try {
+      await setMyGameDelegationMutation({ gameId: typedGameId, allow });
+    } catch (error) {
+      setDelegationError(error instanceof Error ? error.message : "Unable to update turn delegation.");
+    }
+  }, [setMyGameDelegationMutation, typedGameId]);
   const controlsDisabled = !isMyTurn || isSpectator || submitting || placementSubmitting || historyOpen;
   const canSetOccupyShortcut =
     !!state?.pending &&
@@ -1715,6 +1787,12 @@ export default function GamePage() {
           allowPlaceOnTeammate,
           allowFortifyWithTeammate,
           allowFortifyThroughTeammates,
+        }}
+        showDelegationToggle={showDelegationToggle}
+        allowTeammatesToAct={myGameDelegationEnabled}
+        delegationError={delegationError}
+        onToggleDelegation={(allow) => {
+          void handleToggleGameDelegation(allow);
         }}
         cardsOpen={cardsOpen}
         myHand={effectiveHand}

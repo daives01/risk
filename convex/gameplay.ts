@@ -177,6 +177,7 @@ function extractEliminationNotificationData(events: unknown[]): {
 type DelegationPlayerDoc = {
   enginePlayerId?: string;
   teamId?: string;
+  allowTeammatesToAct?: boolean;
 };
 
 export function resolveActingPlayerFromDocs(args: {
@@ -247,19 +248,12 @@ async function resolveActingPlayer(ctx: MutationCtx, args: {
       .filter((q) => q.eq(q.field("enginePlayerId"), requestedPlayerId))
       .unique()
     : null;
-  const targetSettings = targetPlayer
-    ? await ctx.db
-      .query("userSettings")
-      .withIndex("by_userId", (q) => q.eq("userId", targetPlayer.userId))
-      .unique()
-    : null;
-
   return resolveActingPlayerFromDocs({
     requestedPlayerId: args.requestedPlayerId,
     callerId: args.callerId,
     callerPlayer,
     targetPlayer,
-    targetAllowsDelegation: targetSettings?.allowTeammatesToAct ?? true,
+    targetAllowsDelegation: targetPlayer?.allowTeammatesToAct ?? false,
     game: args.game,
     state: args.state,
   });
