@@ -1,6 +1,7 @@
 import { internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { readGameStateNullable } from "./typeAdapters";
+import { getGameStateDoc } from "./gameState";
 
 export const getSlackNotificationContext = internalQuery({
   args: { gameId: v.id("games"), expectedPlayerId: v.string(), turnStartedAt: v.number() },
@@ -12,7 +13,8 @@ export const getSlackNotificationContext = internalQuery({
     if (!game.slackTeamId) return { ok: false as const, reason: "missing_team" };
     if (game.turnStartedAt !== args.turnStartedAt) return { ok: false as const, reason: "stale_turn" };
 
-    const state = readGameStateNullable(game.state);
+    const gameState = await getGameStateDoc(ctx, args.gameId);
+    const state = readGameStateNullable(gameState?.privateState);
     if (!state || state.turn.currentPlayerId !== args.expectedPlayerId) {
       return { ok: false as const, reason: "player_mismatch" };
     }

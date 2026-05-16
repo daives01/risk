@@ -72,7 +72,7 @@ export const getGameView = query({
     }
 
     const gameState = await getGameStateDoc(ctx, gameId);
-    const state = readGameStateNullable(gameState?.privateState ?? game.state);
+    const state = readGameStateNullable(gameState?.privateState);
 
     return {
       _id: game._id,
@@ -169,7 +169,7 @@ export const getGameViewAsPlayer = query({
     }
 
     const gameState = await getGameStateDoc(ctx, gameId);
-    const state = readGameStateNullable(gameState?.privateState ?? game.state);
+    const state = readGameStateNullable(gameState?.privateState);
     const enginePlayerId = callerPlayer?.enginePlayerId as
       | PlayerId
       | undefined;
@@ -346,7 +346,7 @@ export const listMyGames = query({
         }
 
         const gameState = game.status === "active" ? await getGameStateDoc(ctx, game._id) : null;
-        const privateState = readGameStateNullable(gameState?.privateState ?? game.state);
+        const privateState = readGameStateNullable(gameState?.privateState);
 
         return {
           _id: game._id,

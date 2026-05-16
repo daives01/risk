@@ -75,8 +75,11 @@ export default defineSchema({
     finishedAt: v.optional(v.number()),
     winningPlayerId: v.optional(v.string()),
     winningTeamId: v.optional(v.string()),
+    // Obsolete: current state now lives in gameStates; kept only until old rows are cleared.
     initialState: v.optional(v.any()),
+    // Obsolete: current state now lives in gameStates; kept only until old rows are cleared.
     state: v.optional(v.any()),
+    // Obsolete: use gameStates.version.
     stateVersion: v.optional(v.number()),
     turnStartedAt: v.optional(v.number()),
     turnDeadlineAt: v.optional(v.number()),
@@ -145,26 +148,6 @@ export default defineSchema({
     index: v.number(),
     publicState: v.any(),
     createdAt: v.number(),
-  }).index("by_gameId_index", ["gameId", "index"]),
-  gameTimelineFrames: defineTable({
-    gameId: v.id("games"),
-    index: v.number(),
-    actionId: v.optional(v.id("gameActions")),
-    projectionVersion: v.optional(v.number()),
-    actionType: v.optional(v.string()),
-    label: v.optional(v.string()),
-    actorId: v.optional(v.union(v.string(), v.null())),
-    events: v.optional(v.any()),
-    turnRound: v.optional(v.number()),
-    turnPlayerId: v.optional(v.string()),
-    turnPhase: v.optional(v.string()),
-    hasCapture: v.optional(v.boolean()),
-    eliminatedPlayerIds: v.optional(v.array(v.string())),
-    replayError: v.optional(v.union(v.string(), v.null())),
-    checkpointState: v.optional(v.any()),
-    statePatch: v.optional(v.any()),
-    state: v.optional(v.any()),
-    createdAt: v.optional(v.number()),
   }).index("by_gameId_index", ["gameId", "index"]),
   gameChatMessages: defineTable({
     gameId: v.id("games"),

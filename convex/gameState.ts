@@ -42,10 +42,10 @@ export async function getGameStateDoc(ctx: any, gameId: Id<"games">) {
 
 export async function readCurrentPrivateGameState(
   ctx: any,
-  game: { _id: Id<"games">; state?: unknown },
+  game: { _id: Id<"games"> },
 ) {
   const gameState = await getGameStateDoc(ctx, game._id);
-  return readGameStateNullable(gameState?.privateState ?? game.state);
+  return readGameStateNullable(gameState?.privateState);
 }
 
 export async function upsertCurrentGameState(

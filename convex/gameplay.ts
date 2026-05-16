@@ -8,20 +8,16 @@ import {
   ActionError,
   calculateReinforcements,
 } from "risk-engine";
-import type { Action, CardId, GameState, PlayerId, GraphMap, TerritoryId, GameEvent, RulesetConfig } from "risk-engine";
+import type { Action, CardId, GameState, PlayerId, GraphMap, TerritoryId, RulesetConfig } from "risk-engine";
 import { resolveEffectiveRuleset, type RulesetOverrides } from "./rulesets";
 import { computeTurnDeadlineAt, didTurnAdvance, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
-import { readGameState, readGraphMap } from "./typeAdapters";
+import { readGraphMap } from "./typeAdapters";
 import { scheduleTurnTimeout } from "./turnTimeoutScheduling";
-import {
-  buildTimelineStatePatch,
-  shouldStoreTimelineCheckpoint,
-  TIMELINE_CHECKPOINT_INTERVAL,
-  type TimelinePublicState,
-} from "./historyTimeline";
+import { buildTimelineStatePatch } from "./historyTimeline";
 import {
   GAME_STATE_SNAPSHOT_INTERVAL,
   insertGameStateSnapshotIfMissing,
+  publicGameStateProjection,
   readCurrentPrivateGameState,
   upsertCurrentGameState,
 } from "./gameState";
@@ -156,77 +152,6 @@ function extractEliminationNotificationData(events: unknown[]): {
       ? { byPlayerId: eliminationEvents[0].byId as string }
       : {}),
   };
-}
-
-function buildTimelineFrame(args: {
-  gameId: Id<"games">;
-  index: number;
-  events: GameEvent[];
-  state: GameState;
-  previousState?: GameState;
-}) {
-  const state = toTimelinePublicState(args.state);
-  const previousState = args.previousState ? toTimelinePublicState(args.previousState) : null;
-  const checkpointState = shouldStoreTimelineCheckpoint(args.index) ? state : undefined;
-  return {
-    gameId: args.gameId,
-    index: args.index,
-    events: redactEvents(args.events as unknown as RawEvent[]),
-    checkpointState,
-    statePatch: checkpointState ? undefined : buildTimelineStatePatch(previousState, state),
-  };
-}
-
-function buildStartTimelineFrame(args: {
-  gameId: Id<"games">;
-  state: GameState;
-}) {
-  return {
-    gameId: args.gameId,
-    index: -1,
-    events: [],
-    checkpointState: toTimelinePublicState(args.state),
-  };
-}
-
-async function insertTimelineFrameIfMissing(
-  ctx: MutationCtx,
-  frame: ReturnType<typeof buildTimelineFrame> | ReturnType<typeof buildStartTimelineFrame>,
-) {
-  const existing = await ctx.db
-    .query("gameTimelineFrames")
-    .withIndex("by_gameId_index", (q) => q.eq("gameId", frame.gameId).eq("index", frame.index))
-    .unique();
-  if (existing) return existing._id;
-  return await ctx.db.insert("gameTimelineFrames", frame);
-}
-
-async function insertTimelineProjectionIfMissing(
-  ctx: MutationCtx,
-  args: {
-    gameId: Id<"games">;
-    index: number;
-    events: GameEvent[];
-    state: GameState;
-    previousState?: GameState;
-  },
-) {
-  await insertTimelineFrameIfMissing(ctx, buildTimelineFrame(args));
-}
-
-async function insertInitialTimelineProjectionIfAvailable(
-  ctx: MutationCtx,
-  args: {
-    gameId: Id<"games">;
-    initialState: unknown;
-  },
-) {
-  if (!args.initialState) return;
-  const state = readGameState(args.initialState);
-  await insertTimelineFrameIfMissing(ctx, buildStartTimelineFrame({
-    gameId: args.gameId,
-    state,
-  }));
 }
 
 type DelegationPlayerDoc = {
@@ -396,11 +321,6 @@ export const submitAction = mutation({
     const nextIndex = lastAction ? lastAction.index + 1 : 0;
 
     const createdAt = Date.now();
-    await insertInitialTimelineProjectionIfAvailable(ctx, {
-      gameId: args.gameId,
-      initialState: game.initialState,
-    });
-
     // Append to action log
     await ctx.db.insert("gameActions", {
       gameId: args.gameId,
@@ -409,21 +329,14 @@ export const submitAction = mutation({
       action: args.action,
       events: result.events,
       publicStatePatch: buildTimelineStatePatch(
-        toTimelinePublicState(state),
-        toTimelinePublicState(result.state),
+        publicGameStateProjection(state),
+        publicGameStateProjection(result.state),
       ),
       actingUserId: actingPlayer.actingUserId,
       wasDelegated: actingPlayer.wasDelegated,
       stateVersionBefore: state.stateVersion,
       stateVersionAfter: result.state.stateVersion,
       createdAt,
-    });
-    await insertTimelineProjectionIfMissing(ctx, {
-      gameId: args.gameId,
-      index: nextIndex,
-      events: result.events as GameEvent[],
-      state: result.state,
-      previousState: state,
     });
     await insertGameStateSnapshotIfMissing(ctx, {
       gameId: args.gameId,
@@ -461,8 +374,6 @@ export const submitAction = mutation({
       updatedAt: now,
     });
     await ctx.db.patch(args.gameId, {
-      state: result.state,
-      stateVersion: result.state.stateVersion,
       turnStartedAt: timingPatch.turnStartedAt,
       turnDeadlineAt: timingPatch.turnDeadlineAt,
       turnTimeoutJobId,
@@ -599,10 +510,6 @@ export const submitReinforcementPlacements = mutation({
 
     const action = { type: "PlaceReinforcementsBatch", placements: args.placements };
     const createdAt = Date.now();
-    await insertInitialTimelineProjectionIfAvailable(ctx, {
-      gameId: args.gameId,
-      initialState: game.initialState,
-    });
     await ctx.db.insert("gameActions", {
       gameId: args.gameId,
       index: nextIndex,
@@ -610,21 +517,14 @@ export const submitReinforcementPlacements = mutation({
       action,
       events,
       publicStatePatch: buildTimelineStatePatch(
-        toTimelinePublicState(state),
-        toTimelinePublicState(nextState),
+        publicGameStateProjection(state),
+        publicGameStateProjection(nextState),
       ),
       actingUserId: actingPlayer.actingUserId,
       wasDelegated: actingPlayer.wasDelegated,
       stateVersionBefore: state.stateVersion,
       stateVersionAfter: nextState.stateVersion,
       createdAt,
-    });
-    await insertTimelineProjectionIfMissing(ctx, {
-      gameId: args.gameId,
-      index: nextIndex,
-      events: events as GameEvent[],
-      state: nextState,
-      previousState: state,
     });
     await insertGameStateSnapshotIfMissing(ctx, {
       gameId: args.gameId,
@@ -660,8 +560,6 @@ export const submitReinforcementPlacements = mutation({
       updatedAt: now,
     });
     await ctx.db.patch(args.gameId, {
-      state: nextState,
-      stateVersion: nextState.stateVersion,
       turnStartedAt: timingPatch.turnStartedAt,
       turnDeadlineAt: timingPatch.turnDeadlineAt,
       turnTimeoutJobId,
@@ -867,10 +765,6 @@ export const resign = mutation({
 
     const action = { type: "Resign" };
     const createdAt = Date.now();
-    await insertInitialTimelineProjectionIfAvailable(ctx, {
-      gameId,
-      initialState: game.initialState,
-    });
     await ctx.db.insert("gameActions", {
       gameId,
       index: nextIndex,
@@ -878,19 +772,12 @@ export const resign = mutation({
       action,
       events,
       publicStatePatch: buildTimelineStatePatch(
-        toTimelinePublicState(state),
-        toTimelinePublicState(newState),
+        publicGameStateProjection(state),
+        publicGameStateProjection(newState),
       ),
       stateVersionBefore: state.stateVersion,
       stateVersionAfter: newState.stateVersion,
       createdAt,
-    });
-    await insertTimelineProjectionIfMissing(ctx, {
-      gameId,
-      index: nextIndex,
-      events: events as GameEvent[],
-      state: newState,
-      previousState: state,
     });
     await insertGameStateSnapshotIfMissing(ctx, {
       gameId,
@@ -905,8 +792,6 @@ export const resign = mutation({
       updatedAt: now,
     });
     await ctx.db.patch(gameId, {
-      state: newState,
-      stateVersion: newState.stateVersion,
       turnStartedAt: timingPatch.turnStartedAt,
       turnDeadlineAt: timingPatch.turnDeadlineAt,
       turnTimeoutJobId,
@@ -1027,54 +912,6 @@ export const getHistorySummary = query({
   },
 });
 
-function toTimelinePublicState(state: GameState): TimelinePublicState {
-  const handSizes: Record<string, number> = {};
-  for (const [playerId, hand] of Object.entries(state.hands)) {
-    handSizes[playerId] = hand.length;
-  }
-
-  const turnOrder = [...state.turnOrder];
-  const territories = Object.fromEntries(
-    Object.entries(state.territories).map(([territoryId, territory]) => [
-      territoryId,
-      { ownerId: territory.ownerId, armies: territory.armies },
-    ]),
-  );
-
-  return {
-    players: state.players as Record<string, { status: string; teamId?: string }>,
-    turnOrder,
-    territories,
-    turn: {
-      currentPlayerId: state.turn.currentPlayerId,
-      phase: state.turn.phase,
-      round: state.turn.round,
-    },
-    pending: state.pending
-      ? {
-          type: "Occupy",
-          from: state.pending.from,
-          to: state.pending.to,
-          minMove: state.pending.minMove,
-          maxMove: state.pending.maxMove,
-        }
-      : undefined,
-    reinforcements: state.reinforcements
-      ? {
-          remaining: state.reinforcements.remaining,
-          sources: state.reinforcements.sources,
-        }
-      : undefined,
-    capturedThisTurn: state.capturedThisTurn,
-    tradesCompleted: state.tradesCompleted,
-    fortifiesUsedThisTurn: state.fortifiesUsedThisTurn,
-    deckCount: state.deck.draw.length,
-    discardCount: state.deck.discard.length,
-    handSizes,
-    stateVersion: state.stateVersion,
-  };
-}
-
 export function applyResignStateTransition(
   state: GameState,
   playerId: PlayerId,
@@ -1159,77 +996,6 @@ export function applyResignStateTransition(
     stateVersion: state.stateVersion + 1,
   };
 }
-
-export const getHistoryTimeline = query({
-  args: {
-    gameId: v.id("games"),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, { gameId, limit }) => {
-    const latestAction = await ctx.db
-      .query("gameActions")
-      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
-      .order("desc")
-      .first();
-    const latestIndex = latestAction?.index ?? -1;
-    const projectedKeep = typeof limit === "number" && Number.isFinite(limit) && limit > 0
-      ? Math.floor(limit) + 1
-      : undefined;
-    const compactReadCount = projectedKeep ? projectedKeep + TIMELINE_CHECKPOINT_INTERVAL : undefined;
-    const projectedFrames = await ctx.db
-      .query("gameTimelineFrames")
-      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
-      .order("desc")
-      .take(compactReadCount ?? Math.max(1, latestIndex + 2));
-    const projectedTimeline = projectedFrames.reverse();
-    const projectedStartIndex = projectedKeep
-      ? Math.max(-1, latestIndex - projectedKeep + 1)
-      : -1;
-
-    let checkpointOffset = -1;
-    for (let i = projectedTimeline.length - 1; i >= 0; i -= 1) {
-      const frame = projectedTimeline[i]!;
-      if (frame.index <= projectedStartIndex && frame.checkpointState) {
-        checkpointOffset = i;
-        break;
-      }
-    }
-    const compactTimeline = checkpointOffset >= 0 ? projectedTimeline.slice(checkpointOffset) : [];
-    const hasCompactTimeline =
-      compactTimeline.length > 0 &&
-      compactTimeline[0]!.checkpointState &&
-      compactTimeline[compactTimeline.length - 1]!.index === latestIndex &&
-      compactTimeline.every((frame, i) =>
-        i === 0 || frame.index === compactTimeline[i - 1]!.index + 1
-      ) &&
-      compactTimeline.every((frame, i) => i === 0 || frame.checkpointState || frame.statePatch);
-    if (hasCompactTimeline) {
-      return compactTimeline.map((frame) => ({
-        index: frame.index,
-        events: frame.events,
-        ...(frame.checkpointState ? { checkpointState: frame.checkpointState } : {}),
-        ...(frame.statePatch ? { statePatch: frame.statePatch } : {}),
-      }));
-    }
-
-    const legacyTimeline = projectedTimeline.filter((frame) => frame.index >= projectedStartIndex);
-    const hasLegacyTimeline =
-      legacyTimeline.length > 0 &&
-      legacyTimeline[0]!.index === projectedStartIndex &&
-      legacyTimeline[legacyTimeline.length - 1]!.index === latestIndex &&
-      legacyTimeline.every((frame, i) => i === 0 || frame.index === legacyTimeline[i - 1]!.index + 1) &&
-      legacyTimeline.every((frame) => frame.state);
-    if (hasLegacyTimeline) {
-      return legacyTimeline.map((frame) => ({
-        index: frame.index,
-        events: frame.events,
-        checkpointState: frame.state as TimelinePublicState,
-      }));
-    }
-
-    return [];
-  },
-});
 
 export const getHistoryWindow = query({
   args: {

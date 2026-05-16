@@ -296,8 +296,6 @@ async function processExpiredTurnForGame(ctx: any, args: {
     updatedAt: now,
   });
   await ctx.db.patch(game._id, {
-    state: resolution.nextState,
-    stateVersion: resolution.nextState.stateVersion,
     ...(isGameOver
       ? { status: "finished" as const, finishedAt: now, ...winner }
       : {}),
@@ -409,7 +407,7 @@ export const getGameForNotification = internalQuery({
 
     return {
       ...game,
-      state: gameState?.privateState ?? game.state,
+      state: gameState?.privateState,
       players,
     };
   },

@@ -998,9 +998,6 @@ export const startGame = mutation({
     await ctx.db.patch(gameId, {
       status: "active",
       startedAt: Date.now(),
-      initialState: engineState,
-      state: engineState,
-      stateVersion: 1,
       effectiveRuleset: toStoredRuleset(effectiveRuleset),
       turnStartedAt,
       turnDeadlineAt: turnDeadlineAt ?? undefined,
