@@ -14,12 +14,6 @@ export default function LandingPage() {
     <div className="soft-grid flex min-h-screen flex-col bg-[--app-bg] lg:flex-row">
       <div className="flex flex-col justify-center px-6 py-16 md:px-12 lg:w-[42%] lg:px-16 lg:py-0">
         <div className="max-w-lg">
-          <p className="text-[13px] tracking-[0.3em] text-[--app-accent] uppercase">
-            A Game of <span className="text-[--app-text]">Strategic</span> Domination
-          </p>
-
-          <hr className="my-5 w-12 border-t border-[--app-accent]/50" />
-
           <h1 className="text-[clamp(2rem,5vw,3.5rem)] font-bold leading-[1.1] tracking-tight text-primary">
             Legally Distinct
             <br />
@@ -28,7 +22,7 @@ export default function LandingPage() {
 
           <p className="mb-10 mt-5 max-w-md text-sm leading-relaxed text-[--app-muted]">
             Command armies, forge alliances, and conquer every territory in
-            this classic game of global strategy. Play at your own pace with
+            this classic game of global strategy. Play with your coworkers with
             async turns.
           </p>
 
@@ -37,7 +31,7 @@ export default function LandingPage() {
               to={session ? "/home" : "/signup"}
               className="inline-flex h-11 items-center justify-center border border-[--app-accent] bg-[--app-accent] px-7 text-sm font-semibold tracking-[0.08em] text-[--app-bg] transition-all hover:brightness-110"
             >
-              {session ? "GO TO HQ" : "PLAY NOW"}
+              {session ? "GO TO HQ" : "SIGN UP"}
             </Link>
             <Link
               to={session ? "/games/new" : "/login"}
@@ -47,9 +41,6 @@ export default function LandingPage() {
             </Link>
           </div>
 
-          <p className="mt-10 text-xs tracking-wider text-[--app-muted]/60">
-            Free to play. No download required.
-          </p>
         </div>
       </div>
 
