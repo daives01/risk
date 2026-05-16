@@ -1,22 +1,14 @@
 import { GameChatCard, GamePlayersCard } from "@/components/game/game-panels";
+import type { ChatMentionMap } from "@/lib/game/chat-mentions";
 import type { ChatHoverTag, HighlightFilter } from "@/lib/game/highlighting";
-import type { ChatChannel, ChatMessage, PublicState } from "@/lib/game/types";
+import type { PlayerPanelStats } from "@/lib/game/player-stats";
+import type { ChatChannel, ChatMessage, PlayerRef, PublicState } from "@/lib/game/types";
 
 interface GameSidePanelsProps {
-  playerStats: Array<{
-    playerId: string;
-    territories: number;
-    armies: number;
-    reserveTroops: number;
-    cards: number;
-    status: string;
-    teamId?: string;
-  }>;
+  playerStats: PlayerPanelStats[];
   resolvedDisplayState: PublicState;
-  playerMap: Array<{ userId?: string; displayName: string; enginePlayerId: string | null; teamId?: string | null }>;
-  graphMap: {
-    territories: Record<string, { name?: string }>;
-  };
+  playerMap: PlayerRef[];
+  graphMap: ChatMentionMap;
   teamModeEnabled: boolean;
   teamNames: Record<string, string>;
   showTurnTimer: boolean;
@@ -25,7 +17,7 @@ interface GameSidePanelsProps {
   onTogglePlayerHighlight: (playerId: string) => void;
   onToggleTeamHighlight: (teamId: string) => void;
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
-  getPlayerName: (enginePlayerId: string, players: Array<{ displayName: string; enginePlayerId: string | null }>) => string;
+  getPlayerName: (enginePlayerId: string, players: PlayerRef[]) => string;
   myEnginePlayerId: string | undefined;
   canResign: boolean;
   onResign: () => void;
