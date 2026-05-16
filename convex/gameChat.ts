@@ -3,12 +3,28 @@ import { v } from "convex/values";
 import { authComponent } from "./auth.js";
 import type { Id } from "./_generated/dataModel";
 
-const CHAT_CHANNEL_VALIDATOR = v.union(v.literal("global"), v.literal("team"));
+const CHAT_CHANNEL_VALIDATOR = v.union(v.literal("all"), v.literal("team"), v.literal("dm"));
+const PUBLIC_CHAT_CHANNEL_VALIDATOR = v.union(v.literal("all"), v.literal("team"));
 const MAX_CHAT_LENGTH = 300;
 const DEFAULT_MESSAGE_LIMIT = 60;
 const MAX_MESSAGE_LIMIT = 120;
 
-export type ChatChannel = "global" | "team";
+export type ChatChannel = "all" | "team" | "dm";
+type StoredChatChannel = ChatChannel | "global";
+type StoredChatMessage = {
+  _id: Id<"gameChatMessages">;
+  channel: StoredChatChannel;
+  teamId?: string;
+  recipientUserId?: string;
+  recipientDisplayName?: string;
+  recipientEnginePlayerId?: string;
+  text: string;
+  createdAt: number;
+  editedAt?: number;
+  senderUserId: string;
+  senderDisplayName: string;
+  senderEnginePlayerId?: string;
+};
 
 export function normalizeChatMessage(text: string): string {
   const normalized = text.trim();
@@ -26,7 +42,7 @@ export function resolveTeamChannelAccess(args: {
   teamModeEnabled: boolean;
   playerTeamId?: string | null;
 }) {
-  if (args.channel === "global") {
+  if (args.channel === "all" || args.channel === "dm") {
     return null;
   }
   if (!args.teamModeEnabled) {
@@ -64,10 +80,84 @@ async function getMembershipContext(ctx: QueryCtx | MutationCtx, gameId: Id<"gam
   };
 }
 
+async function getGameParticipantByEnginePlayerId(
+  ctx: QueryCtx | MutationCtx,
+  gameId: Id<"games">,
+  enginePlayerId: string,
+) {
+  const players = await ctx.db
+    .query("gamePlayers")
+    .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
+    .collect();
+  return players.find((player) => player.enginePlayerId === enginePlayerId) ?? null;
+}
+
+function normalizeMessageLimit(limit?: number) {
+  return Math.max(1, Math.min(MAX_MESSAGE_LIMIT, Math.trunc(limit ?? DEFAULT_MESSAGE_LIMIT)));
+}
+
+function newestFirst(messages: StoredChatMessage[], limit: number) {
+  return messages.sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
+}
+
+async function listRecentAllMessages(ctx: QueryCtx, gameId: Id<"games">, limit: number) {
+  const allMessages = await ctx.db
+    .query("gameChatMessages")
+    .withIndex("by_gameId_channel_createdAt", (q) => q.eq("gameId", gameId).eq("channel", "all"))
+    .order("desc")
+    .take(limit);
+  const legacyGlobalMessages = await ctx.db
+    .query("gameChatMessages")
+    .withIndex("by_gameId_channel_createdAt", (q) => q.eq("gameId", gameId).eq("channel", "global"))
+    .order("desc")
+    .take(limit);
+
+  return newestFirst([...allMessages, ...legacyGlobalMessages], limit);
+}
+
+async function listRecentTeamMessages(
+  ctx: QueryCtx,
+  gameId: Id<"games">,
+  teamId: string,
+  limit: number,
+) {
+  return ctx.db
+    .query("gameChatMessages")
+    .withIndex("by_gameId_channel_teamId_createdAt", (q) =>
+      q.eq("gameId", gameId).eq("channel", "team").eq("teamId", teamId),
+    )
+    .order("desc")
+    .take(limit);
+}
+
+async function listRecentDirectMessages(
+  ctx: QueryCtx,
+  gameId: Id<"games">,
+  callerId: string,
+  limit: number,
+) {
+  const sentMessages = await ctx.db
+    .query("gameChatMessages")
+    .withIndex("by_gameId_channel_senderUserId_createdAt", (q) =>
+      q.eq("gameId", gameId).eq("channel", "dm").eq("senderUserId", callerId),
+    )
+    .order("desc")
+    .take(limit);
+  const receivedMessages = await ctx.db
+    .query("gameChatMessages")
+    .withIndex("by_gameId_channel_recipientUserId_createdAt", (q) =>
+      q.eq("gameId", gameId).eq("channel", "dm").eq("recipientUserId", callerId),
+    )
+    .order("desc")
+    .take(limit);
+
+  return [...sentMessages, ...receivedMessages];
+}
+
 export const listMessages = query({
   args: {
     gameId: v.id("games"),
-    channel: CHAT_CHANNEL_VALIDATOR,
+    channel: PUBLIC_CHAT_CHANNEL_VALIDATOR,
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -78,52 +168,24 @@ export const listMessages = query({
       playerTeamId: membership.teamId ?? null,
     });
 
-    const limit = Math.max(1, Math.min(MAX_MESSAGE_LIMIT, Math.trunc(args.limit ?? DEFAULT_MESSAGE_LIMIT)));
+    const limit = normalizeMessageLimit(args.limit);
 
-    const messages = args.channel === "global"
-      ? await ctx.db
-          .query("gameChatMessages")
-          .withIndex("by_gameId_channel_createdAt", (q) => q.eq("gameId", args.gameId).eq("channel", "global"))
-          .order("desc")
-          .take(limit)
-      : await ctx.db
-          .query("gameChatMessages")
-          .withIndex("by_gameId_channel_teamId_createdAt", (q) =>
-            q.eq("gameId", args.gameId).eq("channel", "team").eq("teamId", teamId!),
-          )
-          .order("desc")
-          .take(limit);
+    const messages = args.channel === "all"
+      ? await listRecentAllMessages(ctx, args.gameId, limit)
+      : await listRecentTeamMessages(ctx, args.gameId, teamId!, limit);
 
-    return messages.reverse().map((message) => ({
-      _id: message._id,
-      channel: message.channel,
-      teamId: message.teamId ?? null,
-      text: message.text,
-      createdAt: message.createdAt,
-      editedAt: message.editedAt ?? null,
-      senderUserId: message.senderUserId,
-      senderDisplayName: message.senderDisplayName,
-      senderEnginePlayerId: message.senderEnginePlayerId ?? null,
-      isMine: message.senderUserId === callerId,
-    }));
+    return messages.reverse().map((message) => formatMessageForClient(message, callerId));
   },
 });
 
-function formatMessageForClient(message: {
-  _id: Id<"gameChatMessages">;
-  channel: ChatChannel;
-  teamId?: string;
-  text: string;
-  createdAt: number;
-  editedAt?: number;
-  senderUserId: string;
-  senderDisplayName: string;
-  senderEnginePlayerId?: string;
-}, callerId: string) {
+function formatMessageForClient(message: StoredChatMessage, callerId: string) {
   return {
     _id: message._id,
-    channel: message.channel,
+    channel: message.channel === "global" ? "all" : message.channel,
     teamId: message.teamId ?? null,
+    recipientUserId: message.recipientUserId ?? null,
+    recipientDisplayName: message.recipientDisplayName ?? null,
+    recipientEnginePlayerId: message.recipientEnginePlayerId ?? null,
     text: message.text,
     createdAt: message.createdAt,
     editedAt: message.editedAt ?? null,
@@ -145,26 +207,13 @@ export const listVisibleMessages = query({
       game.teamModeEnabled && membership.teamId
         ? membership.teamId
         : null;
-    const limit = Math.max(1, Math.min(MAX_MESSAGE_LIMIT, Math.trunc(args.limit ?? DEFAULT_MESSAGE_LIMIT)));
+    const limit = normalizeMessageLimit(args.limit);
 
-    const globalMessages = await ctx.db
-      .query("gameChatMessages")
-      .withIndex("by_gameId_channel_createdAt", (q) => q.eq("gameId", args.gameId).eq("channel", "global"))
-      .order("desc")
-      .take(limit);
-    const teamMessages = teamId
-      ? await ctx.db
-          .query("gameChatMessages")
-          .withIndex("by_gameId_channel_teamId_createdAt", (q) =>
-            q.eq("gameId", args.gameId).eq("channel", "team").eq("teamId", teamId),
-          )
-          .order("desc")
-          .take(limit)
-      : [];
+    const allMessages = await listRecentAllMessages(ctx, args.gameId, limit);
+    const teamMessages = teamId ? await listRecentTeamMessages(ctx, args.gameId, teamId, limit) : [];
+    const directMessages = await listRecentDirectMessages(ctx, args.gameId, callerId, limit);
 
-    return [...globalMessages, ...teamMessages]
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, limit)
+    return newestFirst([...allMessages, ...teamMessages, ...directMessages], limit)
       .reverse()
       .map((message) => formatMessageForClient(message, callerId));
   },
@@ -174,6 +223,7 @@ export const sendMessage = mutation({
   args: {
     gameId: v.id("games"),
     channel: CHAT_CHANNEL_VALIDATOR,
+    recipientEnginePlayerId: v.optional(v.string()),
     text: v.string(),
   },
   handler: async (ctx, args) => {
@@ -187,12 +237,29 @@ export const sendMessage = mutation({
       teamModeEnabled: game.teamModeEnabled ?? false,
       playerTeamId: membership.teamId ?? null,
     });
+    const recipient = args.channel === "dm"
+      ? await getGameParticipantByEnginePlayerId(ctx, args.gameId, args.recipientEnginePlayerId ?? "")
+      : null;
+    if (args.channel === "dm") {
+      if (!args.recipientEnginePlayerId) {
+        throw new Error("Choose a player to message");
+      }
+      if (!recipient) {
+        throw new Error("Message recipient is not in this game");
+      }
+      if (recipient.userId === callerId) {
+        throw new Error("You cannot send a direct message to yourself");
+      }
+    }
 
     const text = normalizeChatMessage(args.text);
     await ctx.db.insert("gameChatMessages", {
       gameId: args.gameId,
       channel: args.channel,
       teamId: teamId ?? undefined,
+      recipientUserId: recipient?.userId,
+      recipientDisplayName: recipient?.displayName,
+      recipientEnginePlayerId: recipient?.enginePlayerId,
       senderUserId: callerId,
       senderDisplayName: membership.displayName,
       senderEnginePlayerId: membership.enginePlayerId,

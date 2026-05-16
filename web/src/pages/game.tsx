@@ -11,9 +11,11 @@ import { authClient } from "@/lib/auth-client";
 import { adaptMapDoc, adaptView } from "@/lib/game/adapters";
 import { getPlayerColor, getPlayerName } from "@/lib/game/display";
 import {
+  resolveChatHoverTerritoryIds,
   resolveHighlightedTerritoryIds,
   togglePlayerHighlight,
   toggleTeamHighlight,
+  type ChatHoverTag,
   type HighlightFilter,
 } from "@/lib/game/highlighting";
 import { buildPlayerPanelStats } from "@/lib/game/player-stats";
@@ -117,7 +119,8 @@ export default function GamePage() {
   const typedGameId = gameId as Id<"games"> | undefined;
   const { playerView, publicView } = useGameViewQueries(session, typedGameId);
   const { view, myEnginePlayerId, myHand, delegatableTurnHand, playerMap, state } = adaptView(playerView, publicView);
-  const [chatChannel, setChatChannel] = useState<ChatChannel>("global");
+  const [chatChannel, setChatChannel] = useState<ChatChannel>("all");
+  const [chatRecipientEnginePlayerId, setChatRecipientEnginePlayerId] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState("");
   const [chatEditingMessageId, setChatEditingMessageId] = useState<string | null>(null);
   const [chatEditingChannel, setChatEditingChannel] = useState<ChatChannel | null>(null);
@@ -174,6 +177,8 @@ export default function GamePage() {
   const recentAttackTimeoutRef = useRef<number | null>(null);
   const [suppressTroopDeltas, setSuppressTroopDeltas] = useState(false);
   const [highlightFilter, setHighlightFilter] = useState<HighlightFilter>("none");
+  const [chatHoverTag, setChatHoverTag] = useState<ChatHoverTag>(null);
+  const [chatPinnedTerritoryId, setChatPinnedTerritoryId] = useState<string | null>(null);
   const [isMapFullscreen, setIsMapFullscreen] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [actionButtonCooldownActive, setActionButtonCooldownActive] = useState(false);
@@ -330,7 +335,6 @@ export default function GamePage() {
   );
   const myTeamId = myEnginePlayerId && state ? state.players[myEnginePlayerId]?.teamId : undefined;
   const effectiveTeamId = effectiveEnginePlayerId && state ? state.players[effectiveEnginePlayerId]?.teamId : undefined;
-  const myTeamName = myTeamId ? teamNames[myTeamId] ?? myTeamId : null;
   const canUseTeamChat = !!view?.teamModeEnabled && !!myTeamId;
   const canSendChat = !isSpectator && !historyOpen && view?.status === "active";
   const myCardCount = effectiveHand?.length ?? 0;
@@ -1076,6 +1080,9 @@ export default function GamePage() {
         await sendGameChatMessageMutation({
           gameId: typedGameId,
           channel: chatChannel,
+          ...(chatChannel === "dm" && chatRecipientEnginePlayerId
+            ? { recipientEnginePlayerId: chatRecipientEnginePlayerId }
+            : {}),
           text,
         });
       }
@@ -1092,6 +1099,7 @@ export default function GamePage() {
     }
   }, [
     chatChannel,
+    chatRecipientEnginePlayerId,
     chatDraft,
     chatEditingMessageId,
     editGameChatMessageMutation,
@@ -1102,6 +1110,14 @@ export default function GamePage() {
   const handleStartEditChatMessage = useCallback((message: ChatMessage) => {
     setChatEditingMessageId(message._id);
     setChatEditingChannel(message.channel);
+    setChatChannel(message.channel);
+    setChatRecipientEnginePlayerId(
+      message.channel === "dm"
+        ? message.isMine
+          ? message.recipientEnginePlayerId
+          : message.senderEnginePlayerId
+        : null,
+    );
     setChatDraft(message.text);
   }, []);
 
@@ -1168,9 +1184,22 @@ export default function GamePage() {
 
   useEffect(() => {
     if (chatChannel === "team" && !canUseTeamChat) {
-      setChatChannel("global");
+      setChatChannel("all");
+      setChatRecipientEnginePlayerId(null);
     }
   }, [canUseTeamChat, chatChannel]);
+
+  useEffect(() => {
+    if (chatChannel !== "dm") return;
+    const recipientStillExists = playerMap.some((player) =>
+      player.enginePlayerId === chatRecipientEnginePlayerId &&
+      player.enginePlayerId !== myEnginePlayerId
+    );
+    if (!recipientStillExists) {
+      setChatChannel("all");
+      setChatRecipientEnginePlayerId(null);
+    }
+  }, [chatChannel, chatRecipientEnginePlayerId, myEnginePlayerId, playerMap]);
 
   useEffect(() => {
     if (!chatEditingMessageId) return;
@@ -1190,6 +1219,20 @@ export default function GamePage() {
     setHighlightFilter((prev) => toggleTeamHighlight(prev, teamId));
   }, []);
 
+  const handleClickChatTag = useCallback((tag: Exclude<ChatHoverTag, null>) => {
+    if (tag.kind === "player") {
+      setChatPinnedTerritoryId(null);
+      setHighlightFilter((prev) => togglePlayerHighlight(prev, tag.playerId));
+      return;
+    }
+    if (tag.kind === "team") {
+      setChatPinnedTerritoryId(null);
+      setHighlightFilter((prev) => toggleTeamHighlight(prev, tag.teamId));
+      return;
+    }
+    setChatPinnedTerritoryId((prev) => (prev === tag.territoryId ? null : tag.territoryId));
+  }, []);
+
   useEffect(() => {
     if (highlightFilter === "none") return;
     const onPointerDown = (event: PointerEvent) => {
@@ -1202,6 +1245,17 @@ export default function GamePage() {
     window.addEventListener("pointerdown", onPointerDown);
     return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [highlightFilter]);
+
+  useEffect(() => {
+    if (!chatPinnedTerritoryId) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest("[data-chat-tag='true']")) return;
+      setChatPinnedTerritoryId(null);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, [chatPinnedTerritoryId]);
 
   useEffect(() => {
     if (historyOpen || isSpectator || !isMyTurn) return;
@@ -1291,10 +1345,17 @@ export default function GamePage() {
   });
 
   const displayState = historyOpen ? (historyFrames[historyFrameIndex]?.state ?? state) : state;
-  const highlightedTerritoryIds = useMemo(
-    () => (displayState ? resolveHighlightedTerritoryIds(displayState, highlightFilter) : new Set<string>()),
-    [displayState, highlightFilter],
-  );
+  const highlightedTerritoryIds = useMemo(() => {
+    if (!displayState) return new Set<string>();
+    const selectedIds = resolveHighlightedTerritoryIds(displayState, highlightFilter);
+    const hoverIds = resolveChatHoverTerritoryIds(displayState, chatHoverTag);
+    const pinnedIds = chatPinnedTerritoryId && displayState.territories[chatPinnedTerritoryId]
+      ? new Set([chatPinnedTerritoryId])
+      : new Set<string>();
+    if (hoverIds.size === 0 && pinnedIds.size === 0) return selectedIds;
+    return new Set([...selectedIds, ...pinnedIds, ...hoverIds]);
+  }, [chatHoverTag, chatPinnedTerritoryId, displayState, highlightFilter]);
+  const chatHoverTerritoryId = chatHoverTag?.kind === "territory" ? chatHoverTag.territoryId : null;
   const playerStats = useMemo(() => (displayState ? buildPlayerPanelStats(displayState) : []), [displayState]);
 
   useEffect(() => {
@@ -1695,6 +1756,8 @@ export default function GamePage() {
             fortifyConnectedEdgeIds={fortifyConnectedEdgeIds}
             infoOverlayEnabled={infoOverlayEnabled}
             infoPinnedTerritoryId={infoPinnedTerritoryId}
+            externalFocusTerritoryId={chatHoverTerritoryId}
+            externalFocusTerritoryTooltip={!!chatHoverTerritoryId}
             onSetInfoPinnedTerritoryId={setInfoPinnedTerritoryId}
             troopDeltaDurationMs={TROOP_DELTA_DURATION_MS}
             suppressTroopDeltas={suppressTroopDeltas}
@@ -1723,6 +1786,7 @@ export default function GamePage() {
               playerStats={playerStats}
               resolvedDisplayState={resolvedDisplayState}
               playerMap={playerMap}
+              graphMap={graphMap}
               teamModeEnabled={!!view.teamModeEnabled}
               teamNames={teamNames}
               showTurnTimer={showTurnTimer}
@@ -1741,21 +1805,23 @@ export default function GamePage() {
               onStopDelegation={handleStopDelegation}
               chatMessages={chatMessages ?? []}
               chatChannel={chatChannel}
+              chatRecipientEnginePlayerId={chatRecipientEnginePlayerId}
               canUseTeamChat={canUseTeamChat}
-              myTeamName={myTeamName}
               canSendChat={canSendChat}
               chatDraft={chatDraft}
               chatEditingMessageId={chatEditingMessageId}
               chatEditingChannel={chatEditingChannel}
               onSetChatDraft={setChatDraft}
-              onSelectChannel={(nextChannel) => {
+              onSelectChannel={(nextChannel, recipientEnginePlayerId = null) => {
                 setChatChannel(nextChannel);
+                setChatRecipientEnginePlayerId(nextChannel === "dm" ? recipientEnginePlayerId : null);
                 setChatEditingMessageId(null);
                 setChatEditingChannel(null);
                 setChatDraft("");
               }}
               onToggleChannel={() => {
-                setChatChannel((currentChannel) => currentChannel === "team" ? "global" : "team");
+                setChatChannel((currentChannel) => currentChannel === "team" ? "all" : "team");
+                setChatRecipientEnginePlayerId(null);
               }}
               onStartEditMessage={handleStartEditChatMessage}
               onCancelEditMessage={handleCancelEditChatMessage}
@@ -1765,6 +1831,9 @@ export default function GamePage() {
               onSendMessage={() => {
                 void handleSendChatMessage();
               }}
+              onHoverChatTag={setChatHoverTag}
+              onLeaveChatTag={() => setChatHoverTag(null)}
+              onClickChatTag={handleClickChatTag}
             />
           </div>
         )}

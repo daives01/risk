@@ -134,8 +134,11 @@ export default defineSchema({
     .index("by_gameId_playerId", ["gameId", "playerId"]),
   gameChatMessages: defineTable({
     gameId: v.id("games"),
-    channel: v.union(v.literal("global"), v.literal("team")),
+    channel: v.union(v.literal("all"), v.literal("global"), v.literal("team"), v.literal("dm")),
     teamId: v.optional(v.string()),
+    recipientUserId: v.optional(v.string()),
+    recipientDisplayName: v.optional(v.string()),
+    recipientEnginePlayerId: v.optional(v.string()),
     senderUserId: v.string(),
     senderDisplayName: v.string(),
     senderEnginePlayerId: v.optional(v.string()),
@@ -145,7 +148,9 @@ export default defineSchema({
   })
     .index("by_gameId_createdAt", ["gameId", "createdAt"])
     .index("by_gameId_channel_createdAt", ["gameId", "channel", "createdAt"])
-    .index("by_gameId_channel_teamId_createdAt", ["gameId", "channel", "teamId", "createdAt"]),
+    .index("by_gameId_channel_teamId_createdAt", ["gameId", "channel", "teamId", "createdAt"])
+    .index("by_gameId_channel_senderUserId_createdAt", ["gameId", "channel", "senderUserId", "createdAt"])
+    .index("by_gameId_channel_recipientUserId_createdAt", ["gameId", "channel", "recipientUserId", "createdAt"]),
   maps: defineTable({
     mapId: v.string(),
     name: v.string(),

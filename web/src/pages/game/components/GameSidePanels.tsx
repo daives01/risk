@@ -1,19 +1,14 @@
 import { GameChatCard, GamePlayersCard } from "@/components/game/game-panels";
-import type { HighlightFilter } from "@/lib/game/highlighting";
-import type { ChatChannel, ChatMessage, PublicState } from "@/lib/game/types";
+import type { ChatMentionMap } from "@/lib/game/chat-mentions";
+import type { ChatHoverTag, HighlightFilter } from "@/lib/game/highlighting";
+import type { PlayerPanelStats } from "@/lib/game/player-stats";
+import type { ChatChannel, ChatMessage, PlayerRef, PublicState } from "@/lib/game/types";
 
 interface GameSidePanelsProps {
-  playerStats: Array<{
-    playerId: string;
-    territories: number;
-    armies: number;
-    reserveTroops: number;
-    cards: number;
-    status: string;
-    teamId?: string;
-  }>;
+  playerStats: PlayerPanelStats[];
   resolvedDisplayState: PublicState;
-  playerMap: Array<{ displayName: string; enginePlayerId: string | null }>;
+  playerMap: PlayerRef[];
+  graphMap: ChatMentionMap;
   teamModeEnabled: boolean;
   teamNames: Record<string, string>;
   showTurnTimer: boolean;
@@ -22,7 +17,7 @@ interface GameSidePanelsProps {
   onTogglePlayerHighlight: (playerId: string) => void;
   onToggleTeamHighlight: (teamId: string) => void;
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
-  getPlayerName: (enginePlayerId: string, players: Array<{ displayName: string; enginePlayerId: string | null }>) => string;
+  getPlayerName: (enginePlayerId: string, players: PlayerRef[]) => string;
   myEnginePlayerId: string | undefined;
   canResign: boolean;
   onResign: () => void;
@@ -32,25 +27,29 @@ interface GameSidePanelsProps {
   onStopDelegation: () => void;
   chatMessages: ChatMessage[];
   chatChannel: ChatChannel;
+  chatRecipientEnginePlayerId: string | null;
   canUseTeamChat: boolean;
-  myTeamName: string | null;
   canSendChat: boolean;
   chatDraft: string;
   chatEditingMessageId: string | null;
   chatEditingChannel: ChatChannel | null;
   onSetChatDraft: (value: string) => void;
-  onSelectChannel: (channel: ChatChannel) => void;
+  onSelectChannel: (channel: ChatChannel, recipientEnginePlayerId?: string | null) => void;
   onToggleChannel: () => void;
   onStartEditMessage: (message: ChatMessage) => void;
   onCancelEditMessage: () => void;
   onDeleteMessage: (messageId: string) => void;
   onSendMessage: () => void;
+  onHoverChatTag: (tag: ChatHoverTag) => void;
+  onLeaveChatTag: () => void;
+  onClickChatTag: (tag: Exclude<ChatHoverTag, null>) => void;
 }
 
 export function GameSidePanels({
   playerStats,
   resolvedDisplayState,
   playerMap,
+  graphMap,
   teamModeEnabled,
   teamNames,
   showTurnTimer,
@@ -69,8 +68,8 @@ export function GameSidePanels({
   onStopDelegation,
   chatMessages,
   chatChannel,
+  chatRecipientEnginePlayerId,
   canUseTeamChat,
-  myTeamName,
   canSendChat,
   chatDraft,
   chatEditingMessageId,
@@ -82,11 +81,10 @@ export function GameSidePanels({
   onCancelEditMessage,
   onDeleteMessage,
   onSendMessage,
+  onHoverChatTag,
+  onLeaveChatTag,
+  onClickChatTag,
 }: GameSidePanelsProps) {
-  const visibleChatMessages = chatChannel === "team"
-    ? chatMessages.filter((message) => message.channel === "team")
-    : chatMessages;
-
   return (
     <>
       <div className="min-w-0 space-y-4">
@@ -114,11 +112,15 @@ export function GameSidePanels({
       </div>
       <div className="min-w-0 xl:order-last">
         <GameChatCard
-          messages={visibleChatMessages}
+          messages={chatMessages}
           activeChannel={chatChannel}
+          activeRecipientEnginePlayerId={chatRecipientEnginePlayerId}
+          playerOptions={playerMap}
+          teamNames={teamNames}
+          graphMap={graphMap}
+          myEnginePlayerId={myEnginePlayerId}
           teamGameEnabled={teamModeEnabled}
           teamAvailable={canUseTeamChat}
-          activeTeamName={myTeamName}
           canSend={canSendChat}
           draftText={chatDraft}
           editingMessageId={chatEditingMessageId}
@@ -130,6 +132,9 @@ export function GameSidePanels({
           onCancelEditMessage={onCancelEditMessage}
           onDeleteMessage={onDeleteMessage}
           onSend={onSendMessage}
+          onHoverTag={onHoverChatTag}
+          onLeaveTag={onLeaveChatTag}
+          onClickTag={onClickChatTag}
         />
       </div>
     </>

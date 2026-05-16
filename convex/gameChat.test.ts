@@ -8,10 +8,17 @@ describe("game chat", () => {
     expect(() => normalizeChatMessage("x".repeat(301))).toThrow("Message cannot exceed 300 characters");
   });
 
-  test("allows global access without team assignment", () => {
+  test("allows all access without team assignment", () => {
     expect(
       resolveTeamChannelAccess({
-        channel: "global",
+        channel: "all",
+        teamModeEnabled: false,
+        playerTeamId: null,
+      }),
+    ).toBeNull();
+    expect(
+      resolveTeamChannelAccess({
+        channel: "dm",
         teamModeEnabled: false,
         playerTeamId: null,
       }),

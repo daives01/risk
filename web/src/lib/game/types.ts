@@ -50,12 +50,15 @@ export type GameAction = {
 
 export type ReinforcementDraft = { territoryId: string; count: number };
 
-export type ChatChannel = "global" | "team";
+export type ChatChannel = "all" | "team" | "dm";
 
 export type ChatMessage = {
   _id: string;
   channel: ChatChannel;
   teamId: string | null;
+  recipientUserId: string | null;
+  recipientDisplayName: string | null;
+  recipientEnginePlayerId: string | null;
   text: string;
   createdAt: number;
   editedAt: number | null;

@@ -35,6 +35,8 @@ interface GameMapSectionProps {
   fortifyConnectedEdgeIds: Set<string> | undefined;
   infoOverlayEnabled: boolean;
   infoPinnedTerritoryId: string | null;
+  externalFocusTerritoryId?: string | null;
+  externalFocusTerritoryTooltip?: boolean;
   onSetInfoPinnedTerritoryId: (territoryId: string | null) => void;
   troopDeltaDurationMs: number;
   suppressTroopDeltas: boolean;
@@ -76,6 +78,8 @@ export function GameMapSection({
   fortifyConnectedEdgeIds,
   infoOverlayEnabled,
   infoPinnedTerritoryId,
+  externalFocusTerritoryId = null,
+  externalFocusTerritoryTooltip = false,
   onSetInfoPinnedTerritoryId,
   troopDeltaDurationMs,
   suppressTroopDeltas,
@@ -133,6 +137,8 @@ export function GameMapSection({
             onToggleFullscreen={onToggleFullscreen}
             infoOverlayEnabled={infoOverlayEnabled}
             infoPinnedTerritoryId={infoPinnedTerritoryId}
+            externalFocusTerritoryId={externalFocusTerritoryId}
+            externalFocusTerritoryTooltip={externalFocusTerritoryTooltip}
             onSetInfoPinnedTerritoryId={onSetInfoPinnedTerritoryId}
             onClickTerritory={onTerritoryClick}
             onRightClickTerritory={onTerritoryRightClick}
