@@ -1,5 +1,5 @@
 import { GameChatCard, GamePlayersCard } from "@/components/game/game-panels";
-import type { HighlightFilter } from "@/lib/game/highlighting";
+import type { ChatHoverTag, HighlightFilter } from "@/lib/game/highlighting";
 import type { ChatChannel, ChatMessage, PublicState } from "@/lib/game/types";
 
 interface GameSidePanelsProps {
@@ -13,7 +13,10 @@ interface GameSidePanelsProps {
     teamId?: string;
   }>;
   resolvedDisplayState: PublicState;
-  playerMap: Array<{ userId?: string; displayName: string; enginePlayerId: string | null }>;
+  playerMap: Array<{ userId?: string; displayName: string; enginePlayerId: string | null; teamId?: string | null }>;
+  graphMap: {
+    territories: Record<string, { name?: string }>;
+  };
   teamModeEnabled: boolean;
   teamNames: Record<string, string>;
   showTurnTimer: boolean;
@@ -45,12 +48,16 @@ interface GameSidePanelsProps {
   onCancelEditMessage: () => void;
   onDeleteMessage: (messageId: string) => void;
   onSendMessage: () => void;
+  onHoverChatTag: (tag: ChatHoverTag) => void;
+  onLeaveChatTag: () => void;
+  onClickChatTag: (tag: Exclude<ChatHoverTag, null>) => void;
 }
 
 export function GameSidePanels({
   playerStats,
   resolvedDisplayState,
   playerMap,
+  graphMap,
   teamModeEnabled,
   teamNames,
   showTurnTimer,
@@ -82,6 +89,9 @@ export function GameSidePanels({
   onCancelEditMessage,
   onDeleteMessage,
   onSendMessage,
+  onHoverChatTag,
+  onLeaveChatTag,
+  onClickChatTag,
 }: GameSidePanelsProps) {
   return (
     <>
@@ -114,6 +124,8 @@ export function GameSidePanels({
           activeChannel={chatChannel}
           activeRecipientEnginePlayerId={chatRecipientEnginePlayerId}
           playerOptions={playerMap}
+          teamNames={teamNames}
+          graphMap={graphMap}
           myEnginePlayerId={myEnginePlayerId}
           teamGameEnabled={teamModeEnabled}
           teamAvailable={canUseTeamChat}
@@ -128,6 +140,9 @@ export function GameSidePanels({
           onCancelEditMessage={onCancelEditMessage}
           onDeleteMessage={onDeleteMessage}
           onSend={onSendMessage}
+          onHoverTag={onHoverChatTag}
+          onLeaveTag={onLeaveChatTag}
+          onClickTag={onClickChatTag}
         />
       </div>
     </>

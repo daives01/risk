@@ -1,6 +1,11 @@
 import type { PublicState } from "./types";
 
 export type HighlightFilter = "none" | `player:${string}` | `team:${string}`;
+export type ChatHoverTag =
+  | { kind: "player"; playerId: string }
+  | { kind: "team"; teamId: string }
+  | { kind: "territory"; territoryId: string }
+  | null;
 
 function parseHighlightFilter(filter: HighlightFilter): { mode: "none" } | { mode: "player"; id: string } | { mode: "team"; id: string } {
   if (filter === "none") return { mode: "none" };
@@ -37,3 +42,23 @@ export function resolveHighlightedTerritoryIds(state: PublicState, filter: Highl
   return highlighted;
 }
 
+export function resolveChatHoverTerritoryIds(state: PublicState, tag: ChatHoverTag): Set<string> {
+  if (!tag) return new Set();
+
+  if (tag.kind === "territory") {
+    return state.territories[tag.territoryId] ? new Set([tag.territoryId]) : new Set();
+  }
+
+  const highlighted = new Set<string>();
+  for (const [territoryId, territory] of Object.entries(state.territories)) {
+    if (tag.kind === "player") {
+      if (territory.ownerId === tag.playerId) highlighted.add(territoryId);
+      continue;
+    }
+
+    if (territory.ownerId === "neutral") continue;
+    if (state.players[territory.ownerId]?.teamId === tag.teamId) highlighted.add(territoryId);
+  }
+
+  return highlighted;
+}

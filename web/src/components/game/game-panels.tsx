@@ -1,13 +1,12 @@
 import { ArrowUp, Check, Flag, Handshake, Pencil, Trash2, Users, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { HighlightFilter } from "@/lib/game/highlighting";
+import type { ChatHoverTag, HighlightFilter } from "@/lib/game/highlighting";
 import type { ChatChannel, ChatMessage, PublicState } from "@/lib/game/types";
 
 interface PlayerSummary {
@@ -24,6 +23,7 @@ interface PlayerRef {
   userId?: string;
   displayName: string;
   enginePlayerId: string | null;
+  teamId?: string | null;
 }
 
 interface ChatTargetOption {
@@ -33,6 +33,316 @@ interface ChatTargetOption {
   channel: ChatChannel;
   recipientEnginePlayerId: string | null;
   aliases?: string[];
+}
+
+interface GraphMapRef {
+  territories: Record<string, { name?: string }>;
+}
+
+interface ChatMentionOption {
+  key: string;
+  label: string;
+  token: string;
+  searchText: string;
+  resolved: ResolvedChatMention;
+}
+
+type ResolvedChatMention =
+  | { kind: "player"; playerId: string }
+  | { kind: "team"; teamId: string }
+  | { kind: "territory"; territoryId: string };
+
+interface ChatMentionResolver {
+  resolve: (token: string) => ResolvedChatMention | null;
+  options: ChatMentionOption[];
+}
+
+function normalizeChatMention(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9_-]+/g, "");
+}
+
+function normalizeMentionSearch(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function formatBracketMentionToken(label: string) {
+  return `@[${label.replace(/]/g, "")}]`;
+}
+
+function getMentionDisplayLabel(token: string) {
+  if (token.startsWith("@[") && token.endsWith("]")) return `@${token.slice(2, -1)}`;
+  return token;
+}
+
+function addUniqueMention<T extends ResolvedChatMention>(
+  index: Map<string, T | null>,
+  key: string,
+  value: T,
+) {
+  if (!key) return;
+  const existing = index.get(key);
+  if (existing === undefined) {
+    index.set(key, value);
+    return;
+  }
+  if (existing && JSON.stringify(existing) === JSON.stringify(value)) return;
+  index.set(key, null);
+}
+
+function buildChatMentionResolver(
+  playerOptions: PlayerRef[],
+  teamNames: Record<string, string>,
+  graphMap: GraphMapRef,
+): ChatMentionResolver {
+  const mentionIndex = new Map<string, ResolvedChatMention | null>();
+  const options: ChatMentionOption[] = [];
+  const optionKeys = new Set<string>();
+
+  const addOption = (label: string, resolved: ResolvedChatMention, group: string) => {
+    const searchText = normalizeMentionSearch(label);
+    if (!searchText) return;
+    const key = `${group}:${searchText}:${JSON.stringify(resolved)}`;
+    if (optionKeys.has(key)) return;
+    optionKeys.add(key);
+    options.push({
+      key,
+      label,
+      token: formatBracketMentionToken(label),
+      searchText,
+      resolved,
+    });
+  };
+
+  for (const player of playerOptions) {
+    if (!player.enginePlayerId) continue;
+    const resolved = {
+      kind: "player",
+      playerId: player.enginePlayerId,
+    } as const;
+    addUniqueMention(mentionIndex, normalizeChatMention(player.displayName), {
+      kind: "player",
+      playerId: player.enginePlayerId,
+    });
+    addOption(player.displayName, resolved, "player");
+  }
+
+  const teamIds = [...new Set([
+    ...playerOptions.map((player) => player.teamId).filter((teamId): teamId is string => !!teamId),
+    ...Object.keys(teamNames),
+  ])].sort((a, b) => a.localeCompare(b));
+
+  teamIds.forEach((teamId, index) => {
+    const mention = { kind: "team", teamId } as const;
+    addUniqueMention(mentionIndex, normalizeChatMention(teamId), mention);
+    addUniqueMention(mentionIndex, `team${index + 1}`, mention);
+    if (teamIds.length === 1) addUniqueMention(mentionIndex, "team", mention);
+    const teamName = teamNames[teamId];
+    if (teamName) addUniqueMention(mentionIndex, normalizeChatMention(teamName), mention);
+    addOption(teamName ?? teamId, mention, "team");
+  });
+
+  for (const [territoryId, territory] of Object.entries(graphMap.territories)) {
+    const resolved = {
+      kind: "territory",
+      territoryId,
+    } as const;
+    addUniqueMention(mentionIndex, normalizeChatMention(territory.name ?? territoryId), {
+      kind: "territory",
+      territoryId,
+    });
+    addOption(territory.name ?? territoryId, resolved, "territory");
+  }
+
+  return {
+    resolve: (token) => mentionIndex.get(normalizeChatMention(token)) ?? null,
+    options: options.sort((a, b) => a.label.localeCompare(b.label)),
+  };
+}
+
+function ChatMessageText({
+  text,
+  resolver,
+  onHoverTag,
+  onLeaveTag,
+  onClickTag,
+}: {
+  text: string;
+  resolver: ChatMentionResolver;
+  onHoverTag: (tag: ChatHoverTag) => void;
+  onLeaveTag: () => void;
+  onClickTag: (tag: Exclude<ChatHoverTag, null>) => void;
+}) {
+  const mentionPattern = /(^|[^A-Za-z0-9_@])(?:@\[([^\]\n]{1,80})\]|@([A-Za-z0-9][A-Za-z0-9_-]*))/g;
+  const parts: Array<string | { token: string; resolved: ResolvedChatMention }> = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = mentionPattern.exec(text)) !== null) {
+    const prefix = match[1] ?? "";
+    const bracketToken = match[2] ?? "";
+    const bareToken = match[3] ?? "";
+    const token = bracketToken || bareToken;
+    const tokenStart = match.index + prefix.length;
+    const tokenEnd = tokenStart + (bracketToken ? bracketToken.length + 3 : bareToken.length + 1);
+    const resolved = resolver.resolve(token);
+    if (!resolved) continue;
+
+    if (tokenStart > cursor) parts.push(text.slice(cursor, tokenStart));
+    parts.push({ token: text.slice(tokenStart, tokenEnd), resolved });
+    cursor = tokenEnd;
+  }
+
+  if (cursor === 0) return <>{text}</>;
+  if (cursor < text.length) parts.push(text.slice(cursor));
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (typeof part === "string") return <span key={index}>{part}</span>;
+        return (
+          <button
+            key={`${part.token}-${index}`}
+            type="button"
+            data-chat-tag="true"
+            className="inline rounded border border-primary/35 bg-primary/10 px-1 font-semibold not-italic text-primary underline-offset-2 transition hover:border-primary/70 hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/70"
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerEnter={() => onHoverTag(part.resolved)}
+            onPointerLeave={onLeaveTag}
+            onFocus={() => onHoverTag(part.resolved)}
+            onBlur={onLeaveTag}
+            onClick={() => onClickTag(part.resolved)}
+          >
+            {getMentionDisplayLabel(part.token)}
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
+function tokenizeChatText(text: string, resolver: ChatMentionResolver) {
+  const mentionPattern = /(^|[^A-Za-z0-9_@])(?:@\[([^\]\n]{1,80})\]|@([A-Za-z0-9][A-Za-z0-9_-]*))/g;
+  const parts: Array<string | { token: string; resolved: ResolvedChatMention }> = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = mentionPattern.exec(text)) !== null) {
+    const prefix = match[1] ?? "";
+    const bracketToken = match[2] ?? "";
+    const bareToken = match[3] ?? "";
+    const token = bracketToken || bareToken;
+    const tokenStart = match.index + prefix.length;
+    const tokenEnd = tokenStart + (bracketToken ? bracketToken.length + 3 : bareToken.length + 1);
+    const resolved = resolver.resolve(token);
+    if (!resolved) continue;
+
+    if (tokenStart > cursor) parts.push(text.slice(cursor, tokenStart));
+    parts.push({ token: text.slice(tokenStart, tokenEnd), resolved });
+    cursor = tokenEnd;
+  }
+
+  if (cursor === 0) return [text];
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return parts;
+}
+
+function serializeComposerNode(root: HTMLElement) {
+  let text = "";
+  const visit = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += node.textContent ?? "";
+      return;
+    }
+    if (!(node instanceof HTMLElement)) return;
+    const token = node.dataset.mentionToken;
+    if (token) {
+      text += token;
+      return;
+    }
+    for (const child of Array.from(node.childNodes)) visit(child);
+  };
+  for (const child of Array.from(root.childNodes)) visit(child);
+  return text.replace(/\u00a0/g, " ");
+}
+
+function getComposerCursor(root: HTMLElement) {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return serializeComposerNode(root).length;
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.startContainer)) return serializeComposerNode(root).length;
+
+  let cursor = 0;
+  let found = false;
+  const walk = (node: Node) => {
+    if (found) return;
+    if (node === range.startContainer) {
+      cursor += range.startOffset;
+      found = true;
+      return;
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      cursor += (node.textContent ?? "").length;
+      return;
+    }
+    if (!(node instanceof HTMLElement)) return;
+    const token = node.dataset.mentionToken;
+    if (token) {
+      cursor += token.length;
+      return;
+    }
+    const children = Array.from(node.childNodes);
+    if (node === range.startContainer) {
+      for (let index = 0; index < range.startOffset; index += 1) walk(children[index]!);
+      found = true;
+      return;
+    }
+    for (const child of children) walk(child);
+  };
+
+  for (const child of Array.from(root.childNodes)) walk(child);
+  return cursor;
+}
+
+function setComposerCursor(root: HTMLElement, offset: number) {
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const range = document.createRange();
+  let cursor = 0;
+  let placed = false;
+  const placeIn = (node: Node) => {
+    if (placed) return;
+    if (node.nodeType === Node.TEXT_NODE) {
+      const textLength = (node.textContent ?? "").length;
+      if (cursor + textLength >= offset) {
+        range.setStart(node, Math.max(0, offset - cursor));
+        range.collapse(true);
+        placed = true;
+      }
+      cursor += textLength;
+      return;
+    }
+    if (!(node instanceof HTMLElement)) return;
+    const token = node.dataset.mentionToken;
+    if (token) {
+      if (cursor + token.length >= offset) {
+        range.setStartAfter(node);
+        range.collapse(true);
+        placed = true;
+      }
+      cursor += token.length;
+      return;
+    }
+    for (const child of Array.from(node.childNodes)) placeIn(child);
+  };
+
+  for (const child of Array.from(root.childNodes)) placeIn(child);
+  if (!placed) {
+    range.selectNodeContents(root);
+    range.collapse(false);
+  }
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 interface PlayersCardProps {
@@ -373,6 +683,8 @@ interface GameChatCardProps {
   activeChannel: ChatChannel;
   activeRecipientEnginePlayerId: string | null;
   playerOptions: PlayerRef[];
+  teamNames: Record<string, string>;
+  graphMap: GraphMapRef;
   myEnginePlayerId?: string | null;
   teamGameEnabled: boolean;
   teamAvailable: boolean;
@@ -387,6 +699,9 @@ interface GameChatCardProps {
   onCancelEditMessage: () => void;
   onDeleteMessage: (messageId: string) => void;
   onSend: () => void;
+  onHoverTag: (tag: ChatHoverTag) => void;
+  onLeaveTag: () => void;
+  onClickTag: (tag: Exclude<ChatHoverTag, null>) => void;
 }
 
 export function GameChatCard({
@@ -394,6 +709,8 @@ export function GameChatCard({
   activeChannel,
   activeRecipientEnginePlayerId,
   playerOptions,
+  teamNames,
+  graphMap,
   myEnginePlayerId,
   teamGameEnabled,
   teamAvailable,
@@ -408,9 +725,15 @@ export function GameChatCard({
   onCancelEditMessage,
   onDeleteMessage,
   onSend,
+  onHoverTag,
+  onLeaveTag,
+  onClickTag,
 }: GameChatCardProps) {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLDivElement | null>(null);
   const [slashSelectionIndex, setSlashSelectionIndex] = useState(0);
+  const [mentionSelectionIndex, setMentionSelectionIndex] = useState(0);
+  const [draftCursor, setDraftCursor] = useState(draftText.length);
 
   const messagesWithTimestamps = useMemo(() => {
     const today = new Date();
@@ -452,9 +775,6 @@ export function GameChatCard({
     [myEnginePlayerId, playerOptions],
   );
   const chatTargetOptions = useMemo<ChatTargetOption[]>(() => {
-    const normalizeCommand = (value: string) =>
-      value.toLowerCase().replace(/[^a-z0-9_-]+/g, "");
-
     const options: ChatTargetOption[] = [
       {
         key: "all",
@@ -475,7 +795,7 @@ export function GameChatCard({
         : []),
       ...selectablePlayers.map((player) => ({
         key: `dm:${player.enginePlayerId}`,
-        command: normalizeCommand(player.displayName),
+        command: normalizeChatMention(player.displayName),
         label: `${player.displayName}:`,
         channel: "dm" as const,
         recipientEnginePlayerId: player.enginePlayerId,
@@ -484,6 +804,10 @@ export function GameChatCard({
 
     return options.filter((option) => option.command.length > 0);
   }, [selectablePlayers, teamAvailable, teamGameEnabled]);
+  const chatMentionResolver = useMemo(
+    () => buildChatMentionResolver(playerOptions, teamNames, graphMap),
+    [graphMap, playerOptions, teamNames],
+  );
   const targetLabel = currentInputChannel === "dm" && dmTarget
     ? `${dmTarget.displayName}:`
     : currentInputChannel === "team" && teamAvailable
@@ -506,6 +830,28 @@ export function GameChatCard({
   }, [chatTargetOptions, slashToken]);
   const showSlashMenu = slashMatches.length > 0 && slashToken !== null;
   const selectedSlashOption = slashMatches[Math.min(slashSelectionIndex, Math.max(0, slashMatches.length - 1))] ?? null;
+  const activeMentionQuery = useMemo(() => {
+    if (editingMessageId) return null;
+    const beforeCursor = draftText.slice(0, draftCursor);
+    const match = /(^|\s)@\[?([^\]@\s]{2,})$/.exec(beforeCursor);
+    if (!match) return null;
+    const query = match[2] ?? "";
+    return {
+      query,
+      normalizedQuery: normalizeMentionSearch(query),
+      tokenStart: beforeCursor.length - query.length - (match[0].includes("@[") ? 2 : 1),
+      cursor: draftCursor,
+    };
+  }, [draftCursor, draftText, editingMessageId]);
+  const mentionMatches = useMemo(() => {
+    if (!activeMentionQuery || !activeMentionQuery.normalizedQuery) return [];
+    return chatMentionResolver.options
+      .filter((option) => option.searchText.includes(activeMentionQuery.normalizedQuery))
+      .slice(0, 12);
+  }, [activeMentionQuery, chatMentionResolver]);
+  const showMentionMenu = mentionMatches.length > 0 && !!activeMentionQuery;
+  const selectedMentionOption =
+    mentionMatches[Math.min(mentionSelectionIndex, Math.max(0, mentionMatches.length - 1))] ?? null;
 
   const applyChatTargetOption = (option: ChatTargetOption) => {
     onSelectChannel(option.channel, option.recipientEnginePlayerId);
@@ -518,7 +864,103 @@ export function GameChatCard({
     setSlashSelectionIndex(0);
   };
 
-  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const renderComposerDraft = useCallback((text: string, cursorOffset = text.length) => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.replaceChildren();
+    for (const part of tokenizeChatText(text, chatMentionResolver)) {
+      if (typeof part === "string") {
+        input.append(document.createTextNode(part));
+        continue;
+      }
+      const tag = document.createElement("button");
+      tag.type = "button";
+      tag.contentEditable = "false";
+      tag.dataset.chatTag = "true";
+      tag.dataset.mentionToken = part.token;
+      tag.className = "inline rounded border border-primary/35 bg-primary/10 px-1 font-semibold not-italic text-primary underline-offset-2 transition hover:border-primary/70 hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/70";
+      tag.textContent = getMentionDisplayLabel(part.token);
+      tag.addEventListener("pointerdown", (event) => event.stopPropagation());
+      tag.addEventListener("pointerenter", () => onHoverTag(part.resolved));
+      tag.addEventListener("pointerleave", onLeaveTag);
+      tag.addEventListener("focus", () => onHoverTag(part.resolved));
+      tag.addEventListener("blur", onLeaveTag);
+      tag.addEventListener("click", () => onClickTag(part.resolved));
+      input.append(tag);
+    }
+    setComposerCursor(input, cursorOffset);
+  }, [chatMentionResolver, onClickTag, onHoverTag, onLeaveTag]);
+
+  const applyMentionOption = (option: ChatMentionOption) => {
+    if (!activeMentionQuery) return;
+    const nextText = `${draftText.slice(0, activeMentionQuery.tokenStart)}${option.token} ${draftText.slice(activeMentionQuery.cursor)}`;
+    const nextCursor = activeMentionQuery.tokenStart + option.token.length + 1;
+    onSetDraftText(nextText);
+    setMentionSelectionIndex(0);
+    setDraftCursor(nextCursor);
+    window.requestAnimationFrame(() => {
+      renderComposerDraft(nextText, nextCursor);
+      inputRef.current?.focus();
+    });
+  };
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Backspace" && draftCursor > 0) {
+      const selection = window.getSelection();
+      const input = inputRef.current;
+      if (selection && input && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const previousElement =
+          range.startContainer === input && range.startOffset > 0
+            ? input.childNodes[range.startOffset - 1]
+            : null;
+        if (previousElement instanceof HTMLElement && previousElement.dataset.mentionToken) {
+          event.preventDefault();
+          previousElement.remove();
+          syncDraftFromComposer(input);
+          return;
+        }
+      }
+      const beforeCursor = draftText.slice(0, draftCursor);
+      const afterCursor = draftText.slice(draftCursor);
+      const mentionAtCursor = /@\[([^\]\n]{1,80})\]\s?$/.exec(beforeCursor);
+      if (mentionAtCursor) {
+        event.preventDefault();
+        const nextCursor = beforeCursor.length - mentionAtCursor[0].length;
+        const nextText = `${draftText.slice(0, nextCursor)}${afterCursor}`;
+        onSetDraftText(nextText);
+        setDraftCursor(nextCursor);
+        window.requestAnimationFrame(() => {
+          renderComposerDraft(nextText, nextCursor);
+          inputRef.current?.focus();
+        });
+        return;
+      }
+    }
+    if (showMentionMenu && event.key === "ArrowDown") {
+      event.preventDefault();
+      setMentionSelectionIndex((index) => (index + 1) % mentionMatches.length);
+      return;
+    }
+    if (showMentionMenu && event.key === "ArrowUp") {
+      event.preventDefault();
+      setMentionSelectionIndex((index) => (index - 1 + mentionMatches.length) % mentionMatches.length);
+      return;
+    }
+    if (showMentionMenu && event.key === "Tab") {
+      event.preventDefault();
+      if (mentionMatches.length > 1) {
+        setMentionSelectionIndex((index) => (index + 1) % mentionMatches.length);
+        return;
+      }
+      if (selectedMentionOption) applyMentionOption(selectedMentionOption);
+      return;
+    }
+    if (showMentionMenu && (event.key === "Enter" || event.key === " ") && selectedMentionOption) {
+      event.preventDefault();
+      applyMentionOption(selectedMentionOption);
+      return;
+    }
     if (showSlashMenu && event.key === "ArrowDown") {
       event.preventDefault();
       setSlashSelectionIndex((index) => (index + 1) % slashMatches.length);
@@ -560,11 +1002,28 @@ export function GameChatCard({
     }
   };
 
+  const syncDraftFromComposer = (input: HTMLDivElement) => {
+    const nextText = serializeComposerNode(input);
+    setDraftCursor(getComposerCursor(input));
+    onSetDraftText(nextText);
+  };
+
+  const updateDraftCursorFromInput = (input: HTMLDivElement) => {
+    setDraftCursor(getComposerCursor(input));
+  };
+
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
     container.scrollTop = container.scrollHeight;
   }, [messages.length]);
+
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    if (serializeComposerNode(input) === draftText) return;
+    renderComposerDraft(draftText, draftText.length);
+  }, [draftText, renderComposerDraft]);
 
   return (
     <Card className="glass-panel h-[min(30rem,50vh)] gap-2 border-0 py-0 xl:h-[min(34rem,50vh)]">
@@ -625,7 +1084,13 @@ export function GameChatCard({
                     {timestampLabel ? <span className="inline-block w-[4.75rem]">{timestampLabel}</span> : null}
                     {scopeLabel ? <>{scopeLabel} </> : null}
                     <span className="font-semibold">{displaySender}:</span>{" "}
-                    {message.text}
+                    <ChatMessageText
+                      text={message.text}
+                      resolver={chatMentionResolver}
+                      onHoverTag={onHoverTag}
+                      onLeaveTag={onLeaveTag}
+                      onClickTag={onClickTag}
+                    />
                     {message.editedAt ? <span className="ml-1 text-[0.72rem] text-muted-foreground">(edited)</span> : null}
                   </p>
                 </div>
@@ -654,6 +1119,35 @@ export function GameChatCard({
                     >
                       <span>{option.label}</span>
                       <span className="font-mono text-[0.7rem] text-muted-foreground">/{option.command}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {showMentionMenu && activeMentionQuery && (
+              <div className="absolute bottom-[calc(100%+0.35rem)] left-0 z-20 max-h-64 w-[min(24rem,100%)] overflow-y-auto border border-border/80 bg-popover p-1 text-xs text-popover-foreground shadow-md game-scrollbar">
+                {mentionMatches.map((option, index) => {
+                  const isSelected = index === Math.min(mentionSelectionIndex, mentionMatches.length - 1);
+                  const kindLabel =
+                    option.resolved.kind === "player"
+                      ? "player"
+                      : option.resolved.kind === "team"
+                        ? "team"
+                        : "territory";
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      className={`flex w-full items-center justify-between gap-3 px-2 py-1.5 text-left outline-none ${
+                        isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent/70"
+                      }`}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        applyMentionOption(option);
+                      }}
+                    >
+                      <span className="min-w-0 truncate">{option.label}</span>
+                      <span className="shrink-0 font-mono text-[0.7rem] text-muted-foreground">{kindLabel}</span>
                     </button>
                   );
                 })}
@@ -705,22 +1199,31 @@ export function GameChatCard({
                 {targetLabel}
               </div>
             )}
-            <Input
-              value={draftText}
-              maxLength={300}
-              disabled={!canSend}
-              placeholder={
+            <div
+              ref={inputRef}
+              role="textbox"
+              aria-label="Chat message"
+              aria-disabled={!canSend}
+              contentEditable={canSend}
+              suppressContentEditableWarning
+              data-placeholder={
                 canSend
                   ? editingMessageId
                     ? "Edit your message and press Enter..."
                     : "Send a message..."
                   : "Chat is read-only"
               }
-              className={`min-w-0 focus-visible:border-input focus-visible:ring-0 ${isSpecialInputTarget ? "text-amber-400 italic placeholder:text-amber-400/55" : ""}`}
-              onChange={(event) => {
+              className={`relative flex h-9 min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-pre rounded-none border border-input bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)] focus-visible:border-input focus-visible:ring-0 disabled:pointer-events-none disabled:opacity-50 md:text-sm ${
+                isSpecialInputTarget ? "text-amber-400 italic empty:before:text-amber-400/55" : ""
+              }`}
+              onInput={(event) => {
                 setSlashSelectionIndex(0);
-                onSetDraftText(event.target.value);
+                setMentionSelectionIndex(0);
+                syncDraftFromComposer(event.currentTarget);
               }}
+              onClick={(event) => updateDraftCursorFromInput(event.currentTarget)}
+              onKeyUp={(event) => updateDraftCursorFromInput(event.currentTarget)}
+              onSelect={(event) => updateDraftCursorFromInput(event.currentTarget)}
               onKeyDown={handleInputKeyDown}
             />
           </div>

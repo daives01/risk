@@ -47,6 +47,8 @@ interface MapCanvasProps {
   onToggleFullscreen?: () => void;
   infoOverlayEnabled?: boolean;
   infoPinnedTerritoryId?: string | null;
+  externalFocusTerritoryId?: string | null;
+  externalFocusTerritoryTooltip?: boolean;
   onSetInfoPinnedTerritoryId?: (territoryId: string | null) => void;
   onClickTerritory: (territoryId: string) => void;
   onRightClickTerritory?: (territoryId: string) => void;
@@ -135,6 +137,8 @@ export function MapCanvas({
   onToggleFullscreen,
   infoOverlayEnabled = false,
   infoPinnedTerritoryId = null,
+  externalFocusTerritoryId = null,
+  externalFocusTerritoryTooltip = false,
   onSetInfoPinnedTerritoryId = () => undefined,
   onClickTerritory,
   onRightClickTerritory,
@@ -305,7 +309,11 @@ export function MapCanvas({
       markerRadius,
     });
   }, [battleOverlay, containerSize.height, containerSize.width, markerSize, overlayPanelSize.height, overlayPanelSize.width, projectedAnchors]);
-  const activeTooltipTerritoryId = infoOverlayEnabled ? infoPinnedTerritoryId : hoveredTerritoryId;
+  const activeTooltipTerritoryId = externalFocusTerritoryTooltip && externalFocusTerritoryId
+    ? externalFocusTerritoryId
+    : infoOverlayEnabled
+      ? infoPinnedTerritoryId
+      : hoveredTerritoryId;
   const detachedTooltip = useMemo(() => {
     if (!fullscreen || !activeTooltipTerritoryId) return null;
     const anchor = projectedAnchors[activeTooltipTerritoryId];
@@ -812,7 +820,9 @@ export function MapCanvas({
             const outlineWidth = isFrom || isTo ? 2.5 : isActionable ? 1.5 : 0;
             const outlineColor = isFrom || isTo ? actionOutline : isActionable ? actionEdge : "transparent";
 
-            const showInfo = infoOverlayEnabled
+            const showInfo = externalFocusTerritoryTooltip && externalFocusTerritoryId === territoryId
+              ? true
+              : infoOverlayEnabled
               ? infoPinnedTerritoryId === territoryId
               : supportsHover && hoveredTerritoryId === territoryId;
             const markerBackgroundColor = getPlayerColor(territoryState.ownerId, turnOrder);
