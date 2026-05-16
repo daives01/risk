@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { Providers } from "@/lib/providers";
+import LandingPage from "@/pages/landing";
 import HomePage from "@/pages/home";
 import LoginPage from "@/pages/login";
 import SignUpPage from "@/pages/signup";
@@ -21,7 +22,8 @@ function App() {
     <Providers>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<HomePage />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/home" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />

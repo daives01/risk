@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TabNav } from "@/pages/home/components/TabNav";
 import { ArchivePanel } from "@/pages/home/components/ArchivePanel";
@@ -56,7 +56,9 @@ export default function HomePage() {
           <CardHeader className="space-y-4 py-6">
             <div>
               <CardTitle className="hero-title">
-                <span className="text-primary">Legally Distinct Global Domination</span>
+                <Link to="/" className="text-primary transition-colors hover:text-primary/85">
+                  Legally Distinct Global Domination
+                </Link>
               </CardTitle>
             </div>
             <TabNav tab={tab} setTab={setTab} />
