@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { HighlightFilter } from "@/lib/game/highlighting";
 import type { ChatChannel, ChatMessage, PublicState } from "@/lib/game/types";
@@ -22,8 +23,19 @@ interface PlayerSummary {
 }
 
 interface PlayerRef {
+  userId?: string;
   displayName: string;
   enginePlayerId: string | null;
+}
+
+interface ChatTargetOption {
+  key: string;
+  command: string;
+  label: string;
+  channel: ChatChannel;
+  recipientEnginePlayerId: string | null;
+  italic?: boolean;
+  aliases?: string[];
 }
 
 const CHAT_MESSAGE_FONT = '13px "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace';
@@ -372,15 +384,17 @@ export function GameEventsCard({ events, activeIndex, onSelectEvent }: GameEvent
 interface GameChatCardProps {
   messages: ChatMessage[];
   activeChannel: ChatChannel;
+  activeRecipientEnginePlayerId: string | null;
+  playerOptions: PlayerRef[];
+  myEnginePlayerId?: string | null;
   teamGameEnabled: boolean;
   teamAvailable: boolean;
-  activeTeamName?: string | null;
   canSend: boolean;
   draftText: string;
   editingMessageId: string | null;
   editingChannel: ChatChannel | null;
   onSetDraftText: (value: string) => void;
-  onSelectChannel: (channel: ChatChannel) => void;
+  onSelectChannel: (channel: ChatChannel, recipientEnginePlayerId?: string | null) => void;
   onToggleChannel: () => void;
   onStartEditMessage: (message: ChatMessage) => void;
   onCancelEditMessage: () => void;
@@ -391,9 +405,11 @@ interface GameChatCardProps {
 export function GameChatCard({
   messages,
   activeChannel,
+  activeRecipientEnginePlayerId,
+  playerOptions,
+  myEnginePlayerId,
   teamGameEnabled,
   teamAvailable,
-  activeTeamName,
   canSend,
   draftText,
   editingMessageId,
@@ -409,6 +425,7 @@ export function GameChatCard({
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [messagesContainerWidth, setMessagesContainerWidth] = useState(0);
+  const [slashSelectionIndex, setSlashSelectionIndex] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -456,11 +473,113 @@ export function GameChatCard({
     event.preventDefault();
     onSend();
   };
-  const showTargetPicker = teamGameEnabled && teamAvailable && !editingMessageId;
   const currentInputChannel = editingChannel ?? activeChannel;
+  const dmTarget = currentInputChannel === "dm"
+    ? playerOptions.find((player) => player.enginePlayerId === activeRecipientEnginePlayerId) ?? null
+    : null;
+  const selectablePlayers = useMemo(
+    () => playerOptions.filter((player) => player.enginePlayerId && player.enginePlayerId !== myEnginePlayerId),
+    [myEnginePlayerId, playerOptions],
+  );
+  const chatTargetOptions = useMemo<ChatTargetOption[]>(() => {
+    const normalizeCommand = (value: string) =>
+      value.toLowerCase().replace(/[^a-z0-9_-]+/g, "");
+
+    const options: ChatTargetOption[] = [
+      {
+        key: "all",
+        command: "all",
+        label: "All:",
+        channel: "all",
+        recipientEnginePlayerId: null,
+        aliases: ["global"],
+      },
+      ...(teamGameEnabled && teamAvailable
+        ? [{
+            key: "team",
+            command: "team",
+            label: "Team:",
+            channel: "team" as const,
+            recipientEnginePlayerId: null,
+            italic: true,
+          }]
+        : []),
+      ...selectablePlayers.map((player) => ({
+        key: `dm:${player.enginePlayerId}`,
+        command: normalizeCommand(player.displayName),
+        label: `${player.displayName}:`,
+        channel: "dm" as const,
+        recipientEnginePlayerId: player.enginePlayerId,
+      })),
+    ];
+
+    return options.filter((option) => option.command.length > 0);
+  }, [selectablePlayers, teamAvailable, teamGameEnabled]);
   const isTeamTarget = currentInputChannel === "team" && teamAvailable;
+  const targetLabel = currentInputChannel === "dm" && dmTarget
+    ? `${dmTarget.displayName}:`
+    : isTeamTarget
+      ? "Team:"
+      : "All:";
+  const selectValue = activeChannel === "dm" && activeRecipientEnginePlayerId
+    ? `dm:${activeRecipientEnginePlayerId}`
+    : activeChannel;
+  const canSubmitToSelectedTarget = activeChannel !== "dm" || !!activeRecipientEnginePlayerId;
+  const slashToken = !editingMessageId && draftText.startsWith("/") && !/\s/.test(draftText)
+    ? draftText.slice(1).toLowerCase()
+    : null;
+  const slashMatches = useMemo(() => {
+    if (slashToken === null) return [];
+    return chatTargetOptions.filter((option) =>
+      option.command.startsWith(slashToken) ||
+      option.aliases?.some((alias) => alias.startsWith(slashToken))
+    );
+  }, [chatTargetOptions, slashToken]);
+  const showSlashMenu = slashMatches.length > 0 && slashToken !== null;
+  const selectedSlashOption = slashMatches[Math.min(slashSelectionIndex, Math.max(0, slashMatches.length - 1))] ?? null;
+
+  const applyChatTargetOption = (option: ChatTargetOption) => {
+    onSelectChannel(option.channel, option.recipientEnginePlayerId);
+    onSetDraftText("");
+    setSlashSelectionIndex(0);
+  };
+
+  const completeSlashOption = (option: ChatTargetOption) => {
+    onSetDraftText(`/${option.command}`);
+    setSlashSelectionIndex(0);
+  };
 
   const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (showSlashMenu && event.key === "ArrowDown") {
+      event.preventDefault();
+      setSlashSelectionIndex((index) => (index + 1) % slashMatches.length);
+      return;
+    }
+    if (showSlashMenu && event.key === "ArrowUp") {
+      event.preventDefault();
+      setSlashSelectionIndex((index) => (index - 1 + slashMatches.length) % slashMatches.length);
+      return;
+    }
+    if (showSlashMenu && event.key === "Tab" && selectedSlashOption) {
+      event.preventDefault();
+      if (slashMatches.length > 1) {
+        setSlashSelectionIndex((index) => (index + 1) % slashMatches.length);
+        return;
+      }
+      completeSlashOption(selectedSlashOption);
+      return;
+    }
+    if (showSlashMenu && (event.key === " " || event.key === "Enter") && selectedSlashOption) {
+      const exactMatch = selectedSlashOption.command === slashToken ||
+        selectedSlashOption.aliases?.includes(slashToken ?? "");
+      event.preventDefault();
+      if (exactMatch || slashMatches.length === 1 || event.key === "Enter") {
+        applyChatTargetOption(selectedSlashOption);
+        return;
+      }
+      completeSlashOption(selectedSlashOption);
+      return;
+    }
     if (event.key === "Tab" && teamAvailable && !editingMessageId && !event.shiftKey) {
       event.preventDefault();
       onToggleChannel();
@@ -531,6 +650,10 @@ export function GameChatCard({
             {messagesWithTimestamps.map((message) => {
               const timestampLabel = message.timestampLabel;
               const isTeamMessage = message.channel === "team";
+              const isDmMessage = message.channel === "dm";
+              const dmPeerName = message.isMine
+                ? message.recipientDisplayName ?? "player"
+                : message.senderDisplayName;
               const bubbleWidth = chatBubbleWidths.get(message._id);
               const bubbleStyle = bubbleWidth
                 ? ({ width: `${bubbleWidth}px`, maxWidth: "100%" } satisfies CSSProperties)
@@ -562,6 +685,7 @@ export function GameChatCard({
                         </span>
                       )}
                       {isTeamMessage ? <span className="italic">(team)</span> : null}
+                      {isDmMessage ? <span>(dm {message.isMine ? "to" : "from"} {dmPeerName})</span> : null}
                       <span>{message.isMine ? "You" : message.senderDisplayName}</span>
                       {timestampLabel ? <span className="text-[0.7rem] tracking-wide">{timestampLabel}</span> : null}
                       {message.editedAt ? <span className="text-[0.7rem] tracking-wide">edited</span> : null}
@@ -572,7 +696,7 @@ export function GameChatCard({
                       message.isMine
                         ? "bg-primary text-primary-foreground"
                         : "bg-background/80"
-                    } ${isTeamMessage ? "border border-primary/25" : ""}`}
+                    } ${isTeamMessage || isDmMessage ? "border border-primary/25" : ""}`}
                   >
                     <p className={`break-normal [overflow-wrap:break-word] text-[0.8125rem] leading-snug ${isTeamMessage ? "italic" : ""}`}>{message.text}</p>
                   </div>
@@ -583,49 +707,90 @@ export function GameChatCard({
           </div>
         </div>
 
-        {showTargetPicker && (
-          <div className="flex text-xs text-muted-foreground">
-            <div className="flex border border-border/75 bg-background/45">
-              <Button
-                type="button"
-                size="xs"
-                variant={activeChannel === "global" ? "secondary" : "ghost"}
-                className="h-7"
-                onClick={() => onSelectChannel("global")}
-              >
-                All
-              </Button>
-              <Button
-                type="button"
-                size="xs"
-                variant={activeChannel === "team" ? "secondary" : "ghost"}
-                className="h-7 italic"
-                onClick={() => onSelectChannel("team")}
-              >
-                {activeTeamName ?? "Team"}
-              </Button>
-            </div>
-          </div>
-        )}
-
         <form className="flex gap-2" onSubmit={handleSubmit}>
-          <Input
-            value={draftText}
-            maxLength={300}
-            disabled={!canSend}
-            placeholder={
-              canSend
-                ? editingMessageId
-                  ? "Edit your message and press Enter..."
-                  : isTeamTarget
-                    ? "(team) Send a message..."
+          <div className="relative flex min-w-0 flex-1">
+            {showSlashMenu && (
+              <div className="absolute bottom-[calc(100%+0.35rem)] left-0 z-20 w-[min(22rem,100%)] border border-border/80 bg-popover p-1 text-xs text-popover-foreground shadow-md">
+                {slashMatches.map((option, index) => {
+                  const isSelected = index === Math.min(slashSelectionIndex, slashMatches.length - 1);
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      className={`flex w-full items-center justify-between px-2 py-1.5 text-left outline-none ${
+                        isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent/70"
+                      }`}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        applyChatTargetOption(option);
+                      }}
+                    >
+                      <span className={option.italic ? "italic" : undefined}>{option.label}</span>
+                      <span className="font-mono text-[0.7rem] text-muted-foreground">/{option.command}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {canSend && !editingMessageId ? (
+              <Select
+                value={selectValue}
+                onValueChange={(value) => {
+                  if (value.startsWith("dm:")) {
+                    onSelectChannel("dm", value.slice("dm:".length));
+                    return;
+                  }
+                  onSelectChannel(value as ChatChannel, null);
+                }}
+              >
+                <SelectTrigger
+                  aria-label="Chat target"
+                  className={`h-9 w-[8.5rem] shrink-0 border-border/75 bg-background/60 px-2.5 text-xs font-semibold ${
+                    activeChannel === "team" ? "italic" : ""
+                  }`}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="start" className="min-w-[11rem]">
+                  <SelectItem value="all">All:</SelectItem>
+                  {teamGameEnabled && teamAvailable && (
+                    <SelectItem value="team" className="italic">Team:</SelectItem>
+                  )}
+                  {selectablePlayers.map((player) => (
+                    <SelectItem key={player.enginePlayerId} value={`dm:${player.enginePlayerId}`}>
+                      {player.displayName}:
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div
+                className={`flex h-9 w-[8.5rem] shrink-0 items-center truncate border border-border/75 bg-background/60 px-2.5 text-xs font-semibold text-muted-foreground ${
+                  isTeamTarget ? "italic" : ""
+                }`}
+              >
+                {targetLabel}
+              </div>
+            )}
+            <Input
+              value={draftText}
+              maxLength={300}
+              disabled={!canSend}
+              placeholder={
+                canSend
+                  ? editingMessageId
+                    ? "Edit your message and press Enter..."
                     : "Send a message..."
-                : "Chat is read-only"
-            }
-            className={isTeamTarget ? "italic" : undefined}
-            onChange={(event) => onSetDraftText(event.target.value)}
-            onKeyDown={handleInputKeyDown}
-          />
+                  : "Chat is read-only"
+              }
+              className={`min-w-0 border-l-0 ${isTeamTarget ? "italic" : ""}`}
+              onChange={(event) => {
+                setSlashSelectionIndex(0);
+                onSetDraftText(event.target.value);
+              }}
+              onKeyDown={handleInputKeyDown}
+            />
+          </div>
           {editingMessageId && (
             <Button type="button" size="icon" variant="outline" disabled={!canSend} onClick={onCancelEditMessage}>
               <X className="size-3.5" />
@@ -635,7 +800,7 @@ export function GameChatCard({
             type="submit"
             size="icon"
             className="inline-flex items-center justify-center"
-            disabled={!canSend || !draftText.trim()}
+            disabled={!canSend || !canSubmitToSelectedTarget || !draftText.trim()}
           >
             {editingMessageId ? <Check className="size-3.5" /> : <ArrowUp className="size-3.5" />}
           </Button>

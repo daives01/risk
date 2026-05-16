@@ -13,7 +13,7 @@ interface GameSidePanelsProps {
     teamId?: string;
   }>;
   resolvedDisplayState: PublicState;
-  playerMap: Array<{ displayName: string; enginePlayerId: string | null }>;
+  playerMap: Array<{ userId?: string; displayName: string; enginePlayerId: string | null }>;
   teamModeEnabled: boolean;
   teamNames: Record<string, string>;
   showTurnTimer: boolean;
@@ -32,14 +32,14 @@ interface GameSidePanelsProps {
   onStopDelegation: () => void;
   chatMessages: ChatMessage[];
   chatChannel: ChatChannel;
+  chatRecipientEnginePlayerId: string | null;
   canUseTeamChat: boolean;
-  myTeamName: string | null;
   canSendChat: boolean;
   chatDraft: string;
   chatEditingMessageId: string | null;
   chatEditingChannel: ChatChannel | null;
   onSetChatDraft: (value: string) => void;
-  onSelectChannel: (channel: ChatChannel) => void;
+  onSelectChannel: (channel: ChatChannel, recipientEnginePlayerId?: string | null) => void;
   onToggleChannel: () => void;
   onStartEditMessage: (message: ChatMessage) => void;
   onCancelEditMessage: () => void;
@@ -69,8 +69,8 @@ export function GameSidePanels({
   onStopDelegation,
   chatMessages,
   chatChannel,
+  chatRecipientEnginePlayerId,
   canUseTeamChat,
-  myTeamName,
   canSendChat,
   chatDraft,
   chatEditingMessageId,
@@ -85,7 +85,15 @@ export function GameSidePanels({
 }: GameSidePanelsProps) {
   const visibleChatMessages = chatChannel === "team"
     ? chatMessages.filter((message) => message.channel === "team")
-    : chatMessages;
+    : chatChannel === "dm"
+      ? chatMessages.filter((message) =>
+          message.channel === "dm" &&
+          (
+            message.recipientEnginePlayerId === chatRecipientEnginePlayerId ||
+            message.senderEnginePlayerId === chatRecipientEnginePlayerId
+          ),
+        )
+      : chatMessages;
 
   return (
     <>
@@ -116,9 +124,11 @@ export function GameSidePanels({
         <GameChatCard
           messages={visibleChatMessages}
           activeChannel={chatChannel}
+          activeRecipientEnginePlayerId={chatRecipientEnginePlayerId}
+          playerOptions={playerMap}
+          myEnginePlayerId={myEnginePlayerId}
           teamGameEnabled={teamModeEnabled}
           teamAvailable={canUseTeamChat}
-          activeTeamName={myTeamName}
           canSend={canSendChat}
           draftText={chatDraft}
           editingMessageId={chatEditingMessageId}
