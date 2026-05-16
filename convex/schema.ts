@@ -75,12 +75,6 @@ export default defineSchema({
     finishedAt: v.optional(v.number()),
     winningPlayerId: v.optional(v.string()),
     winningTeamId: v.optional(v.string()),
-    // Obsolete: current state now lives in gameStates; kept only until old rows are cleared.
-    initialState: v.optional(v.any()),
-    // Obsolete: current state now lives in gameStates; kept only until old rows are cleared.
-    state: v.optional(v.any()),
-    // Obsolete: use gameStates.version.
-    stateVersion: v.optional(v.number()),
     turnStartedAt: v.optional(v.number()),
     turnDeadlineAt: v.optional(v.number()),
     turnTimeoutJobId: v.optional(v.id("_scheduled_functions")),
