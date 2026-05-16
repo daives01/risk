@@ -1,22 +1,36 @@
 import { useEffect, useRef, useCallback } from "react";
-import globeTextureSource from "../../../ascii-globe.txt?raw";
+import globeTextureUrl from "./ascii-globe-2.jpeg?inline";
 
 const CHARS = ".-:=+*#%@";
 
-const AXIAL_TILT = (23 * Math.PI) / 180;
 type GlobeTexture = {
   data: Uint8ClampedArray;
   width: number;
   height: number;
 };
 
-function extractTextureUrl(source: string): string {
-  const match = source.match(/data:image\/jpeg;base64,[^']+/);
-  if (!match) {
-    throw new Error("Missing ASCII globe texture data.");
-  }
-  return match[0];
-}
+type GlobeTuning = {
+  tiltXDeg: number;
+  tiltZDeg: number;
+  speed: number;
+  resolution: number;
+  sunX: number;
+  sunY: number;
+  sunZ: number;
+};
+
+const GLOBE_TUNING: GlobeTuning = {
+  tiltXDeg: 6,
+  tiltZDeg: 17,
+  speed: 0.008,
+  resolution: 1.25,
+  sunX: 0.25,
+  sunY: 0,
+  sunZ: -0.05,
+};
+const DRAG_SENSITIVITY = 0.008;
+const MAX_SPIN_VELOCITY = 0.08;
+const SPIN_RETURN_EASE = 0.035;
 
 function loadGlobeTexture(): Promise<GlobeTexture> {
   return new Promise((resolve, reject) => {
@@ -40,7 +54,7 @@ function loadGlobeTexture(): Promise<GlobeTexture> {
       resolve({ data, width, height });
     };
     image.onerror = () => reject(new Error("Unable to load ASCII globe texture."));
-    image.src = extractTextureUrl(globeTextureSource);
+    image.src = globeTextureUrl;
   });
 }
 
@@ -64,10 +78,13 @@ function renderGlobe(
   h: number,
   spin: number,
   texture: GlobeTexture | null,
+  tuning: GlobeTuning,
 ) {
   ctx.clearRect(0, 0, w, h);
 
-  const fontSize = Math.max(7, Math.min(w, h) / 68);
+  const tiltX = (tuning.tiltXDeg * Math.PI) / 180;
+  const tiltZ = (tuning.tiltZDeg * Math.PI) / 180;
+  const fontSize = Math.max(5, Math.min(w, h) / (68 * tuning.resolution));
   const cellW = fontSize * 0.58;
   const cellH = fontSize * 1.0;
 
@@ -82,9 +99,10 @@ function renderGlobe(
   const cyPx = h / 2;
 
   const cSpin = Math.cos(spin), sSpin = Math.sin(spin);
-  const cTilt = Math.cos(AXIAL_TILT), sTilt = Math.sin(AXIAL_TILT);
+  const cTiltX = Math.cos(tiltX), sTiltX = Math.sin(tiltX);
+  const cTiltZ = Math.cos(tiltZ), sTiltZ = Math.sin(tiltZ);
 
-  const lx = 0.4, ly = 0.35, lz = 0.85;
+  const lx = tuning.sunX, ly = tuning.sunY, lz = tuning.sunZ;
   const ll = Math.sqrt(lx * lx + ly * ly + lz * lz);
   const lnx = lx / ll, lny = ly / ll, lnz = lz / ll;
 
@@ -101,12 +119,16 @@ function renderGlobe(
 
       const dz = Math.sqrt(1 - d2);
 
-      const tiltedX = dx * cTilt + dy * sTilt;
-      const tiltedY = -dx * sTilt + dy * cTilt;
+      const xRolled = dx * cTiltZ - dy * sTiltZ;
+      const yRolled = dx * sTiltZ + dy * cTiltZ;
 
-      const ox = tiltedX * cSpin + dz * sSpin;
-      const oy = tiltedY;
-      const oz = -tiltedX * sSpin + dz * cSpin;
+      const xTilted = xRolled;
+      const yTilted = yRolled * cTiltX - dz * sTiltX;
+      const zTilted = yRolled * sTiltX + dz * cTiltX;
+
+      const ox = xTilted * cSpin + zTilted * sSpin;
+      const oy = yTilted;
+      const oz = -xTilted * sSpin + zTilted * cSpin;
 
       const sunlight = Math.max(0, dx * lnx + dy * lny + dz * lnz);
       const light = 0.18 + Math.pow(sunlight, 0.55) * 0.82;
@@ -132,6 +154,7 @@ export function AsciiGlobe() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stateRef = useRef({
     spin: 0,
+    spinVelocity: -GLOBE_TUNING.speed,
     isDragging: false,
     lastX: 0,
   });
@@ -177,10 +200,12 @@ export function AsciiGlobe() {
 
         const s = stateRef.current;
         if (!s.isDragging) {
-          s.spin += 0.005;
+          s.spinVelocity +=
+            (-GLOBE_TUNING.speed - s.spinVelocity) * SPIN_RETURN_EASE;
+          s.spin += s.spinVelocity;
         }
 
-        renderGlobe(ctx, w, h, s.spin, textureRef.current);
+        renderGlobe(ctx, w, h, s.spin, textureRef.current, GLOBE_TUNING);
       }
 
       frameIdRef.current = requestAnimationFrame(render);
@@ -198,6 +223,7 @@ export function AsciiGlobe() {
     const s = stateRef.current;
     s.isDragging = true;
     s.lastX = e.clientX;
+    s.spinVelocity = 0;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   }, []);
 
@@ -205,7 +231,12 @@ export function AsciiGlobe() {
     const s = stateRef.current;
     if (!s.isDragging) return;
     const dx = e.clientX - s.lastX;
-    s.spin += dx * 0.008;
+    const dragSpin = -dx * DRAG_SENSITIVITY;
+    s.spin += dragSpin;
+    s.spinVelocity = Math.max(
+      -MAX_SPIN_VELOCITY,
+      Math.min(MAX_SPIN_VELOCITY, dragSpin),
+    );
     s.lastX = e.clientX;
   }, []);
 
