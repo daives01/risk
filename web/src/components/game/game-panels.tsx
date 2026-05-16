@@ -1,8 +1,6 @@
-import { measureLineStats, prepareWithSegments } from "@chenglou/pretext";
-import type { PreparedTextWithSegments } from "@chenglou/pretext";
 import { ArrowUp, Check, Flag, Handshake, Pencil, Trash2, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, FormEvent, KeyboardEvent } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -34,18 +32,7 @@ interface ChatTargetOption {
   label: string;
   channel: ChatChannel;
   recipientEnginePlayerId: string | null;
-  italic?: boolean;
   aliases?: string[];
-}
-
-const CHAT_MESSAGE_FONT = '13px "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace';
-const CHAT_TEAM_MESSAGE_FONT = 'italic 13px "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace';
-const CHAT_BUBBLE_HORIZONTAL_PADDING = 20;
-
-function measureChatBubbleWidth(prepared: PreparedTextWithSegments, maxBubbleWidth: number, hasBorder: boolean): number {
-  const maxTextWidth = Math.max(1, maxBubbleWidth - CHAT_BUBBLE_HORIZONTAL_PADDING);
-  const { maxLineWidth } = measureLineStats(prepared, maxTextWidth);
-  return Math.ceil(maxLineWidth + CHAT_BUBBLE_HORIZONTAL_PADDING + (hasBorder ? 2 : 0));
 }
 
 interface PlayersCardProps {
@@ -423,51 +410,34 @@ export function GameChatCard({
   onSend,
 }: GameChatCardProps) {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-  const [messagesContainerWidth, setMessagesContainerWidth] = useState(0);
   const [slashSelectionIndex, setSlashSelectionIndex] = useState(0);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
   const messagesWithTimestamps = useMemo(() => {
-    const currentYear = new Date(now).getFullYear();
+    const today = new Date();
 
     const formatChatTimestamp = (timestamp: number) => {
       const date = new Date(timestamp);
       if (Number.isNaN(date.getTime())) return "";
 
-      const diffMs = Math.max(0, now - timestamp);
-      const diffMinutes = Math.floor(diffMs / 60000);
-
-      if (diffMinutes < 1) return "just now";
-      if (diffMinutes < 60) return `${diffMinutes}m`;
-
-      const diffHours = Math.floor(diffMinutes / 60);
-      if (diffHours < 24) return `${diffHours}h`;
-
-      const diffDays = Math.floor(diffHours / 24);
-      if (diffDays === 1) return "yesterday";
-      if (diffDays < 7) return `${diffDays}d`;
-
-      const monthLabel = date.toLocaleString("en-US", { month: "short" });
-      const dayLabel = date.getDate();
-      if (date.getFullYear() === currentYear) {
-        return `${monthLabel} ${dayLabel}`;
+      if (date.toDateString() !== today.toDateString()) {
+        return date.toLocaleDateString("en-US", {
+          month: "2-digit",
+          day: "2-digit",
+          year: "2-digit",
+        });
       }
 
-      return `${monthLabel} ${dayLabel}, ${date.getFullYear()}`;
+      return date.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     };
 
     return messages.map((message) => ({
       ...message,
       timestampLabel: formatChatTimestamp(message.createdAt),
     }));
-  }, [messages, now]);
+  }, [messages]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -501,7 +471,6 @@ export function GameChatCard({
             label: "Team:",
             channel: "team" as const,
             recipientEnginePlayerId: null,
-            italic: true,
           }]
         : []),
       ...selectablePlayers.map((player) => ({
@@ -515,12 +484,12 @@ export function GameChatCard({
 
     return options.filter((option) => option.command.length > 0);
   }, [selectablePlayers, teamAvailable, teamGameEnabled]);
-  const isTeamTarget = currentInputChannel === "team" && teamAvailable;
   const targetLabel = currentInputChannel === "dm" && dmTarget
     ? `${dmTarget.displayName}:`
-    : isTeamTarget
+    : currentInputChannel === "team" && teamAvailable
       ? "Team:"
       : "All:";
+  const isSpecialInputTarget = currentInputChannel === "team" || currentInputChannel === "dm";
   const selectValue = activeChannel === "dm" && activeRecipientEnginePlayerId
     ? `dm:${activeRecipientEnginePlayerId}`
     : activeChannel;
@@ -597,44 +566,6 @@ export function GameChatCard({
     container.scrollTop = container.scrollHeight;
   }, [messages.length]);
 
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    const updateWidth = () => setMessagesContainerWidth(container.clientWidth);
-    updateWidth();
-
-    const resizeObserver = new ResizeObserver(updateWidth);
-    resizeObserver.observe(container);
-    return () => resizeObserver.disconnect();
-  }, []);
-
-  const preparedChatMessages = useMemo(() => (
-    new Map(
-      messages.map((message) => [
-        message._id,
-        prepareWithSegments(
-          message.text,
-          message.channel === "team" ? CHAT_TEAM_MESSAGE_FONT : CHAT_MESSAGE_FONT,
-        ),
-      ]),
-    )
-  ), [messages]);
-
-  const chatBubbleWidths = useMemo(() => {
-    const maxBubbleWidth = Math.floor(messagesContainerWidth * 0.9);
-    if (maxBubbleWidth <= 0) return new Map<string, number>();
-
-    return new Map(messages.flatMap((message) => {
-      const prepared = preparedChatMessages.get(message._id);
-      if (!prepared) return [];
-      return [[
-        message._id,
-        measureChatBubbleWidth(prepared, maxBubbleWidth, message.channel === "team"),
-      ]];
-    }));
-  }, [messages, messagesContainerWidth, preparedChatMessages]);
-
   return (
     <Card className="glass-panel h-[min(30rem,50vh)] gap-2 border-0 py-0 xl:h-[min(34rem,50vh)]">
       <CardHeader className="flex flex-row items-center gap-2 pb-0 pt-3">
@@ -643,64 +574,60 @@ export function GameChatCard({
       <CardContent className="flex h-[calc(100%-3rem)] flex-col space-y-1.5 pb-3 pt-0">
         <div
           ref={messagesContainerRef}
-          className="game-scrollbar flex-1 overflow-y-auto rounded-md border bg-background/45 p-2 pt-2.5 text-sm"
+          className="game-scrollbar flex-1 overflow-y-auto px-0.5 py-2 font-mono text-[0.8125rem] leading-snug"
         >
-          <div className="mt-auto space-y-1.5">
+          <div className="mt-auto space-y-1">
             {messages.length === 0 && <p className="text-muted-foreground">No messages yet.</p>}
             {messagesWithTimestamps.map((message) => {
               const timestampLabel = message.timestampLabel;
               const isTeamMessage = message.channel === "team";
               const isDmMessage = message.channel === "dm";
-              const dmPeerName = message.isMine
-                ? message.recipientDisplayName ?? "player"
-                : message.senderDisplayName;
-              const bubbleWidth = chatBubbleWidths.get(message._id);
-              const bubbleStyle = bubbleWidth
-                ? ({ width: `${bubbleWidth}px`, maxWidth: "100%" } satisfies CSSProperties)
-                : undefined;
+              const isSpecialMessage = isTeamMessage || isDmMessage;
+              const displaySender = message.isMine ? "You" : message.senderDisplayName;
+              const scopeLabel = isTeamMessage
+                ? "[team]"
+                : isDmMessage
+                  ? message.isMine
+                    ? `[to ${message.recipientDisplayName ?? "player"}]`
+                    : "[to you]"
+                  : null;
+
               return (
-                <div key={message._id} className={`group flex ${message.isMine ? "justify-end" : "justify-start"}`}>
-                  <div className={`flex max-w-[90%] flex-col gap-0.5 ${message.isMine ? "items-end" : "items-start"}`}>
-                    <div className={`flex flex-wrap items-center gap-1.5 text-[0.7rem] text-muted-foreground ${message.isMine ? "justify-end" : ""}`}>
-                      {message.isMine && canSend && (
-                        <span className="inline-flex items-center gap-0.5 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
-                          <Button
-                            type="button"
-                            size="icon-xs"
-                            variant={editingMessageId === message._id ? "default" : "ghost"}
-                            aria-label="Edit message"
-                            onClick={() => onStartEditMessage(message)}
-                          >
-                            <Pencil className="size-3" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon-xs"
-                            variant="ghost"
-                            aria-label="Delete message"
-                            onClick={() => onDeleteMessage(message._id)}
-                          >
-                            <Trash2 className="size-3" />
-                          </Button>
-                        </span>
-                      )}
-                      {isTeamMessage ? <span className="italic">(team)</span> : null}
-                      {isDmMessage ? <span>(dm {message.isMine ? "to" : "from"} {dmPeerName})</span> : null}
-                      <span>{message.isMine ? "You" : message.senderDisplayName}</span>
-                      {timestampLabel ? <span className="text-[0.7rem] tracking-wide">{timestampLabel}</span> : null}
-                      {message.editedAt ? <span className="text-[0.7rem] tracking-wide">edited</span> : null}
-                    </div>
-                  <div
-                    style={bubbleStyle}
-                    className={`rounded-none px-2.5 py-1.5 ${
-                      message.isMine
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-background/80"
-                    } ${isTeamMessage || isDmMessage ? "border border-primary/25" : ""}`}
-                  >
-                    <p className={`break-normal [overflow-wrap:break-word] text-[0.8125rem] leading-snug ${isTeamMessage ? "italic" : ""}`}>{message.text}</p>
-                  </div>
-                  </div>
+                <div
+                  key={message._id}
+                  className={`group relative text-left ${
+                    isSpecialMessage ? "text-amber-400 italic" : "text-foreground"
+                  }`}
+                >
+                  {message.isMine && canSend && (
+                    <span className="absolute left-0 top-1/2 z-10 inline-flex -translate-y-1/2 items-center gap-0.5 bg-background/95 pr-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant={editingMessageId === message._id ? "default" : "ghost"}
+                        aria-label="Edit message"
+                        onClick={() => onStartEditMessage(message)}
+                      >
+                        <Pencil className="size-3" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        aria-label="Delete message"
+                        onClick={() => onDeleteMessage(message._id)}
+                      >
+                        <Trash2 className="size-3" />
+                      </Button>
+                    </span>
+                  )}
+                  <p className="break-normal [overflow-wrap:anywhere]">
+                    {timestampLabel ? <span className="inline-block w-[4.75rem]">{timestampLabel}</span> : null}
+                    {scopeLabel ? <>{scopeLabel} </> : null}
+                    <span className="font-semibold">{displaySender}:</span>{" "}
+                    {message.text}
+                    {message.editedAt ? <span className="ml-1 text-[0.72rem] text-muted-foreground">(edited)</span> : null}
+                  </p>
                 </div>
               );
             })}
@@ -708,7 +635,7 @@ export function GameChatCard({
         </div>
 
         <form className="flex gap-2" onSubmit={handleSubmit}>
-          <div className="relative flex min-w-0 flex-1">
+          <div className="relative flex min-w-0 flex-1 items-center gap-1">
             {showSlashMenu && (
               <div className="absolute bottom-[calc(100%+0.35rem)] left-0 z-20 w-[min(22rem,100%)] border border-border/80 bg-popover p-1 text-xs text-popover-foreground shadow-md">
                 {slashMatches.map((option, index) => {
@@ -725,7 +652,7 @@ export function GameChatCard({
                         applyChatTargetOption(option);
                       }}
                     >
-                      <span className={option.italic ? "italic" : undefined}>{option.label}</span>
+                      <span>{option.label}</span>
                       <span className="font-mono text-[0.7rem] text-muted-foreground">/{option.command}</span>
                     </button>
                   );
@@ -745,8 +672,10 @@ export function GameChatCard({
               >
                 <SelectTrigger
                   aria-label="Chat target"
-                  className={`h-9 w-[8.5rem] shrink-0 border-border/75 bg-background/60 px-2.5 text-xs font-semibold ${
-                    activeChannel === "team" ? "italic" : ""
+                  className={`h-9 w-auto shrink-0 justify-start gap-1 border-0 bg-transparent px-0.5 text-xs font-semibold shadow-none hover:bg-background/35 focus-visible:ring-1 [&>svg]:order-first [&>svg]:size-3 ${
+                    activeChannel === "team" ? "text-amber-400 [&>svg]:text-amber-400" : ""
+                  } ${
+                    activeChannel === "dm" ? "text-amber-400 [&>svg]:text-amber-400" : ""
                   }`}
                 >
                   <SelectValue />
@@ -754,10 +683,14 @@ export function GameChatCard({
                 <SelectContent align="start" className="min-w-[11rem]">
                   <SelectItem value="all">All:</SelectItem>
                   {teamGameEnabled && teamAvailable && (
-                    <SelectItem value="team" className="italic">Team:</SelectItem>
+                    <SelectItem value="team" className="text-amber-400 focus:text-amber-300">Team:</SelectItem>
                   )}
                   {selectablePlayers.map((player) => (
-                    <SelectItem key={player.enginePlayerId} value={`dm:${player.enginePlayerId}`}>
+                    <SelectItem
+                      key={player.enginePlayerId}
+                      value={`dm:${player.enginePlayerId}`}
+                      className="text-amber-400 focus:text-amber-300"
+                    >
                       {player.displayName}:
                     </SelectItem>
                   ))}
@@ -765,8 +698,8 @@ export function GameChatCard({
               </Select>
             ) : (
               <div
-                className={`flex h-9 w-[8.5rem] shrink-0 items-center truncate border border-border/75 bg-background/60 px-2.5 text-xs font-semibold text-muted-foreground ${
-                  isTeamTarget ? "italic" : ""
+                className={`flex h-9 w-auto shrink-0 items-center truncate px-0.5 text-xs font-semibold ${
+                  isSpecialInputTarget ? "text-amber-400" : "text-muted-foreground"
                 }`}
               >
                 {targetLabel}
@@ -783,7 +716,7 @@ export function GameChatCard({
                     : "Send a message..."
                   : "Chat is read-only"
               }
-              className={`min-w-0 border-l-0 ${isTeamTarget ? "italic" : ""}`}
+              className={`min-w-0 focus-visible:border-input focus-visible:ring-0 ${isSpecialInputTarget ? "text-amber-400 italic placeholder:text-amber-400/55" : ""}`}
               onChange={(event) => {
                 setSlashSelectionIndex(0);
                 onSetDraftText(event.target.value);
@@ -799,10 +732,17 @@ export function GameChatCard({
           <Button
             type="submit"
             size="icon"
-            className="inline-flex items-center justify-center"
+            variant="ghost"
+            aria-label={editingMessageId ? "Save message edit" : "Send message"}
+            title={editingMessageId ? "Save edit" : "Send message"}
+            className={`h-9 w-8 border border-transparent bg-transparent text-muted-foreground shadow-none hover:border-border/70 hover:bg-background/45 hover:text-foreground focus-visible:border-input focus-visible:ring-0 disabled:opacity-30 ${
+              isSpecialInputTarget ? "text-amber-400 hover:text-amber-300" : ""
+            } ${
+              editingMessageId ? "border-amber-500/35 text-amber-400 hover:border-amber-500/60 hover:text-amber-300" : ""
+            }`}
             disabled={!canSend || !canSubmitToSelectedTarget || !draftText.trim()}
           >
-            {editingMessageId ? <Check className="size-3.5" /> : <ArrowUp className="size-3.5" />}
+            {editingMessageId ? <Check className="size-3.5" /> : <ArrowUp className="size-4" />}
           </Button>
         </form>
       </CardContent>

@@ -83,18 +83,6 @@ export function GameSidePanels({
   onDeleteMessage,
   onSendMessage,
 }: GameSidePanelsProps) {
-  const visibleChatMessages = chatChannel === "team"
-    ? chatMessages.filter((message) => message.channel === "team")
-    : chatChannel === "dm"
-      ? chatMessages.filter((message) =>
-          message.channel === "dm" &&
-          (
-            message.recipientEnginePlayerId === chatRecipientEnginePlayerId ||
-            message.senderEnginePlayerId === chatRecipientEnginePlayerId
-          ),
-        )
-      : chatMessages;
-
   return (
     <>
       <div className="min-w-0 space-y-4">
@@ -122,7 +110,7 @@ export function GameSidePanels({
       </div>
       <div className="min-w-0 xl:order-last">
         <GameChatCard
-          messages={visibleChatMessages}
+          messages={chatMessages}
           activeChannel={chatChannel}
           activeRecipientEnginePlayerId={chatRecipientEnginePlayerId}
           playerOptions={playerMap}
