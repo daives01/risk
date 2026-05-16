@@ -18,7 +18,7 @@ export default function LoginPage() {
   const redirectTarget =
     requestedRedirect && requestedRedirect.startsWith("/") && !requestedRedirect.startsWith("//")
       ? requestedRedirect
-      : "/";
+      : "/home";
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
