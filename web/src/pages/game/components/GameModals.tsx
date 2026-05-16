@@ -114,7 +114,6 @@ export function GameModals({
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
                   <p className="text-base font-semibold">Keyboard Shortcuts</p>
-                  <p className="text-sm text-muted-foreground">Quick controls for your turn.</p>
                 </div>
                 <Button size="xs" variant="outline" type="button" onClick={onCloseShortcuts}>
                   Close
@@ -146,7 +145,6 @@ export function GameModals({
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
                   <p className="text-base font-semibold">Game Rules</p>
-                  <p className="text-sm text-muted-foreground">Current ruleset for this game.</p>
                 </div>
                 <Button size="xs" variant="outline" type="button" onClick={onCloseSettings}>
                   Close
@@ -182,7 +180,6 @@ export function GameModals({
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
                   <p className="text-base font-semibold">Cards ({myCardCount})</p>
-                  <p className="text-sm text-muted-foreground">Select 3 to trade.</p>
                   {mustTradeNow && (
                     <p className="text-xs uppercase tracking-wide text-destructive">
                       Trade required at {forcedTradeHandSize}+ cards
