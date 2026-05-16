@@ -8,10 +8,28 @@ export default function LandingPage() {
 
   useEffect(() => {
     document.title = "Legally Distinct Global Domination";
+
+    const { body, documentElement } = document;
+    const previousBodyOverflow = body.style.overflow;
+    const previousBodyOverscroll = body.style.overscrollBehavior;
+    const previousHtmlOverflow = documentElement.style.overflow;
+    const previousHtmlOverscroll = documentElement.style.overscrollBehavior;
+
+    body.style.overflow = "hidden";
+    body.style.overscrollBehavior = "none";
+    documentElement.style.overflow = "hidden";
+    documentElement.style.overscrollBehavior = "none";
+
+    return () => {
+      body.style.overflow = previousBodyOverflow;
+      body.style.overscrollBehavior = previousBodyOverscroll;
+      documentElement.style.overflow = previousHtmlOverflow;
+      documentElement.style.overscrollBehavior = previousHtmlOverscroll;
+    };
   }, []);
 
   return (
-    <div className="soft-grid relative isolate flex h-dvh max-h-dvh flex-col overflow-hidden bg-[--app-bg] landscape:flex-row">
+    <div className="soft-grid fixed inset-0 isolate flex h-dvh max-h-dvh flex-col overflow-hidden bg-[--app-bg] overscroll-none landscape:flex-row">
       <div className="pointer-events-none relative z-10 order-2 flex flex-1 flex-col justify-start px-6 pb-8 pt-0 portrait:-mt-[6svh] sm:px-8 landscape:order-1 landscape:min-h-dvh landscape:w-[44%] landscape:justify-center landscape:px-10 landscape:py-0 lg:landscape:px-16">
         <div className="mx-auto w-full max-w-[25rem] text-center landscape:mx-0 landscape:max-w-[35rem] landscape:text-left">
           <h1 className="text-[clamp(2.55rem,11vw,4.75rem)] font-bold leading-[0.94] tracking-[0.015em] text-primary text-balance landscape:text-[clamp(2.5rem,5.8vw,5.8rem)]">
