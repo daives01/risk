@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface PendingOccupy {
   minMove: number;
@@ -8,6 +8,7 @@ interface PendingOccupy {
 
 interface UseGameOccupyOptions {
   pending: PendingOccupy | null | undefined;
+  stateVersion: number | null | undefined;
   isMyTurn: boolean;
   historyOpen: boolean;
   controlsDisabled: boolean;
@@ -17,6 +18,7 @@ interface UseGameOccupyOptions {
 
 export function useGameOccupy({
   pending,
+  stateVersion,
   isMyTurn,
   historyOpen,
   controlsDisabled,
@@ -24,6 +26,7 @@ export function useGameOccupy({
   submitAction,
 }: UseGameOccupyOptions) {
   const [occupyMove, setOccupyMove] = useState(1);
+  const autoOccupySubmittedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!pending) return;
@@ -41,8 +44,15 @@ export function useGameOccupy({
     ) {
       return;
     }
+    const submissionKey = [
+      stateVersion ?? "unknown",
+      pending.minMove,
+      pending.maxMove,
+    ].join(":");
+    if (autoOccupySubmittedKeyRef.current === submissionKey) return;
+    autoOccupySubmittedKeyRef.current = submissionKey;
     void submitAction({ type: "Occupy", moveArmies: pending.minMove });
-  }, [controlsDisabled, historyOpen, isMyTurn, pending, phase, submitAction]);
+  }, [controlsDisabled, historyOpen, isMyTurn, pending, phase, stateVersion, submitAction]);
 
   return {
     occupyMove,

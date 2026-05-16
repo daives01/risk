@@ -46,6 +46,7 @@ export type GameAction = {
   _id: string;
   index: number;
   events: Array<{ type: string; [key: string]: unknown }>;
+  publicStatePatch?: TimelineStatePatch;
 };
 
 export type ReinforcementDraft = { territoryId: string; count: number };
@@ -70,17 +71,39 @@ export type ChatMessage = {
 
 export type HistoryFrame = {
   index: number;
-  actionType: string;
-  label: string;
-  actorId: string | null;
   events?: Array<{ type: string; [key: string]: unknown }>;
-  turnRound: number;
-  turnPlayerId: string;
-  turnPhase: Phase;
-  hasCapture: boolean;
-  eliminatedPlayerIds: string[];
   state: PublicState;
-  replayError?: string | null;
+};
+
+export type TimelineStatePatch = {
+  players?: PublicState["players"];
+  turnOrder?: PublicState["turnOrder"];
+  territories?: Record<string, { ownerId?: string; armies?: number }>;
+  turn?: PublicState["turn"];
+  pending?: PublicState["pending"] | null;
+  reinforcements?: PublicState["reinforcements"] | null;
+  capturedThisTurn?: boolean;
+  tradesCompleted?: number;
+  fortifiesUsedThisTurn?: number | null;
+  deckCount?: number;
+  discardCount?: number;
+  handSizes?: PublicState["handSizes"];
+  stateVersion?: number;
+};
+
+export type HistoryTimelineEntry = {
+  index: number;
+  events?: Array<{ type: string; [key: string]: unknown }>;
+  checkpointState?: PublicState;
+  statePatch?: TimelineStatePatch;
+};
+
+export type HistoryWindow = {
+  latestIndex: number;
+  snapshotIndex: number | null;
+  snapshotPublicState: PublicState | null;
+  actions: GameAction[];
+  hasPrevious: boolean;
 };
 
 export const PHASE_COPY: Record<Phase, { title: string; description: string }> = {

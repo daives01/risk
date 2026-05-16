@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 import { describe, expect, test } from "bun:test";
-import type { HistoryFrame } from "./types";
+import type { HistoryFrame, PublicState } from "./types";
 import {
   findNextCaptureFrame,
   findNextEliminationFrame,
@@ -9,17 +9,10 @@ import {
   findPreviousTurnBoundary,
 } from "./history-navigation";
 
-function frame(overrides: Partial<HistoryFrame>): HistoryFrame {
-  return {
+function frame(overrides: Omit<Partial<HistoryFrame>, "state"> & { state?: Partial<PublicState> }): HistoryFrame {
+  const base: HistoryFrame = {
     index: 0,
-    actionType: "Test",
-    label: "label",
-    actorId: "p1",
-    turnRound: 1,
-    turnPlayerId: "p1",
-    turnPhase: "Reinforcement",
-    hasCapture: false,
-    eliminatedPlayerIds: [],
+    events: [],
     state: {
       players: {},
       turnOrder: [],
@@ -32,18 +25,26 @@ function frame(overrides: Partial<HistoryFrame>): HistoryFrame {
       handSizes: {},
       stateVersion: 1,
     },
+  };
+  return {
+    ...base,
     ...overrides,
+    state: { ...base.state, ...overrides.state },
   };
 }
 
 describe("history navigation", () => {
   const frames: HistoryFrame[] = [
-    frame({ index: -1, actionType: "Start", actorId: null, label: "start" }),
-    frame({ index: 0, turnRound: 1, turnPlayerId: "p1" }),
-    frame({ index: 1, turnRound: 1, turnPlayerId: "p1", hasCapture: true }),
-    frame({ index: 2, turnRound: 1, turnPlayerId: "p2" }),
-    frame({ index: 3, turnRound: 1, turnPlayerId: "p2", eliminatedPlayerIds: ["p3"] }),
-    frame({ index: 4, turnRound: 2, turnPlayerId: "p1" }),
+    frame({ index: -1 }),
+    frame({ index: 0 }),
+    frame({ index: 1, events: [{ type: "TerritoryCaptured" }] }),
+    frame({ index: 2, state: { turn: { currentPlayerId: "p2", phase: "Reinforcement", round: 1 } } }),
+    frame({
+      index: 3,
+      events: [{ type: "PlayerEliminated" }],
+      state: { turn: { currentPlayerId: "p2", phase: "Reinforcement", round: 1 } },
+    }),
+    frame({ index: 4, state: { turn: { currentPlayerId: "p1", phase: "Reinforcement", round: 2 } } }),
   ];
 
   test("finds previous and next turn boundaries", () => {

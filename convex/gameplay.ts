@@ -1,4 +1,4 @@
-import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -7,22 +7,24 @@ import {
   applyAction,
   ActionError,
   calculateReinforcements,
-  createDeck,
-  createRng,
-  resolveInitialArmies,
 } from "risk-engine";
 import type { Action, CardId, GameState, PlayerId, GraphMap, TerritoryId, GameEvent, RulesetConfig } from "risk-engine";
-import { summarizeTimelineFrame } from "./historyTimeline";
 import { resolveEffectiveRuleset, type RulesetOverrides } from "./rulesets";
 import { computeTurnDeadlineAt, didTurnAdvance, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
 import { readGameState, readGraphMap } from "./typeAdapters";
-import { distributeInitialArmiesCappedRandom } from "./initialPlacement";
-import { createTeamAwareTurnOrder } from "./teamTurnOrder";
 import { scheduleTurnTimeout } from "./turnTimeoutScheduling";
-
-const HISTORY_PROJECTION_VERSION = 1;
-const HISTORY_SNAPSHOT_INTERVAL = 50;
-const HISTORY_BACKFILL_BATCH_SIZE = 50;
+import {
+  buildTimelineStatePatch,
+  shouldStoreTimelineCheckpoint,
+  TIMELINE_CHECKPOINT_INTERVAL,
+  type TimelinePublicState,
+} from "./historyTimeline";
+import {
+  GAME_STATE_SNAPSHOT_INTERVAL,
+  insertGameStateSnapshotIfMissing,
+  readCurrentPrivateGameState,
+  upsertCurrentGameState,
+} from "./gameState";
 
 const actionValidator = v.union(
   v.object({
@@ -57,28 +59,6 @@ const actionValidator = v.union(
     type: v.literal("EndTurn"),
   }),
 );
-
-type TimelinePublicState = {
-  players: Record<string, { status: string; teamId?: string }>;
-  turnOrder: string[];
-  territories: Record<string, { ownerId: string; armies: number }>;
-  turn: { currentPlayerId: string; phase: string; round: number };
-  pending?: {
-    type: "Occupy";
-    from: string;
-    to: string;
-    minMove: number;
-    maxMove: number;
-  };
-  reinforcements?: { remaining: number; sources?: Record<string, number> };
-  capturedThisTurn: boolean;
-  tradesCompleted: number;
-  fortifiesUsedThisTurn?: number;
-  deckCount: number;
-  discardCount: number;
-  handSizes: Record<string, number>;
-  stateVersion: number;
-};
 
 function getGameRuleset(game: {
   teamModeEnabled?: boolean;
@@ -178,69 +158,34 @@ function extractEliminationNotificationData(events: unknown[]): {
   };
 }
 
-function shouldStoreTimelineSnapshot(index: number): boolean {
-  return index === -1 || index % HISTORY_SNAPSHOT_INTERVAL === 0;
-}
-
 function buildTimelineFrame(args: {
   gameId: Id<"games">;
   index: number;
-  actionId?: Id<"gameActions">;
-  action: Record<string, unknown>;
-  actionType: string;
-  actorId: string | null;
   events: GameEvent[];
   state: GameState;
-  replayError?: string | null;
-  createdAt: number;
+  previousState?: GameState;
 }) {
-  const summary = summarizeTimelineFrame({
-    action: args.action,
-    actionType: args.actionType,
-    actorId: args.actorId,
-    events: args.events,
-    state: args.state,
-  });
-
+  const state = toTimelinePublicState(args.state);
+  const previousState = args.previousState ? toTimelinePublicState(args.previousState) : null;
+  const checkpointState = shouldStoreTimelineCheckpoint(args.index) ? state : undefined;
   return {
     gameId: args.gameId,
     index: args.index,
-    ...(args.actionId ? { actionId: args.actionId } : {}),
-    projectionVersion: HISTORY_PROJECTION_VERSION,
-    actionType: args.actionType,
-    label: summary.label,
-    actorId: summary.actorId,
     events: redactEvents(args.events as unknown as RawEvent[]),
-    turnRound: summary.turnRound,
-    turnPlayerId: summary.turnPlayerId,
-    turnPhase: summary.turnPhase,
-    hasCapture: summary.hasCapture,
-    eliminatedPlayerIds: summary.eliminatedPlayerIds,
-    state: toTimelinePublicState(args.state),
-    replayError: args.replayError ?? null,
-    createdAt: args.createdAt,
+    checkpointState,
+    statePatch: checkpointState ? undefined : buildTimelineStatePatch(previousState, state),
   };
 }
 
 function buildStartTimelineFrame(args: {
   gameId: Id<"games">;
   state: GameState;
-  createdAt: number;
 }) {
   return {
     gameId: args.gameId,
     index: -1,
-    projectionVersion: HISTORY_PROJECTION_VERSION,
-    actionType: "Start",
-    label: "Game start",
-    actorId: null,
-    turnRound: args.state.turn.round,
-    turnPlayerId: args.state.turn.currentPlayerId,
-    turnPhase: args.state.turn.phase,
-    hasCapture: false,
-    eliminatedPlayerIds: [],
-    state: toTimelinePublicState(args.state),
-    createdAt: args.createdAt,
+    events: [],
+    checkpointState: toTimelinePublicState(args.state),
   };
 }
 
@@ -252,34 +197,8 @@ async function insertTimelineFrameIfMissing(
     .query("gameTimelineFrames")
     .withIndex("by_gameId_index", (q) => q.eq("gameId", frame.gameId).eq("index", frame.index))
     .unique();
-  if (existing?.projectionVersion === HISTORY_PROJECTION_VERSION) return existing._id;
   if (existing) return existing._id;
   return await ctx.db.insert("gameTimelineFrames", frame);
-}
-
-async function insertTimelineSnapshotIfMissing(
-  ctx: MutationCtx,
-  args: {
-    gameId: Id<"games">;
-    index: number;
-    state: GameState;
-    createdAt: number;
-  },
-) {
-  if (!shouldStoreTimelineSnapshot(args.index)) return null;
-  const existing = await ctx.db
-    .query("gameTimelineSnapshots")
-    .withIndex("by_gameId_index", (q) => q.eq("gameId", args.gameId).eq("index", args.index))
-    .unique();
-  if (existing?.projectionVersion === HISTORY_PROJECTION_VERSION) return existing._id;
-  if (existing) return existing._id;
-  return await ctx.db.insert("gameTimelineSnapshots", {
-    gameId: args.gameId,
-    index: args.index,
-    projectionVersion: HISTORY_PROJECTION_VERSION,
-    state: args.state,
-    createdAt: args.createdAt,
-  });
 }
 
 async function insertTimelineProjectionIfMissing(
@@ -287,23 +206,12 @@ async function insertTimelineProjectionIfMissing(
   args: {
     gameId: Id<"games">;
     index: number;
-    actionId?: Id<"gameActions">;
-    action: Record<string, unknown>;
-    actionType: string;
-    actorId: string | null;
     events: GameEvent[];
     state: GameState;
-    replayError?: string | null;
-    createdAt: number;
+    previousState?: GameState;
   },
 ) {
   await insertTimelineFrameIfMissing(ctx, buildTimelineFrame(args));
-  await insertTimelineSnapshotIfMissing(ctx, {
-    gameId: args.gameId,
-    index: args.index,
-    state: args.state,
-    createdAt: args.createdAt,
-  });
 }
 
 async function insertInitialTimelineProjectionIfAvailable(
@@ -311,7 +219,6 @@ async function insertInitialTimelineProjectionIfAvailable(
   args: {
     gameId: Id<"games">;
     initialState: unknown;
-    createdAt: number;
   },
 ) {
   if (!args.initialState) return;
@@ -319,14 +226,7 @@ async function insertInitialTimelineProjectionIfAvailable(
   await insertTimelineFrameIfMissing(ctx, buildStartTimelineFrame({
     gameId: args.gameId,
     state,
-    createdAt: args.createdAt,
   }));
-  await insertTimelineSnapshotIfMissing(ctx, {
-    gameId: args.gameId,
-    index: -1,
-    state,
-    createdAt: args.createdAt,
-  });
 }
 
 type DelegationPlayerDoc = {
@@ -433,7 +333,7 @@ export const submitAction = mutation({
       turnDeadlineAt: game.turnDeadlineAt ?? undefined,
     });
 
-    const state = readGameState(game.state);
+    const state = await readCurrentPrivateGameState(ctx, game);
     if (!state) throw new Error("Game has no state");
     const ruleset = getGameRuleset({
       teamModeEnabled: game.teamModeEnabled,
@@ -499,16 +399,19 @@ export const submitAction = mutation({
     await insertInitialTimelineProjectionIfAvailable(ctx, {
       gameId: args.gameId,
       initialState: game.initialState,
-      createdAt,
     });
 
     // Append to action log
-    const actionId = await ctx.db.insert("gameActions", {
+    await ctx.db.insert("gameActions", {
       gameId: args.gameId,
       index: nextIndex,
       playerId,
       action: args.action,
       events: result.events,
+      publicStatePatch: buildTimelineStatePatch(
+        toTimelinePublicState(state),
+        toTimelinePublicState(result.state),
+      ),
       actingUserId: actingPlayer.actingUserId,
       wasDelegated: actingPlayer.wasDelegated,
       stateVersionBefore: state.stateVersion,
@@ -518,11 +421,13 @@ export const submitAction = mutation({
     await insertTimelineProjectionIfMissing(ctx, {
       gameId: args.gameId,
       index: nextIndex,
-      actionId,
-      action: args.action as Record<string, unknown>,
-      actionType: action.type,
-      actorId: playerId,
       events: result.events as GameEvent[],
+      state: result.state,
+      previousState: state,
+    });
+    await insertGameStateSnapshotIfMissing(ctx, {
+      gameId: args.gameId,
+      index: nextIndex,
       state: result.state,
       createdAt,
     });
@@ -550,6 +455,11 @@ export const submitAction = mutation({
     });
 
     // Persist new state
+    await upsertCurrentGameState(ctx, {
+      gameId: args.gameId,
+      state: result.state,
+      updatedAt: now,
+    });
     await ctx.db.patch(args.gameId, {
       state: result.state,
       stateVersion: result.state.stateVersion,
@@ -612,7 +522,7 @@ export const submitReinforcementPlacements = mutation({
     });
     if (args.placements.length === 0) throw new Error("No placements to submit");
 
-    const state = readGameState(game.state);
+    const state = await readCurrentPrivateGameState(ctx, game);
     if (!state) throw new Error("Game has no state");
     const ruleset = getGameRuleset({
       teamModeEnabled: game.teamModeEnabled,
@@ -692,14 +602,17 @@ export const submitReinforcementPlacements = mutation({
     await insertInitialTimelineProjectionIfAvailable(ctx, {
       gameId: args.gameId,
       initialState: game.initialState,
-      createdAt,
     });
-    const actionId = await ctx.db.insert("gameActions", {
+    await ctx.db.insert("gameActions", {
       gameId: args.gameId,
       index: nextIndex,
       playerId,
       action,
       events,
+      publicStatePatch: buildTimelineStatePatch(
+        toTimelinePublicState(state),
+        toTimelinePublicState(nextState),
+      ),
       actingUserId: actingPlayer.actingUserId,
       wasDelegated: actingPlayer.wasDelegated,
       stateVersionBefore: state.stateVersion,
@@ -709,11 +622,13 @@ export const submitReinforcementPlacements = mutation({
     await insertTimelineProjectionIfMissing(ctx, {
       gameId: args.gameId,
       index: nextIndex,
-      actionId,
-      action,
-      actionType: action.type,
-      actorId: playerId,
       events: events as GameEvent[],
+      state: nextState,
+      previousState: state,
+    });
+    await insertGameStateSnapshotIfMissing(ctx, {
+      gameId: args.gameId,
+      index: nextIndex,
       state: nextState,
       createdAt,
     });
@@ -739,6 +654,11 @@ export const submitReinforcementPlacements = mutation({
       expectedPlayerId: timingPatch.turnStartedAt ? nextState.turn.currentPlayerId : undefined,
     });
 
+    await upsertCurrentGameState(ctx, {
+      gameId: args.gameId,
+      state: nextState,
+      updatedAt: now,
+    });
     await ctx.db.patch(args.gameId, {
       state: nextState,
       stateVersion: nextState.stateVersion,
@@ -790,7 +710,7 @@ export const resign = mutation({
     if (!game) throw new Error("Game not found");
     if (game.status !== "active") throw new Error("Game is not active");
 
-    const state = readGameState(game.state);
+  const state = await readCurrentPrivateGameState(ctx, game);
     if (!state) throw new Error("Game has no state");
     const ruleset = getGameRuleset({
       teamModeEnabled: game.teamModeEnabled,
@@ -950,14 +870,17 @@ export const resign = mutation({
     await insertInitialTimelineProjectionIfAvailable(ctx, {
       gameId,
       initialState: game.initialState,
-      createdAt,
     });
-    const actionId = await ctx.db.insert("gameActions", {
+    await ctx.db.insert("gameActions", {
       gameId,
       index: nextIndex,
       playerId,
       action,
       events,
+      publicStatePatch: buildTimelineStatePatch(
+        toTimelinePublicState(state),
+        toTimelinePublicState(newState),
+      ),
       stateVersionBefore: state.stateVersion,
       stateVersionAfter: newState.stateVersion,
       createdAt,
@@ -965,15 +888,22 @@ export const resign = mutation({
     await insertTimelineProjectionIfMissing(ctx, {
       gameId,
       index: nextIndex,
-      actionId,
-      action,
-      actionType: action.type,
-      actorId: playerId,
       events: events as GameEvent[],
+      state: newState,
+      previousState: state,
+    });
+    await insertGameStateSnapshotIfMissing(ctx, {
+      gameId,
+      index: nextIndex,
       state: newState,
       createdAt,
     });
 
+    await upsertCurrentGameState(ctx, {
+      gameId,
+      state: newState,
+      updatedAt: now,
+    });
     await ctx.db.patch(gameId, {
       state: newState,
       stateVersion: newState.stateVersion,
@@ -1145,110 +1075,7 @@ function toTimelinePublicState(state: GameState): TimelinePublicState {
   };
 }
 
-function toPlayerIndex(playerId: string): number {
-  const match = /^p(\d+)$/.exec(playerId);
-  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
-}
-
-function createInitialStateFromSeed(
-  currentState: GameState,
-  graphMap: GraphMap,
-  playerIds: PlayerId[],
-  ruleset: RulesetConfig,
-): GameState {
-  const territoryIds = Object.keys(graphMap.territories) as TerritoryId[];
-  const setup = ruleset.setup;
-  const rng = createRng({ seed: currentState.rng.seed, index: 0 });
-  const playerTeamIdsByPlayerId: Record<string, string | undefined> = {};
-  for (const playerId of playerIds) {
-    playerTeamIdsByPlayerId[playerId] = currentState.players[playerId]?.teamId;
-  }
-  const turnOrder = ruleset.teams.teamsEnabled
-    ? createTeamAwareTurnOrder(playerIds, playerTeamIdsByPlayerId, rng)
-    : rng.shuffle(playerIds);
-
-  const shuffledTerritories = rng.shuffle(territoryIds);
-  const initialArmies = resolveInitialArmies(
-    setup,
-    playerIds.length,
-    territoryIds.length,
-    setup.neutralTerritoryCount,
-  );
-
-  const neutralCount = Math.min(
-    setup.neutralTerritoryCount,
-    territoryIds.length - playerIds.length,
-  );
-  const neutralTerritories = shuffledTerritories.slice(0, neutralCount);
-  const playerTerritories = shuffledTerritories.slice(neutralCount);
-
-  const territories: Record<string, { ownerId: PlayerId | "neutral"; armies: number }> = {};
-
-  for (const tid of neutralTerritories) {
-    territories[tid] = { ownerId: "neutral", armies: setup.neutralInitialArmies };
-  }
-
-  const assignments: Record<string, TerritoryId[]> = {};
-  for (const pid of turnOrder) assignments[pid] = [];
-  for (let i = 0; i < playerTerritories.length; i++) {
-    const pid = turnOrder[i % turnOrder.length]!;
-    const tid = playerTerritories[i]!;
-    territories[tid] = { ownerId: pid, armies: 1 };
-    assignments[pid]!.push(tid);
-  }
-
-  for (const pid of turnOrder) {
-    const owned = assignments[pid]!;
-    distributeInitialArmiesCappedRandom(rng, owned, territories, initialArmies, 4);
-  }
-
-  const players: GameState["players"] = {};
-  for (const pid of playerIds) {
-    players[pid] = {
-      status: "alive",
-      ...(currentState.players[pid]?.teamId ? { teamId: currentState.players[pid]!.teamId } : {}),
-    };
-  }
-
-  const deckResult = createDeck(ruleset.cards.deckDefinition, territoryIds, rng);
-  const hands: Record<string, readonly CardId[]> = {};
-  for (const pid of playerIds) hands[pid] = [];
-
-  const firstPlayer = turnOrder[0]!;
-  const reinforcementResult = calculateReinforcements(
-    { territories, players } as GameState,
-    firstPlayer,
-    graphMap,
-    ruleset.teams,
-    turnOrder,
-  );
-
-  return {
-    players,
-    turnOrder,
-    territories,
-    turn: {
-      currentPlayerId: firstPlayer,
-      phase: "Reinforcement",
-      round: 1,
-    },
-    reinforcements: {
-      remaining: reinforcementResult.total,
-      sources: reinforcementResult.sources,
-    },
-    deck: deckResult.deck,
-    cardsById: deckResult.cardsById,
-    hands,
-    tradesCompleted: 0,
-    capturedThisTurn: false,
-    fortifiesUsedThisTurn: 0,
-    rng: rng.state,
-    stateVersion: 1,
-    rulesetVersion: currentState.rulesetVersion,
-  };
-}
-
-export function applyResignForTimeline(
+export function applyResignStateTransition(
   state: GameState,
   playerId: PlayerId,
   graphMap: GraphMap,
@@ -1333,272 +1160,6 @@ export function applyResignForTimeline(
   };
 }
 
-function applyEventsFallbackForTimeline(
-  state: GameState,
-  rawEvents: unknown[],
-  stateVersionAfter?: number,
-): GameState {
-  const territories: Record<string, { ownerId: PlayerId | "neutral"; armies: number }> = {
-    ...state.territories,
-  };
-  const players: GameState["players"] = { ...state.players };
-  const hands: Record<string, readonly CardId[]> = { ...state.hands };
-  const turn = { ...state.turn };
-  let reinforcements = state.reinforcements ? { ...state.reinforcements } : undefined;
-  let pending = state.pending;
-  let capturedThisTurn = state.capturedThisTurn;
-  let tradesCompleted = state.tradesCompleted;
-  let fortifiesUsedThisTurn = state.fortifiesUsedThisTurn;
-
-  const ensureTerritory = (territoryId: string) => {
-    if (!territories[territoryId]) {
-      territories[territoryId] = { ownerId: "neutral", armies: 0 };
-    }
-    return territories[territoryId]!;
-  };
-
-  for (const rawEvent of rawEvents) {
-    if (!rawEvent || typeof rawEvent !== "object") continue;
-    const event = rawEvent as Record<string, unknown>;
-    switch (event.type) {
-      case "ReinforcementsGranted": {
-        const amount = typeof event.amount === "number" ? event.amount : 0;
-        const sources = event.sources && typeof event.sources === "object"
-          ? event.sources as Record<string, number>
-          : undefined;
-        reinforcements = { remaining: amount, sources };
-        turn.phase = "Reinforcement";
-        break;
-      }
-      case "CardsTraded": {
-        if (typeof event.tradesCompletedAfter === "number") {
-          tradesCompleted = event.tradesCompletedAfter;
-        }
-        if (typeof event.value === "number") {
-          if (reinforcements) {
-            reinforcements = {
-              ...reinforcements,
-              remaining: reinforcements.remaining + event.value,
-            };
-          } else {
-            reinforcements = {
-              remaining: event.value,
-              sources: { trade: event.value },
-            };
-          }
-        }
-        break;
-      }
-      case "ReinforcementsPlaced": {
-        if (typeof event.territoryId !== "string" || typeof event.count !== "number") break;
-        const territory = ensureTerritory(event.territoryId);
-        territory.armies += event.count;
-        if (reinforcements) {
-          reinforcements = {
-            ...reinforcements,
-            remaining: Math.max(0, reinforcements.remaining - event.count),
-          };
-        }
-        break;
-      }
-      case "AttackResolved": {
-        if (typeof event.from !== "string" || typeof event.to !== "string") break;
-        const from = ensureTerritory(event.from);
-        const to = ensureTerritory(event.to);
-        const attackerLosses = typeof event.attackerLosses === "number" ? event.attackerLosses : 0;
-        const defenderLosses = typeof event.defenderLosses === "number" ? event.defenderLosses : 0;
-        from.armies = Math.max(1, from.armies - attackerLosses);
-        to.armies = Math.max(0, to.armies - defenderLosses);
-        turn.phase = "Attack";
-        break;
-      }
-      case "TerritoryCaptured": {
-        if (typeof event.to !== "string" || typeof event.newOwnerId !== "string") break;
-        const to = ensureTerritory(event.to);
-        to.ownerId = event.newOwnerId as PlayerId;
-        capturedThisTurn = true;
-        turn.phase = "Occupy";
-        break;
-      }
-      case "OccupyResolved": {
-        if (typeof event.from !== "string" || typeof event.to !== "string") break;
-        const moved = typeof event.moved === "number" ? event.moved : 0;
-        const from = ensureTerritory(event.from);
-        const to = ensureTerritory(event.to);
-        from.armies = Math.max(1, from.armies - moved);
-        to.armies += moved;
-        if (typeof event.playerId === "string") {
-          to.ownerId = event.playerId as PlayerId;
-        }
-        pending = undefined;
-        turn.phase = "Attack";
-        break;
-      }
-      case "FortifyResolved": {
-        if (typeof event.from !== "string" || typeof event.to !== "string") break;
-        const moved = typeof event.moved === "number" ? event.moved : 0;
-        const from = ensureTerritory(event.from);
-        const to = ensureTerritory(event.to);
-        from.armies = Math.max(1, from.armies - moved);
-        to.armies += moved;
-        turn.phase = "Fortify";
-        fortifiesUsedThisTurn = (fortifiesUsedThisTurn ?? 0) + 1;
-        break;
-      }
-      case "PlayerEliminated": {
-        if (typeof event.eliminatedId === "string" && players[event.eliminatedId as PlayerId]) {
-          players[event.eliminatedId as PlayerId] = {
-            ...players[event.eliminatedId as PlayerId]!,
-            status: "defeated",
-          };
-        }
-        break;
-      }
-      case "TurnAdvanced": {
-        if (typeof event.nextPlayerId !== "string" || typeof event.round !== "number") break;
-        turn.currentPlayerId = event.nextPlayerId as PlayerId;
-        turn.round = event.round;
-        turn.phase = "Reinforcement";
-        pending = undefined;
-        capturedThisTurn = false;
-        fortifiesUsedThisTurn = 0;
-        break;
-      }
-      case "GameEnded": {
-        turn.phase = "GameOver";
-        pending = undefined;
-        break;
-      }
-      default:
-        break;
-    }
-  }
-
-  return {
-    ...state,
-    territories,
-    players,
-    hands,
-    turn,
-    reinforcements,
-    pending,
-    capturedThisTurn,
-    tradesCompleted,
-    fortifiesUsedThisTurn,
-    stateVersion: typeof stateVersionAfter === "number" ? stateVersionAfter : state.stateVersion + 1,
-  };
-}
-
-async function loadInitialTimelineState(ctx: MutationCtx, args: {
-  game: {
-    initialState?: unknown;
-    state?: unknown;
-    mapId: string;
-    teamModeEnabled?: boolean;
-    rulesetOverrides?: RulesetOverrides;
-    effectiveRuleset?: RulesetConfig;
-  };
-  gameId: Id<"games">;
-}) {
-  if (args.game.initialState) {
-    return readGameState(args.game.initialState);
-  }
-
-  const currentState = readGameState(args.game.state);
-  const mapDoc = await ctx.db
-    .query("maps")
-    .withIndex("by_mapId", (q) => q.eq("mapId", args.game.mapId))
-    .unique();
-  if (!mapDoc) throw new Error("Map not found");
-  const graphMap = readGraphMap(mapDoc.graphMap);
-  const playerDocs = await ctx.db
-    .query("gamePlayers")
-    .withIndex("by_gameId", (q) => q.eq("gameId", args.gameId))
-    .collect();
-  const playerIds = playerDocs
-    .map((doc) => doc.enginePlayerId)
-    .filter((playerId): playerId is string => !!playerId)
-    .sort((a, b) => toPlayerIndex(a) - toPlayerIndex(b)) as PlayerId[];
-  if (playerIds.length === 0) throw new Error("Game has no players");
-  const ruleset = getGameRuleset({
-    teamModeEnabled: args.game.teamModeEnabled,
-    rulesetOverrides: args.game.rulesetOverrides,
-    effectiveRuleset: args.game.effectiveRuleset,
-  });
-  return createInitialStateFromSeed(currentState, graphMap, playerIds, ruleset);
-}
-
-function applyStoredActionForTimeline(args: {
-  state: GameState;
-  actionDoc: {
-    action: unknown;
-    playerId: string;
-    events: unknown;
-    stateVersionAfter?: number;
-  };
-  graphMap: GraphMap;
-  ruleset: RulesetConfig;
-  allowEventFallback: boolean;
-}) {
-  const action = args.actionDoc.action as Record<string, unknown>;
-  const actionType = typeof action.type === "string" ? action.type : "Unknown";
-  const actorId = args.actionDoc.playerId as PlayerId;
-  let state = args.state;
-  let replayError: string | null = null;
-
-  try {
-    if (actionType === "Resign") {
-      state = applyResignForTimeline(state, actorId, args.graphMap, args.ruleset);
-    } else if (actionType === "PlaceReinforcementsBatch") {
-      const placements = Array.isArray(action.placements) ? action.placements : [];
-      for (const placement of placements) {
-        if (!placement || typeof placement !== "object") continue;
-        const territoryId = (placement as { territoryId?: unknown }).territoryId;
-        const count = (placement as { count?: unknown }).count;
-        if (typeof territoryId !== "string" || typeof count !== "number") continue;
-        const result = applyAction(
-          state,
-          actorId,
-          {
-            type: "PlaceReinforcements",
-            territoryId: territoryId as TerritoryId,
-            count,
-          },
-          args.graphMap,
-          args.ruleset.combat,
-          args.ruleset.fortify,
-          args.ruleset.cards,
-          args.ruleset.teams,
-        );
-        state = result.state;
-      }
-    } else {
-      const result = applyAction(
-        state,
-        actorId,
-        action as unknown as Action,
-        args.graphMap,
-        args.ruleset.combat,
-        args.ruleset.fortify,
-        args.ruleset.cards,
-        args.ruleset.teams,
-      );
-      state = result.state;
-    }
-  } catch (error) {
-    replayError = error instanceof Error ? error.message : "Unknown replay error";
-    if (args.allowEventFallback) {
-      state = applyEventsFallbackForTimeline(
-        state,
-        Array.isArray(args.actionDoc.events) ? args.actionDoc.events : [],
-        args.actionDoc.stateVersionAfter,
-      );
-    }
-  }
-
-  return { state, action, actionType, actorId, replayError };
-}
-
 export const getHistoryTimeline = query({
   args: {
     gameId: v.id("games"),
@@ -1614,471 +1175,131 @@ export const getHistoryTimeline = query({
     const projectedKeep = typeof limit === "number" && Number.isFinite(limit) && limit > 0
       ? Math.floor(limit) + 1
       : undefined;
+    const compactReadCount = projectedKeep ? projectedKeep + TIMELINE_CHECKPOINT_INTERVAL : undefined;
     const projectedFrames = await ctx.db
       .query("gameTimelineFrames")
       .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
       .order("desc")
-      .take(projectedKeep ?? Math.max(1, latestIndex + 2));
+      .take(compactReadCount ?? Math.max(1, latestIndex + 2));
     const projectedTimeline = projectedFrames.reverse();
     const projectedStartIndex = projectedKeep
       ? Math.max(-1, latestIndex - projectedKeep + 1)
       : -1;
-    const hasProjectedTimeline =
-      projectedTimeline.length > 0 &&
-      projectedTimeline[0]!.index === projectedStartIndex &&
-      projectedTimeline[projectedTimeline.length - 1]!.index === latestIndex &&
-      projectedTimeline.every((frame, i) => i === 0 || frame.index === projectedTimeline[i - 1]!.index + 1);
-    if (hasProjectedTimeline) {
-      return projectedTimeline.map((frame) => ({
+
+    let checkpointOffset = -1;
+    for (let i = projectedTimeline.length - 1; i >= 0; i -= 1) {
+      const frame = projectedTimeline[i]!;
+      if (frame.index <= projectedStartIndex && frame.checkpointState) {
+        checkpointOffset = i;
+        break;
+      }
+    }
+    const compactTimeline = checkpointOffset >= 0 ? projectedTimeline.slice(checkpointOffset) : [];
+    const hasCompactTimeline =
+      compactTimeline.length > 0 &&
+      compactTimeline[0]!.checkpointState &&
+      compactTimeline[compactTimeline.length - 1]!.index === latestIndex &&
+      compactTimeline.every((frame, i) =>
+        i === 0 || frame.index === compactTimeline[i - 1]!.index + 1
+      ) &&
+      compactTimeline.every((frame, i) => i === 0 || frame.checkpointState || frame.statePatch);
+    if (hasCompactTimeline) {
+      return compactTimeline.map((frame) => ({
         index: frame.index,
-        actionType: frame.actionType,
-        label: frame.label,
-        actorId: frame.actorId,
         events: frame.events,
-        turnRound: frame.turnRound,
-        turnPlayerId: frame.turnPlayerId,
-        turnPhase: frame.turnPhase,
-        hasCapture: frame.hasCapture,
-        eliminatedPlayerIds: frame.eliminatedPlayerIds,
-        state: frame.state,
-        replayError: frame.replayError,
+        ...(frame.checkpointState ? { checkpointState: frame.checkpointState } : {}),
+        ...(frame.statePatch ? { statePatch: frame.statePatch } : {}),
       }));
     }
 
-    const game = await ctx.db.get(gameId);
-    if (!game || !game.state) return [];
-
-    const state = readGameState(game.state);
-    const mapDoc = await ctx.db
-      .query("maps")
-      .withIndex("by_mapId", (q) => q.eq("mapId", game.mapId))
-      .unique();
-    if (!mapDoc) return [];
-    const graphMap = readGraphMap(mapDoc.graphMap);
-    const ruleset = getGameRuleset({
-      teamModeEnabled: game.teamModeEnabled,
-      rulesetOverrides: game.rulesetOverrides as RulesetOverrides | undefined,
-      effectiveRuleset: game.effectiveRuleset as RulesetConfig | undefined,
-    });
-
-    const playerDocs = await ctx.db
-      .query("gamePlayers")
-      .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
-      .collect();
-    const playerIds = playerDocs
-      .map((doc) => doc.enginePlayerId)
-      .filter((playerId): playerId is string => !!playerId)
-      .sort((a, b) => toPlayerIndex(a) - toPlayerIndex(b)) as PlayerId[];
-    if (playerIds.length === 0) return [];
-
-    const actions = await ctx.db
-      .query("gameActions")
-      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
-      .order("asc")
-      .collect();
-
-    const storedInitialState = game.initialState ? readGameState(game.initialState) : null;
-    let simState = storedInitialState ?? createInitialStateFromSeed(state, graphMap, playerIds, ruleset);
-    const allowEventFallback = !storedInitialState;
-    const timeline: Array<{
-      index: number;
-      actionType: string;
-      label: string;
-      actorId: string | null;
-      events?: RawEvent[];
-      turnRound: number;
-      turnPlayerId: string;
-      turnPhase: string;
-      hasCapture: boolean;
-      eliminatedPlayerIds: string[];
-      state: TimelinePublicState;
-      replayError?: string | null;
-    }> = [
-      {
-        index: -1,
-        actionType: "Start",
-        label: "Game start",
-        actorId: null,
-        turnRound: simState.turn.round,
-        turnPlayerId: simState.turn.currentPlayerId,
-        turnPhase: simState.turn.phase,
-        hasCapture: false,
-        eliminatedPlayerIds: [],
-        state: toTimelinePublicState(simState),
-      },
-    ];
-
-    for (const actionDoc of actions) {
-      const action = actionDoc.action as Record<string, unknown>;
-      const actionType = typeof action.type === "string" ? action.type : "Unknown";
-      const actorId = actionDoc.playerId as PlayerId;
-      let replayError: string | null = null;
-
-      try {
-        if (actionType === "Resign") {
-          simState = applyResignForTimeline(simState, actorId, graphMap, ruleset);
-        } else if (actionType === "PlaceReinforcementsBatch") {
-          const placements = Array.isArray(action.placements) ? action.placements : [];
-          for (const placement of placements) {
-            if (!placement || typeof placement !== "object") continue;
-            const territoryId = (placement as { territoryId?: unknown }).territoryId;
-            const count = (placement as { count?: unknown }).count;
-            if (typeof territoryId !== "string" || typeof count !== "number") continue;
-            const result = applyAction(
-              simState,
-              actorId,
-              {
-                type: "PlaceReinforcements",
-                territoryId: territoryId as TerritoryId,
-                count,
-              },
-              graphMap,
-              ruleset.combat,
-              ruleset.fortify,
-              ruleset.cards,
-              ruleset.teams,
-            );
-            simState = result.state;
-          }
-        } else {
-          const result = applyAction(
-            simState,
-            actorId,
-            action as unknown as Action,
-            graphMap,
-            ruleset.combat,
-            ruleset.fortify,
-            ruleset.cards,
-            ruleset.teams,
-          );
-          simState = result.state;
-        }
-      } catch (error) {
-        // Keep playback available even if one legacy action cannot be replayed.
-        replayError = error instanceof Error ? error.message : "Unknown replay error";
-        if (allowEventFallback) {
-          simState = applyEventsFallbackForTimeline(
-            simState,
-            actionDoc.events as unknown[],
-            actionDoc.stateVersionAfter ?? undefined,
-          );
-        }
-      }
-
-      const events = actionDoc.events as GameEvent[];
-      const summary = summarizeTimelineFrame({
-        action,
-        actionType,
-        actorId: actionDoc.playerId ?? null,
-        events,
-        state: simState,
-      });
-      timeline.push({
-        index: actionDoc.index,
-        actionType,
-        label: summary.label,
-        actorId: summary.actorId,
-        events: redactEvents(events as unknown as RawEvent[]),
-        turnRound: summary.turnRound,
-        turnPlayerId: summary.turnPlayerId,
-        turnPhase: summary.turnPhase,
-        hasCapture: summary.hasCapture,
-        eliminatedPlayerIds: summary.eliminatedPlayerIds,
-        state: toTimelinePublicState(simState),
-        replayError,
-      });
+    const legacyTimeline = projectedTimeline.filter((frame) => frame.index >= projectedStartIndex);
+    const hasLegacyTimeline =
+      legacyTimeline.length > 0 &&
+      legacyTimeline[0]!.index === projectedStartIndex &&
+      legacyTimeline[legacyTimeline.length - 1]!.index === latestIndex &&
+      legacyTimeline.every((frame, i) => i === 0 || frame.index === legacyTimeline[i - 1]!.index + 1) &&
+      legacyTimeline.every((frame) => frame.state);
+    if (hasLegacyTimeline) {
+      return legacyTimeline.map((frame) => ({
+        index: frame.index,
+        events: frame.events,
+        checkpointState: frame.state as TimelinePublicState,
+      }));
     }
 
-    if (typeof limit === "number" && Number.isFinite(limit) && limit > 0) {
-      const keep = Math.floor(limit) + 1;
-      if (timeline.length > keep) {
-        return timeline.slice(timeline.length - keep);
-      }
-    }
-
-    return timeline;
+    return [];
   },
 });
 
-async function enqueueHistoryTimelineBackfillJobs(
-  ctx: MutationCtx,
-  args: { batchSize?: number },
-) {
-  const games = await ctx.db
-    .query("games")
-    .withIndex("by_status_timingMode_turnDeadlineAt", (q) => q.eq("status", "active"))
-    .collect();
-  const now = Date.now();
-  let enqueued = 0;
-
-  for (const game of games) {
-    const latestAction = await ctx.db
-      .query("gameActions")
-      .withIndex("by_gameId_index", (q) => q.eq("gameId", game._id))
-      .order("desc")
-      .first();
-    const targetIndex = latestAction?.index ?? -1;
-    const existing = await ctx.db
-      .query("gameHistoryBackfills")
-      .withIndex("by_gameId", (q) => q.eq("gameId", game._id))
-      .unique();
-
-    if (
-      existing?.status === "complete" &&
-      existing.targetIndex >= targetIndex &&
-      existing.projectionVersion === HISTORY_PROJECTION_VERSION
-    ) {
-      continue;
-    }
-
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        status: "pending",
-        cursorIndex: existing.projectionVersion === HISTORY_PROJECTION_VERSION ? existing.cursorIndex : -2,
-        targetIndex,
-        projectionVersion: HISTORY_PROJECTION_VERSION,
-        error: undefined,
-        updatedAt: now,
-      });
-    } else {
-      await ctx.db.insert("gameHistoryBackfills", {
-        gameId: game._id,
-        status: "pending",
-        cursorIndex: -2,
-        targetIndex,
-        projectionVersion: HISTORY_PROJECTION_VERSION,
-        updatedAt: now,
-      });
-    }
-
-    await ctx.scheduler.runAfter(0, (internal as any).gameplay.backfillHistoryTimelineChunk, {
-      gameId: game._id,
-      batchSize: args.batchSize ?? HISTORY_BACKFILL_BATCH_SIZE,
-    });
-    enqueued += 1;
-  }
-
-  return { enqueued };
-}
-
-export const enqueueHistoryTimelineBackfillInternal = internalMutation({
-  args: {
-    batchSize: v.optional(v.number()),
-  },
-  handler: async (ctx, { batchSize }) => {
-    return await enqueueHistoryTimelineBackfillJobs(ctx, { batchSize });
-  },
-});
-
-export const backfillHistoryTimelineChunk = internalMutation({
+export const getHistoryWindow = query({
   args: {
     gameId: v.id("games"),
-    batchSize: v.optional(v.number()),
+    beforeIndex: v.optional(v.number()),
   },
-  handler: async (ctx, { gameId, batchSize }) => {
-    const backfill = await ctx.db
-      .query("gameHistoryBackfills")
-      .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
+  handler: async (ctx, { gameId, beforeIndex }) => {
+    const latestAction = await ctx.db
+      .query("gameActions")
+      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
+      .order("desc")
+      .first();
+    const latestIndex = latestAction?.index ?? -1;
+    if (latestIndex < 0) {
+      const startSnapshot = await ctx.db
+        .query("gameStateSnapshots")
+        .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId).eq("index", -1))
+        .unique();
+      return {
+        latestIndex,
+        snapshotIndex: startSnapshot?.index ?? null,
+        snapshotPublicState: startSnapshot?.publicState ?? null,
+        actions: [],
+        hasPrevious: false,
+      };
+    }
+
+    const rawWindowEnd =
+      typeof beforeIndex === "number" && Number.isFinite(beforeIndex)
+        ? Math.min(latestIndex, Math.floor(beforeIndex) - 1)
+        : latestIndex;
+    const windowEnd = Math.max(0, rawWindowEnd);
+    const targetSnapshotIndex =
+      Math.floor(windowEnd / GAME_STATE_SNAPSHOT_INTERVAL) * GAME_STATE_SNAPSHOT_INTERVAL;
+
+    let snapshot = await ctx.db
+      .query("gameStateSnapshots")
+      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId).eq("index", targetSnapshotIndex))
       .unique();
-    if (!backfill || backfill.status === "complete") return { status: "skipped" };
-
-    const now = Date.now();
-    await ctx.db.patch(backfill._id, {
-      status: "running",
-      error: undefined,
-      updatedAt: now,
-    });
-
-    try {
-      const game = await ctx.db.get(gameId);
-      if (!game || !game.state) {
-        await ctx.db.patch(backfill._id, {
-          status: "failed",
-          error: "Game not found or has no state",
-          updatedAt: Date.now(),
-        });
-        return { status: "failed" };
-      }
-
-      const targetIndex = backfill.targetIndex;
-      let cursorIndex = backfill.cursorIndex;
-      const initialState = await loadInitialTimelineState(ctx, {
-        game,
-        gameId,
-      });
-
-      if (cursorIndex < -1) {
-        await insertTimelineFrameIfMissing(ctx, buildStartTimelineFrame({
-          gameId,
-          state: initialState,
-          createdAt: now,
-        }));
-        await insertTimelineSnapshotIfMissing(ctx, {
-          gameId,
-          index: -1,
-          state: initialState,
-          createdAt: now,
-        });
-        cursorIndex = -1;
-      }
-
-      if (cursorIndex >= targetIndex) {
-        await ctx.db.patch(backfill._id, {
-          status: "complete",
-          cursorIndex,
-          projectionVersion: HISTORY_PROJECTION_VERSION,
-          updatedAt: Date.now(),
-        });
-        return { status: "complete", cursorIndex };
-      }
-
-      const mapDoc = await ctx.db
-        .query("maps")
-        .withIndex("by_mapId", (q) => q.eq("mapId", game.mapId))
+    if (!snapshot) {
+      snapshot = await ctx.db
+        .query("gameStateSnapshots")
+        .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId).eq("index", -1))
         .unique();
-      if (!mapDoc) throw new Error("Map not found");
-      const graphMap = readGraphMap(mapDoc.graphMap);
-      const ruleset = getGameRuleset({
-        teamModeEnabled: game.teamModeEnabled,
-        rulesetOverrides: game.rulesetOverrides as RulesetOverrides | undefined,
-        effectiveRuleset: game.effectiveRuleset as RulesetConfig | undefined,
-      });
-      const allowEventFallback = !game.initialState;
-
-      const snapshots = await ctx.db
-        .query("gameTimelineSnapshots")
-        .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
-        .collect();
-      const snapshot = snapshots
-        .filter((entry) =>
-          entry.projectionVersion === HISTORY_PROJECTION_VERSION &&
-          entry.index <= cursorIndex
-        )
-        .sort((a, b) => b.index - a.index)[0];
-      let simState = snapshot ? readGameState(snapshot.state) : initialState;
-      const replayFromIndex = snapshot?.index ?? -1;
-      const chunkLimit = Math.max(1, Math.floor(batchSize ?? HISTORY_BACKFILL_BATCH_SIZE));
-      const replayTake = Math.max(0, cursorIndex - replayFromIndex) + chunkLimit;
-      const actionsToReplay = await ctx.db
-        .query("gameActions")
-        .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId).gt("index", replayFromIndex))
-        .order("asc")
-        .take(replayTake);
-      let written = 0;
-
-      for (const actionDoc of actionsToReplay) {
-        if (actionDoc.index > targetIndex) break;
-        const applied = applyStoredActionForTimeline({
-          state: simState,
-          actionDoc,
-          graphMap,
-          ruleset,
-          allowEventFallback,
-        });
-        simState = applied.state;
-        if (actionDoc.index <= cursorIndex) continue;
-
-        await insertTimelineProjectionIfMissing(ctx, {
-          gameId,
-          index: actionDoc.index,
-          actionId: actionDoc._id,
-          action: applied.action,
-          actionType: applied.actionType,
-          actorId: actionDoc.playerId ?? null,
-          events: (Array.isArray(actionDoc.events) ? actionDoc.events : []) as GameEvent[],
-          state: simState,
-          replayError: applied.replayError,
-          createdAt: actionDoc.createdAt,
-        });
-        cursorIndex = actionDoc.index;
-        written += 1;
-      }
-
-      const status = cursorIndex >= targetIndex ? "complete" : "running";
-      await ctx.db.patch(backfill._id, {
-        status,
-        cursorIndex,
-        projectionVersion: HISTORY_PROJECTION_VERSION,
-        updatedAt: Date.now(),
-      });
-
-      if (status !== "complete" && written > 0) {
-        await ctx.scheduler.runAfter(0, (internal as any).gameplay.backfillHistoryTimelineChunk, {
-          gameId,
-          batchSize: chunkLimit,
-        });
-      }
-
-      return { status, cursorIndex, written };
-    } catch (error) {
-      await ctx.db.patch(backfill._id, {
-        status: "failed",
-        error: error instanceof Error ? error.message : "Unknown backfill error",
-        updatedAt: Date.now(),
-      });
-      throw error;
     }
-  },
-});
 
-export const verifyHistoryTimelineBackfillInternal = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const games = await ctx.db
-      .query("games")
-      .withIndex("by_status_timingMode_turnDeadlineAt", (q) => q.eq("status", "active"))
+    const snapshotIndex = snapshot?.index ?? -1;
+    const actions = await ctx.db
+      .query("gameActions")
+      .withIndex("by_gameId_index", (q) =>
+        q.eq("gameId", gameId).gt("index", snapshotIndex).lte("index", windowEnd),
+      )
       .collect();
-    const incomplete: Array<{
-      gameId: Id<"games">;
-      latestActionIndex: number;
-      latestFrameIndex: number | null;
-      backfillStatus: string | null;
-    }> = [];
-
-    for (const game of games) {
-      const latestAction = await ctx.db
-        .query("gameActions")
-        .withIndex("by_gameId_index", (q) => q.eq("gameId", game._id))
-        .order("desc")
-        .first();
-      const latestFrame = await ctx.db
-        .query("gameTimelineFrames")
-        .withIndex("by_gameId_index", (q) => q.eq("gameId", game._id))
-        .order("desc")
-        .first();
-      const frames = await ctx.db
-        .query("gameTimelineFrames")
-        .withIndex("by_gameId_index", (q) => q.eq("gameId", game._id))
-        .order("asc")
-        .take((latestAction?.index ?? -1) + 2);
-      const backfill = await ctx.db
-        .query("gameHistoryBackfills")
-        .withIndex("by_gameId", (q) => q.eq("gameId", game._id))
-        .unique();
-      const latestActionIndex = latestAction?.index ?? -1;
-      const latestFrameIndex = latestFrame?.index ?? null;
-      if (
-        latestFrameIndex !== latestActionIndex ||
-        latestFrame?.projectionVersion !== HISTORY_PROJECTION_VERSION ||
-        frames.length !== latestActionIndex + 2 ||
-        frames.some((frame, i) =>
-          frame.projectionVersion !== HISTORY_PROJECTION_VERSION ||
-          frame.index !== i - 1
-        )
-      ) {
-        incomplete.push({
-          gameId: game._id,
-          latestActionIndex,
-          latestFrameIndex,
-          backfillStatus: backfill?.status ?? null,
-        });
-      }
-    }
 
     return {
-      checked: games.length,
-      complete: games.length - incomplete.length,
-      incomplete,
+      latestIndex,
+      snapshotIndex,
+      snapshotPublicState: snapshot?.publicState ?? null,
+      actions: actions.map((a) => ({
+        _id: a._id,
+        _creationTime: a._creationTime,
+        gameId: a.gameId,
+        index: a.index,
+        playerId: a.playerId,
+        action: redactAction(a.action as Record<string, unknown>),
+        events: redactEvents(a.events as RawEvent[]),
+        publicStatePatch: a.publicStatePatch,
+        createdAt: a.createdAt,
+      })),
+      hasPrevious: snapshotIndex > -1,
     };
   },
 });

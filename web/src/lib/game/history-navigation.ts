@@ -4,6 +4,18 @@ function clampIndex(index: number, maxIndex: number) {
   return Math.max(0, Math.min(maxIndex, index));
 }
 
+function turnRound(frame: HistoryFrame) {
+  return frame.state.turn.round;
+}
+
+function turnPlayerId(frame: HistoryFrame) {
+  return frame.state.turn.currentPlayerId;
+}
+
+function hasEvent(frame: HistoryFrame, type: string) {
+  return frame.events?.some((event) => event.type === type) ?? false;
+}
+
 export function findPreviousTurnBoundary(frames: HistoryFrame[], currentIndex: number) {
   const safeIndex = clampIndex(currentIndex, Math.max(0, frames.length - 1));
   for (let i = safeIndex; i >= 0; i -= 1) {
@@ -11,7 +23,7 @@ export function findPreviousTurnBoundary(frames: HistoryFrame[], currentIndex: n
     const previous = frames[i - 1];
     if (!current) continue;
     if (!previous) return i;
-    if (current.turnRound !== previous.turnRound || current.turnPlayerId !== previous.turnPlayerId) {
+    if (turnRound(current) !== turnRound(previous) || turnPlayerId(current) !== turnPlayerId(previous)) {
       return i;
     }
   }
@@ -25,7 +37,7 @@ export function findNextTurnBoundary(frames: HistoryFrame[], currentIndex: numbe
     const current = frames[i];
     const previous = frames[i - 1];
     if (!current || !previous) continue;
-    if (current.turnRound !== previous.turnRound || current.turnPlayerId !== previous.turnPlayerId) {
+    if (turnRound(current) !== turnRound(previous) || turnPlayerId(current) !== turnPlayerId(previous)) {
       return i;
     }
   }
@@ -36,7 +48,8 @@ export function findNextCaptureFrame(frames: HistoryFrame[], currentIndex: numbe
   const maxIndex = Math.max(0, frames.length - 1);
   const safeIndex = clampIndex(currentIndex, maxIndex);
   for (let i = safeIndex + 1; i < frames.length; i += 1) {
-    if (frames[i]?.hasCapture) return i;
+    const frame = frames[i];
+    if (frame && hasEvent(frame, "TerritoryCaptured")) return i;
   }
   return safeIndex;
 }
@@ -45,7 +58,8 @@ export function findNextEliminationFrame(frames: HistoryFrame[], currentIndex: n
   const maxIndex = Math.max(0, frames.length - 1);
   const safeIndex = clampIndex(currentIndex, maxIndex);
   for (let i = safeIndex + 1; i < frames.length; i += 1) {
-    if ((frames[i]?.eliminatedPlayerIds.length ?? 0) > 0) return i;
+    const frame = frames[i];
+    if (frame && hasEvent(frame, "PlayerEliminated")) return i;
   }
   return safeIndex;
 }
@@ -54,17 +68,17 @@ export function findLastTurnEndForPlayer(frames: HistoryFrame[], playerId: strin
   if (!playerId || frames.length === 0) return 0;
 
   const maxIndex = Math.max(0, frames.length - 1);
-  const hasPlayerFrame = frames.some((frame) => frame.turnPlayerId === playerId);
+  const hasPlayerFrame = frames.some((frame) => turnPlayerId(frame) === playerId);
   if (!hasPlayerFrame) return 0;
 
-  const hasOtherPlayer = frames.some((frame) => frame.turnPlayerId !== playerId);
+  const hasOtherPlayer = frames.some((frame) => turnPlayerId(frame) !== playerId);
   if (!hasOtherPlayer) return maxIndex;
 
   for (let i = maxIndex; i >= 1; i -= 1) {
     const current = frames[i];
     const previous = frames[i - 1];
     if (!current || !previous) continue;
-    if (previous.turnPlayerId === playerId && current.turnPlayerId !== playerId) {
+    if (turnPlayerId(previous) === playerId && turnPlayerId(current) !== playerId) {
       return i;
     }
   }

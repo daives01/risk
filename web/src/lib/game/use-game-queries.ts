@@ -2,7 +2,8 @@ import { useQuery } from "convex/react";
 import { useMemo } from "react";
 import { api } from "@backend/_generated/api";
 import type { Id } from "@backend/_generated/dataModel";
-import type { ChatMessage, GameAction, HistoryFrame } from "@/lib/game/types";
+import { reconstructHistoryWindow } from "@/lib/game/history-timeline";
+import type { ChatMessage, GameAction, HistoryWindow } from "@/lib/game/types";
 
 export function useGameViewQueries(
   session: unknown,
@@ -36,21 +37,25 @@ export function useGameRuntimeQueries(
     typedGameId ? { gameId: typedGameId } : "skip",
   );
 
-  const historyTimeline = useQuery(
-    api.gameplay.getHistoryTimeline,
-    typedGameId && historyEnabled ? { gameId: typedGameId, limit: 500 } : "skip",
-  ) as HistoryFrame[] | undefined;
+  const historyWindow = useQuery(
+    api.gameplay.getHistoryWindow,
+    typedGameId && historyEnabled ? { gameId: typedGameId } : "skip",
+  ) as HistoryWindow | undefined;
+
+  const historyTimeline = useMemo(
+    () => reconstructHistoryWindow(historyWindow),
+    [historyWindow],
+  );
 
   const timelineActions = useMemo(
     () =>
-      historyTimeline
-        ?.filter((frame) => frame.index >= 0)
-        .map((frame) => ({
-          _id: `${frame.index}`,
-          index: frame.index,
-          events: frame.events ?? [],
-        })) satisfies GameAction[] | undefined,
-    [historyTimeline],
+      historyWindow?.actions.map((action) => ({
+        _id: action._id,
+        index: action.index,
+        events: action.events ?? [],
+        publicStatePatch: action.publicStatePatch,
+      })) satisfies GameAction[] | undefined,
+    [historyWindow],
   );
 
   const chatMessages = useQuery(

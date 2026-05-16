@@ -1,42 +1,18 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ENGINE_VERSION } from "risk-engine";
-import type { GameState, PlayerId } from "risk-engine";
+import type { PlayerId } from "risk-engine";
 import { authComponent } from "./auth.js";
 import { getTeamIds, resolveTeamNames } from "./gameTeams";
 import { resolvePlayerColors } from "./playerColors";
 import { readGameStateNullable } from "./typeAdapters";
+import { getGameStateDoc, publicGameStateProjection } from "./gameState";
 
 export const engineVersion = query({
   handler: async () => {
     return ENGINE_VERSION;
   },
 });
-
-/** Strip private info from GameState to produce a public view. */
-function publicProjection(state: GameState) {
-  // Per-player hand sizes (not contents)
-  const handSizes: Record<string, number> = {};
-  for (const [pid, hand] of Object.entries(state.hands)) {
-    handSizes[pid] = hand.length;
-  }
-
-  return {
-    players: state.players,
-    turnOrder: state.turnOrder,
-    territories: state.territories,
-    turn: state.turn,
-    pending: state.pending,
-    reinforcements: state.reinforcements,
-    capturedThisTurn: state.capturedThisTurn,
-    tradesCompleted: state.tradesCompleted,
-    fortifiesUsedThisTurn: state.fortifiesUsedThisTurn,
-    deckCount: state.deck.draw.length,
-    discardCount: state.deck.discard.length,
-    handSizes,
-    stateVersion: state.stateVersion,
-  };
-}
 
 /**
  * Public game view — safe for spectators. Never exposes RNG seed,
@@ -95,7 +71,8 @@ export const getGameView = query({
       };
     }
 
-    const state = readGameStateNullable(game.state);
+    const gameState = await getGameStateDoc(ctx, gameId);
+    const state = readGameStateNullable(gameState?.privateState ?? game.state);
 
     return {
       _id: game._id,
@@ -120,7 +97,7 @@ export const getGameView = query({
       startedAt: game.startedAt ?? null,
       finishedAt: game.finishedAt ?? null,
       players: playerMap,
-      state: state ? publicProjection(state) : null,
+      state: gameState?.publicState ?? (state ? publicGameStateProjection(state) : null),
     };
   },
 });
@@ -191,7 +168,8 @@ export const getGameViewAsPlayer = query({
       };
     }
 
-    const state = readGameStateNullable(game.state);
+    const gameState = await getGameStateDoc(ctx, gameId);
+    const state = readGameStateNullable(gameState?.privateState ?? game.state);
     const enginePlayerId = callerPlayer?.enginePlayerId as
       | PlayerId
       | undefined;
@@ -269,7 +247,7 @@ export const getGameViewAsPlayer = query({
       startedAt: game.startedAt ?? null,
       finishedAt: game.finishedAt ?? null,
       players: playerMap,
-      state: state ? publicProjection(state) : null,
+      state: gameState?.publicState ?? (state ? publicGameStateProjection(state) : null),
       myHand,
       delegatableTurnHand,
       myEnginePlayerId: enginePlayerId ?? null,
@@ -367,6 +345,9 @@ export const listMyGames = query({
           }
         }
 
+        const gameState = game.status === "active" ? await getGameStateDoc(ctx, game._id) : null;
+        const privateState = readGameStateNullable(gameState?.privateState ?? game.state);
+
         return {
           _id: game._id,
           name: game.name,
@@ -381,7 +362,7 @@ export const listMyGames = query({
           myEnginePlayerId: pd.enginePlayerId ?? null,
           currentTurnPlayerId:
             game.status === "active"
-              ? (readGameStateNullable(game.state)?.turn.currentPlayerId ?? null)
+              ? (privateState?.turn.currentPlayerId ?? null)
               : null,
           result,
         };

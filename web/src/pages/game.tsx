@@ -685,6 +685,7 @@ export default function GamePage() {
 
   const { occupyMove, setOccupyMove } = useGameOccupy({
     pending: state?.pending,
+    stateVersion: state?.stateVersion,
     isMyTurn,
     historyOpen,
     controlsDisabled,
@@ -1452,16 +1453,6 @@ export default function GamePage() {
   const debugTerritories = historyOpen ? historyFrames[historyFrameIndex]?.state?.territories : displayedTerritories;
 
   useEffect(() => {
-    if (!historyDebugEnabled || !historyFrames.length) return;
-    const replayErrors = historyFrames
-      .filter((frame) => !!frame.replayError)
-      .map((frame) => ({ index: frame.index, actionType: frame.actionType, replayError: frame.replayError }));
-    if (replayErrors.length > 0) {
-      console.warn("[HistoryDebug] Replay errors found in history timeline", replayErrors);
-    }
-  }, [historyDebugEnabled, historyFrames]);
-
-  useEffect(() => {
     if (!historyDebugEnabled || !historyOpen) return;
     const frame = historyFrames[historyFrameIndex];
     const signature = territorySignature(debugTerritories);
@@ -1474,12 +1465,10 @@ export default function GamePage() {
     console.debug("[HistoryDebug] Frame update", {
       framePos: historyFrameIndex,
       frameIndex: frame?.index ?? null,
-      actionType: frame?.actionType ?? null,
-      turnRound: frame?.turnRound ?? null,
-      turnPhase: frame?.turnPhase ?? null,
+      turnRound: frame?.state?.turn.round ?? null,
+      turnPhase: frame?.state?.turn.phase ?? null,
       stateVersion: frame?.state?.stateVersion ?? null,
       territorySig: signature,
-      replayError: frame?.replayError ?? null,
       staleRun,
     });
 

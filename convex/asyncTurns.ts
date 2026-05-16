@@ -8,6 +8,14 @@ import { computeTurnDeadlineAt, didTurnAdvance, isAsyncTimingMode, type GameTimi
 import { yourTurnEmailHtml } from "./emails";
 import { readGameStateNullable, readGraphMap } from "./typeAdapters";
 import { scheduleTurnTimeout } from "./turnTimeoutScheduling";
+import {
+  insertGameStateSnapshotIfMissing,
+  getGameStateDoc,
+  publicGameStateProjection,
+  readCurrentPrivateGameState,
+  upsertCurrentGameState,
+} from "./gameState";
+import { buildTimelineStatePatch } from "./historyTimeline";
 
 function getGameRuleset(game: {
   teamModeEnabled?: boolean;
@@ -87,6 +95,7 @@ export function applyTimeoutTurnResolution(args: {
   const actionLogs: Array<{
     action: Action;
     events: unknown[];
+    publicStatePatch: unknown;
     beforeVersion: number;
     afterVersion: number;
   }> = [];
@@ -115,6 +124,10 @@ export function applyTimeoutTurnResolution(args: {
     actionLogs.push({
       action,
       events: [...result.events],
+      publicStatePatch: buildTimelineStatePatch(
+        publicGameStateProjection(workingState),
+        publicGameStateProjection(result.state),
+      ),
       beforeVersion: workingState.stateVersion,
       afterVersion: result.state.stateVersion,
     });
@@ -193,7 +206,7 @@ async function processExpiredTurnForGame(ctx: any, args: {
     return { processed: false, reason: "stale_or_inactive" as const };
   }
 
-  const state = readGameStateNullable(game.state);
+  const state = await readCurrentPrivateGameState(ctx, game);
   if (!state || state.turn.phase === "GameOver") {
     return { processed: false, reason: "game_over" as const };
   }
@@ -240,12 +253,19 @@ async function processExpiredTurnForGame(ctx: any, args: {
       playerId: timedOutPlayerId,
       action: actionLog.action,
       events,
+      publicStatePatch: actionLog.publicStatePatch,
       stateVersionBefore: actionLog.beforeVersion,
       stateVersionAfter: actionLog.afterVersion,
       createdAt: now,
     });
     actionIndex += 1;
   }
+  await insertGameStateSnapshotIfMissing(ctx, {
+    gameId: game._id,
+    index: actionIndex - 1,
+    state: resolution.nextState,
+    createdAt: now,
+  });
 
   const isGameOver = resolution.nextState.turn.phase === "GameOver";
   const winner = isGameOver
@@ -270,6 +290,11 @@ async function processExpiredTurnForGame(ctx: any, args: {
       : undefined,
   });
 
+  await upsertCurrentGameState(ctx, {
+    gameId: game._id,
+    state: resolution.nextState,
+    updatedAt: now,
+  });
   await ctx.db.patch(game._id, {
     state: resolution.nextState,
     stateVersion: resolution.nextState.stateVersion,
@@ -380,9 +405,11 @@ export const getGameForNotification = internalQuery({
       .query("gamePlayers")
       .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
       .collect();
+    const gameState = await getGameStateDoc(ctx, gameId);
 
     return {
       ...game,
+      state: gameState?.privateState ?? game.state,
       players,
     };
   },

@@ -50,6 +50,7 @@ import { readGraphMap } from "./typeAdapters";
 import { generateUniqueInviteCode } from "./inviteCodes";
 import { createTeamAwareTurnOrder } from "./teamTurnOrder";
 import { normalizeTeamId } from "./slackValidation";
+import { insertGameStateSnapshotIfMissing, upsertCurrentGameState } from "./gameState";
 
 const DEFAULT_GAME_VISIBILITY = "unlisted" as const;
 
@@ -310,7 +311,7 @@ export const deleteGame = mutation({
       throw new Error("Only the host can delete this game");
     }
 
-    const [players, invites, actions, chatMessages] = await Promise.all([
+    const [players, invites, actions, chatMessages, states, snapshots] = await Promise.all([
       ctx.db
         .query("gamePlayers")
         .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
@@ -327,6 +328,14 @@ export const deleteGame = mutation({
         .query("gameChatMessages")
         .withIndex("by_gameId_createdAt", (q) => q.eq("gameId", gameId))
         .collect(),
+      ctx.db
+        .query("gameStates")
+        .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
+        .collect(),
+      ctx.db
+        .query("gameStateSnapshots")
+        .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
+        .collect(),
     ]);
 
     for (const player of players) {
@@ -340,6 +349,12 @@ export const deleteGame = mutation({
     }
     for (const message of chatMessages) {
       await ctx.db.delete(message._id);
+    }
+    for (const state of states) {
+      await ctx.db.delete(state._id);
+    }
+    for (const snapshot of snapshots) {
+      await ctx.db.delete(snapshot._id);
     }
 
     await ctx.db.delete(gameId);
@@ -962,6 +977,23 @@ export const startGame = mutation({
       expectedPlayerId: isAsyncTimingMode((game.timingMode ?? "realtime") as GameTimingMode)
         ? engineState.turn.currentPlayerId
         : undefined,
+    });
+    await upsertCurrentGameState(ctx, {
+      gameId,
+      state: engineState,
+      updatedAt: turnStartedAt,
+    });
+    await insertGameStateSnapshotIfMissing(ctx, {
+      gameId,
+      index: -1,
+      state: engineState,
+      createdAt: turnStartedAt,
+    });
+    await insertGameStateSnapshotIfMissing(ctx, {
+      gameId,
+      index: 0,
+      state: engineState,
+      createdAt: turnStartedAt,
     });
     await ctx.db.patch(gameId, {
       status: "active",
