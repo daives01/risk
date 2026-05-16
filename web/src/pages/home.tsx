@@ -10,6 +10,7 @@ import { useHomePageState } from "@/pages/home/useHomePageState";
 export default function HomePage() {
   const {
     isPending,
+    isConvexAuthLoading,
     session,
     location,
     isAdmin,
@@ -40,7 +41,7 @@ export default function HomePage() {
     browsePublicLobbies,
   } = useHomePageState();
 
-  if (isPending) {
+  if (isPending || (session && isConvexAuthLoading)) {
     return <div className="page-shell flex items-center justify-center">Loading...</div>;
   }
 

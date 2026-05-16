@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { api } from "@backend/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import { useHomeKeyboardShortcuts } from "@/pages/home/useHomeKeyboardShortcuts";
@@ -11,13 +11,14 @@ export function useHomePageState() {
   const navigate = useNavigate();
   const location = useLocation();
   const { data: session, isPending } = authClient.useSession();
-  const isAuthenticated = Boolean(session);
+  const { isLoading: isConvexAuthLoading, isAuthenticated: isConvexAuthenticated } = useConvexAuth();
+  const isAuthenticated = Boolean(session) && isConvexAuthenticated;
 
   const games = useQuery(api.games.listMyGames, isAuthenticated ? {} : "skip") as MyGameType[] | undefined;
   const publicGames = useQuery(api.games.listPublicGames, isAuthenticated ? { limit: 24 } : "skip") as PublicGameType[] | undefined;
   const isAdmin = useQuery(api.adminMaps.isCurrentUserAdmin, isAuthenticated ? {} : "skip");
 
-  const isGamesLoading = games === undefined;
+  const isGamesLoading = isPending || isConvexAuthLoading || games === undefined;
 
   const [tab, setTab] = useState<HomeTab>("home");
   const [gamesFilter, setGamesFilter] = useState<GamesFilter>("active");
@@ -155,6 +156,7 @@ export function useHomePageState() {
 
   return {
     isPending,
+    isConvexAuthLoading,
     session,
     location,
     isAdmin,
