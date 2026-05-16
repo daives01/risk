@@ -1,4 +1,4 @@
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -19,6 +19,10 @@ import { readGameState, readGraphMap } from "./typeAdapters";
 import { distributeInitialArmiesCappedRandom } from "./initialPlacement";
 import { createTeamAwareTurnOrder } from "./teamTurnOrder";
 import { scheduleTurnTimeout } from "./turnTimeoutScheduling";
+
+const HISTORY_PROJECTION_VERSION = 1;
+const HISTORY_SNAPSHOT_INTERVAL = 50;
+const HISTORY_BACKFILL_BATCH_SIZE = 50;
 
 const actionValidator = v.union(
   v.object({
@@ -172,6 +176,157 @@ function extractEliminationNotificationData(events: unknown[]): {
       ? { byPlayerId: eliminationEvents[0].byId as string }
       : {}),
   };
+}
+
+function shouldStoreTimelineSnapshot(index: number): boolean {
+  return index === -1 || index % HISTORY_SNAPSHOT_INTERVAL === 0;
+}
+
+function buildTimelineFrame(args: {
+  gameId: Id<"games">;
+  index: number;
+  actionId?: Id<"gameActions">;
+  action: Record<string, unknown>;
+  actionType: string;
+  actorId: string | null;
+  events: GameEvent[];
+  state: GameState;
+  replayError?: string | null;
+  createdAt: number;
+}) {
+  const summary = summarizeTimelineFrame({
+    action: args.action,
+    actionType: args.actionType,
+    actorId: args.actorId,
+    events: args.events,
+    state: args.state,
+  });
+
+  return {
+    gameId: args.gameId,
+    index: args.index,
+    ...(args.actionId ? { actionId: args.actionId } : {}),
+    projectionVersion: HISTORY_PROJECTION_VERSION,
+    actionType: args.actionType,
+    label: summary.label,
+    actorId: summary.actorId,
+    events: redactEvents(args.events as unknown as RawEvent[]),
+    turnRound: summary.turnRound,
+    turnPlayerId: summary.turnPlayerId,
+    turnPhase: summary.turnPhase,
+    hasCapture: summary.hasCapture,
+    eliminatedPlayerIds: summary.eliminatedPlayerIds,
+    state: toTimelinePublicState(args.state),
+    replayError: args.replayError ?? null,
+    createdAt: args.createdAt,
+  };
+}
+
+function buildStartTimelineFrame(args: {
+  gameId: Id<"games">;
+  state: GameState;
+  createdAt: number;
+}) {
+  return {
+    gameId: args.gameId,
+    index: -1,
+    projectionVersion: HISTORY_PROJECTION_VERSION,
+    actionType: "Start",
+    label: "Game start",
+    actorId: null,
+    turnRound: args.state.turn.round,
+    turnPlayerId: args.state.turn.currentPlayerId,
+    turnPhase: args.state.turn.phase,
+    hasCapture: false,
+    eliminatedPlayerIds: [],
+    state: toTimelinePublicState(args.state),
+    createdAt: args.createdAt,
+  };
+}
+
+async function insertTimelineFrameIfMissing(
+  ctx: MutationCtx,
+  frame: ReturnType<typeof buildTimelineFrame> | ReturnType<typeof buildStartTimelineFrame>,
+) {
+  const existing = await ctx.db
+    .query("gameTimelineFrames")
+    .withIndex("by_gameId_index", (q) => q.eq("gameId", frame.gameId).eq("index", frame.index))
+    .unique();
+  if (existing?.projectionVersion === HISTORY_PROJECTION_VERSION) return existing._id;
+  if (existing) return existing._id;
+  return await ctx.db.insert("gameTimelineFrames", frame);
+}
+
+async function insertTimelineSnapshotIfMissing(
+  ctx: MutationCtx,
+  args: {
+    gameId: Id<"games">;
+    index: number;
+    state: GameState;
+    createdAt: number;
+  },
+) {
+  if (!shouldStoreTimelineSnapshot(args.index)) return null;
+  const existing = await ctx.db
+    .query("gameTimelineSnapshots")
+    .withIndex("by_gameId_index", (q) => q.eq("gameId", args.gameId).eq("index", args.index))
+    .unique();
+  if (existing?.projectionVersion === HISTORY_PROJECTION_VERSION) return existing._id;
+  if (existing) return existing._id;
+  return await ctx.db.insert("gameTimelineSnapshots", {
+    gameId: args.gameId,
+    index: args.index,
+    projectionVersion: HISTORY_PROJECTION_VERSION,
+    state: args.state,
+    createdAt: args.createdAt,
+  });
+}
+
+async function insertTimelineProjectionIfMissing(
+  ctx: MutationCtx,
+  args: {
+    gameId: Id<"games">;
+    index: number;
+    actionId?: Id<"gameActions">;
+    action: Record<string, unknown>;
+    actionType: string;
+    actorId: string | null;
+    events: GameEvent[];
+    state: GameState;
+    replayError?: string | null;
+    createdAt: number;
+  },
+) {
+  await insertTimelineFrameIfMissing(ctx, buildTimelineFrame(args));
+  await insertTimelineSnapshotIfMissing(ctx, {
+    gameId: args.gameId,
+    index: args.index,
+    state: args.state,
+    createdAt: args.createdAt,
+  });
+}
+
+async function insertInitialTimelineProjectionIfAvailable(
+  ctx: MutationCtx,
+  args: {
+    gameId: Id<"games">;
+    initialState: unknown;
+    createdAt: number;
+  },
+) {
+  if (!args.initialState) return;
+  const state = readGameState(args.initialState);
+  await insertTimelineFrameIfMissing(ctx, buildStartTimelineFrame({
+    gameId: args.gameId,
+    state,
+    createdAt: args.createdAt,
+  }));
+  await insertTimelineSnapshotIfMissing(ctx, {
+    gameId: args.gameId,
+    index: -1,
+    state,
+    createdAt: args.createdAt,
+  });
 }
 
 type DelegationPlayerDoc = {
@@ -340,8 +495,15 @@ export const submitAction = mutation({
       .first();
     const nextIndex = lastAction ? lastAction.index + 1 : 0;
 
+    const createdAt = Date.now();
+    await insertInitialTimelineProjectionIfAvailable(ctx, {
+      gameId: args.gameId,
+      initialState: game.initialState,
+      createdAt,
+    });
+
     // Append to action log
-    await ctx.db.insert("gameActions", {
+    const actionId = await ctx.db.insert("gameActions", {
       gameId: args.gameId,
       index: nextIndex,
       playerId,
@@ -351,7 +513,18 @@ export const submitAction = mutation({
       wasDelegated: actingPlayer.wasDelegated,
       stateVersionBefore: state.stateVersion,
       stateVersionAfter: result.state.stateVersion,
-      createdAt: Date.now(),
+      createdAt,
+    });
+    await insertTimelineProjectionIfMissing(ctx, {
+      gameId: args.gameId,
+      index: nextIndex,
+      actionId,
+      action: args.action as Record<string, unknown>,
+      actionType: action.type,
+      actorId: playerId,
+      events: result.events as GameEvent[],
+      state: result.state,
+      createdAt,
     });
 
     // Check if game is over
@@ -514,17 +687,35 @@ export const submitReinforcementPlacements = mutation({
       .first();
     const nextIndex = lastAction ? lastAction.index + 1 : 0;
 
-    await ctx.db.insert("gameActions", {
+    const action = { type: "PlaceReinforcementsBatch", placements: args.placements };
+    const createdAt = Date.now();
+    await insertInitialTimelineProjectionIfAvailable(ctx, {
+      gameId: args.gameId,
+      initialState: game.initialState,
+      createdAt,
+    });
+    const actionId = await ctx.db.insert("gameActions", {
       gameId: args.gameId,
       index: nextIndex,
       playerId,
-      action: { type: "PlaceReinforcementsBatch", placements: args.placements },
+      action,
       events,
       actingUserId: actingPlayer.actingUserId,
       wasDelegated: actingPlayer.wasDelegated,
       stateVersionBefore: state.stateVersion,
       stateVersionAfter: nextState.stateVersion,
-      createdAt: Date.now(),
+      createdAt,
+    });
+    await insertTimelineProjectionIfMissing(ctx, {
+      gameId: args.gameId,
+      index: nextIndex,
+      actionId,
+      action,
+      actionType: action.type,
+      actorId: playerId,
+      events: events as GameEvent[],
+      state: nextState,
+      createdAt,
     });
 
     const isGameOver = nextState.turn.phase === "GameOver";
@@ -754,15 +945,33 @@ export const resign = mutation({
       expectedPlayerId: timingPatch.turnStartedAt ? newState.turn.currentPlayerId : undefined,
     });
 
-    await ctx.db.insert("gameActions", {
+    const action = { type: "Resign" };
+    const createdAt = Date.now();
+    await insertInitialTimelineProjectionIfAvailable(ctx, {
+      gameId,
+      initialState: game.initialState,
+      createdAt,
+    });
+    const actionId = await ctx.db.insert("gameActions", {
       gameId,
       index: nextIndex,
       playerId,
-      action: { type: "Resign" },
+      action,
       events,
       stateVersionBefore: state.stateVersion,
       stateVersionAfter: newState.stateVersion,
-      createdAt: Date.now(),
+      createdAt,
+    });
+    await insertTimelineProjectionIfMissing(ctx, {
+      gameId,
+      index: nextIndex,
+      actionId,
+      action,
+      actionType: action.type,
+      actorId: playerId,
+      events: events as GameEvent[],
+      state: newState,
+      createdAt,
     });
 
     await ctx.db.patch(gameId, {
@@ -1280,12 +1489,162 @@ function applyEventsFallbackForTimeline(
   };
 }
 
+async function loadInitialTimelineState(ctx: MutationCtx, args: {
+  game: {
+    initialState?: unknown;
+    state?: unknown;
+    mapId: string;
+    teamModeEnabled?: boolean;
+    rulesetOverrides?: RulesetOverrides;
+    effectiveRuleset?: RulesetConfig;
+  };
+  gameId: Id<"games">;
+}) {
+  if (args.game.initialState) {
+    return readGameState(args.game.initialState);
+  }
+
+  const currentState = readGameState(args.game.state);
+  const mapDoc = await ctx.db
+    .query("maps")
+    .withIndex("by_mapId", (q) => q.eq("mapId", args.game.mapId))
+    .unique();
+  if (!mapDoc) throw new Error("Map not found");
+  const graphMap = readGraphMap(mapDoc.graphMap);
+  const playerDocs = await ctx.db
+    .query("gamePlayers")
+    .withIndex("by_gameId", (q) => q.eq("gameId", args.gameId))
+    .collect();
+  const playerIds = playerDocs
+    .map((doc) => doc.enginePlayerId)
+    .filter((playerId): playerId is string => !!playerId)
+    .sort((a, b) => toPlayerIndex(a) - toPlayerIndex(b)) as PlayerId[];
+  if (playerIds.length === 0) throw new Error("Game has no players");
+  const ruleset = getGameRuleset({
+    teamModeEnabled: args.game.teamModeEnabled,
+    rulesetOverrides: args.game.rulesetOverrides,
+    effectiveRuleset: args.game.effectiveRuleset,
+  });
+  return createInitialStateFromSeed(currentState, graphMap, playerIds, ruleset);
+}
+
+function applyStoredActionForTimeline(args: {
+  state: GameState;
+  actionDoc: {
+    action: unknown;
+    playerId: string;
+    events: unknown;
+    stateVersionAfter?: number;
+  };
+  graphMap: GraphMap;
+  ruleset: RulesetConfig;
+  allowEventFallback: boolean;
+}) {
+  const action = args.actionDoc.action as Record<string, unknown>;
+  const actionType = typeof action.type === "string" ? action.type : "Unknown";
+  const actorId = args.actionDoc.playerId as PlayerId;
+  let state = args.state;
+  let replayError: string | null = null;
+
+  try {
+    if (actionType === "Resign") {
+      state = applyResignForTimeline(state, actorId, args.graphMap, args.ruleset);
+    } else if (actionType === "PlaceReinforcementsBatch") {
+      const placements = Array.isArray(action.placements) ? action.placements : [];
+      for (const placement of placements) {
+        if (!placement || typeof placement !== "object") continue;
+        const territoryId = (placement as { territoryId?: unknown }).territoryId;
+        const count = (placement as { count?: unknown }).count;
+        if (typeof territoryId !== "string" || typeof count !== "number") continue;
+        const result = applyAction(
+          state,
+          actorId,
+          {
+            type: "PlaceReinforcements",
+            territoryId: territoryId as TerritoryId,
+            count,
+          },
+          args.graphMap,
+          args.ruleset.combat,
+          args.ruleset.fortify,
+          args.ruleset.cards,
+          args.ruleset.teams,
+        );
+        state = result.state;
+      }
+    } else {
+      const result = applyAction(
+        state,
+        actorId,
+        action as unknown as Action,
+        args.graphMap,
+        args.ruleset.combat,
+        args.ruleset.fortify,
+        args.ruleset.cards,
+        args.ruleset.teams,
+      );
+      state = result.state;
+    }
+  } catch (error) {
+    replayError = error instanceof Error ? error.message : "Unknown replay error";
+    if (args.allowEventFallback) {
+      state = applyEventsFallbackForTimeline(
+        state,
+        Array.isArray(args.actionDoc.events) ? args.actionDoc.events : [],
+        args.actionDoc.stateVersionAfter,
+      );
+    }
+  }
+
+  return { state, action, actionType, actorId, replayError };
+}
+
 export const getHistoryTimeline = query({
   args: {
     gameId: v.id("games"),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, { gameId, limit }) => {
+    const latestAction = await ctx.db
+      .query("gameActions")
+      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
+      .order("desc")
+      .first();
+    const latestIndex = latestAction?.index ?? -1;
+    const projectedKeep = typeof limit === "number" && Number.isFinite(limit) && limit > 0
+      ? Math.floor(limit) + 1
+      : undefined;
+    const projectedFrames = await ctx.db
+      .query("gameTimelineFrames")
+      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
+      .order("desc")
+      .take(projectedKeep ?? Math.max(1, latestIndex + 2));
+    const projectedTimeline = projectedFrames.reverse();
+    const projectedStartIndex = projectedKeep
+      ? Math.max(-1, latestIndex - projectedKeep + 1)
+      : -1;
+    const hasProjectedTimeline =
+      projectedTimeline.length > 0 &&
+      projectedTimeline[0]!.index === projectedStartIndex &&
+      projectedTimeline[projectedTimeline.length - 1]!.index === latestIndex &&
+      projectedTimeline.every((frame, i) => i === 0 || frame.index === projectedTimeline[i - 1]!.index + 1);
+    if (hasProjectedTimeline) {
+      return projectedTimeline.map((frame) => ({
+        index: frame.index,
+        actionType: frame.actionType,
+        label: frame.label,
+        actorId: frame.actorId,
+        events: frame.events,
+        turnRound: frame.turnRound,
+        turnPlayerId: frame.turnPlayerId,
+        turnPhase: frame.turnPhase,
+        hasCapture: frame.hasCapture,
+        eliminatedPlayerIds: frame.eliminatedPlayerIds,
+        state: frame.state,
+        replayError: frame.replayError,
+      }));
+    }
+
     const game = await ctx.db.get(gameId);
     if (!game || !game.state) return [];
 
@@ -1326,6 +1685,7 @@ export const getHistoryTimeline = query({
       actionType: string;
       label: string;
       actorId: string | null;
+      events?: RawEvent[];
       turnRound: number;
       turnPlayerId: string;
       turnPhase: string;
@@ -1418,6 +1778,7 @@ export const getHistoryTimeline = query({
         actionType,
         label: summary.label,
         actorId: summary.actorId,
+        events: redactEvents(events as unknown as RawEvent[]),
         turnRound: summary.turnRound,
         turnPlayerId: summary.turnPlayerId,
         turnPhase: summary.turnPhase,
@@ -1436,5 +1797,288 @@ export const getHistoryTimeline = query({
     }
 
     return timeline;
+  },
+});
+
+async function enqueueHistoryTimelineBackfillJobs(
+  ctx: MutationCtx,
+  args: { batchSize?: number },
+) {
+  const games = await ctx.db
+    .query("games")
+    .withIndex("by_status_timingMode_turnDeadlineAt", (q) => q.eq("status", "active"))
+    .collect();
+  const now = Date.now();
+  let enqueued = 0;
+
+  for (const game of games) {
+    const latestAction = await ctx.db
+      .query("gameActions")
+      .withIndex("by_gameId_index", (q) => q.eq("gameId", game._id))
+      .order("desc")
+      .first();
+    const targetIndex = latestAction?.index ?? -1;
+    const existing = await ctx.db
+      .query("gameHistoryBackfills")
+      .withIndex("by_gameId", (q) => q.eq("gameId", game._id))
+      .unique();
+
+    if (
+      existing?.status === "complete" &&
+      existing.targetIndex >= targetIndex &&
+      existing.projectionVersion === HISTORY_PROJECTION_VERSION
+    ) {
+      continue;
+    }
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        status: "pending",
+        cursorIndex: existing.projectionVersion === HISTORY_PROJECTION_VERSION ? existing.cursorIndex : -2,
+        targetIndex,
+        projectionVersion: HISTORY_PROJECTION_VERSION,
+        error: undefined,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("gameHistoryBackfills", {
+        gameId: game._id,
+        status: "pending",
+        cursorIndex: -2,
+        targetIndex,
+        projectionVersion: HISTORY_PROJECTION_VERSION,
+        updatedAt: now,
+      });
+    }
+
+    await ctx.scheduler.runAfter(0, (internal as any).gameplay.backfillHistoryTimelineChunk, {
+      gameId: game._id,
+      batchSize: args.batchSize ?? HISTORY_BACKFILL_BATCH_SIZE,
+    });
+    enqueued += 1;
+  }
+
+  return { enqueued };
+}
+
+export const enqueueHistoryTimelineBackfillInternal = internalMutation({
+  args: {
+    batchSize: v.optional(v.number()),
+  },
+  handler: async (ctx, { batchSize }) => {
+    return await enqueueHistoryTimelineBackfillJobs(ctx, { batchSize });
+  },
+});
+
+export const backfillHistoryTimelineChunk = internalMutation({
+  args: {
+    gameId: v.id("games"),
+    batchSize: v.optional(v.number()),
+  },
+  handler: async (ctx, { gameId, batchSize }) => {
+    const backfill = await ctx.db
+      .query("gameHistoryBackfills")
+      .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
+      .unique();
+    if (!backfill || backfill.status === "complete") return { status: "skipped" };
+
+    const now = Date.now();
+    await ctx.db.patch(backfill._id, {
+      status: "running",
+      error: undefined,
+      updatedAt: now,
+    });
+
+    try {
+      const game = await ctx.db.get(gameId);
+      if (!game || !game.state) {
+        await ctx.db.patch(backfill._id, {
+          status: "failed",
+          error: "Game not found or has no state",
+          updatedAt: Date.now(),
+        });
+        return { status: "failed" };
+      }
+
+      const targetIndex = backfill.targetIndex;
+      let cursorIndex = backfill.cursorIndex;
+      const initialState = await loadInitialTimelineState(ctx, {
+        game,
+        gameId,
+      });
+
+      if (cursorIndex < -1) {
+        await insertTimelineFrameIfMissing(ctx, buildStartTimelineFrame({
+          gameId,
+          state: initialState,
+          createdAt: now,
+        }));
+        await insertTimelineSnapshotIfMissing(ctx, {
+          gameId,
+          index: -1,
+          state: initialState,
+          createdAt: now,
+        });
+        cursorIndex = -1;
+      }
+
+      if (cursorIndex >= targetIndex) {
+        await ctx.db.patch(backfill._id, {
+          status: "complete",
+          cursorIndex,
+          projectionVersion: HISTORY_PROJECTION_VERSION,
+          updatedAt: Date.now(),
+        });
+        return { status: "complete", cursorIndex };
+      }
+
+      const mapDoc = await ctx.db
+        .query("maps")
+        .withIndex("by_mapId", (q) => q.eq("mapId", game.mapId))
+        .unique();
+      if (!mapDoc) throw new Error("Map not found");
+      const graphMap = readGraphMap(mapDoc.graphMap);
+      const ruleset = getGameRuleset({
+        teamModeEnabled: game.teamModeEnabled,
+        rulesetOverrides: game.rulesetOverrides as RulesetOverrides | undefined,
+        effectiveRuleset: game.effectiveRuleset as RulesetConfig | undefined,
+      });
+      const allowEventFallback = !game.initialState;
+
+      const snapshots = await ctx.db
+        .query("gameTimelineSnapshots")
+        .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
+        .collect();
+      const snapshot = snapshots
+        .filter((entry) =>
+          entry.projectionVersion === HISTORY_PROJECTION_VERSION &&
+          entry.index <= cursorIndex
+        )
+        .sort((a, b) => b.index - a.index)[0];
+      let simState = snapshot ? readGameState(snapshot.state) : initialState;
+      const replayFromIndex = snapshot?.index ?? -1;
+      const chunkLimit = Math.max(1, Math.floor(batchSize ?? HISTORY_BACKFILL_BATCH_SIZE));
+      const replayTake = Math.max(0, cursorIndex - replayFromIndex) + chunkLimit;
+      const actionsToReplay = await ctx.db
+        .query("gameActions")
+        .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId).gt("index", replayFromIndex))
+        .order("asc")
+        .take(replayTake);
+      let written = 0;
+
+      for (const actionDoc of actionsToReplay) {
+        if (actionDoc.index > targetIndex) break;
+        const applied = applyStoredActionForTimeline({
+          state: simState,
+          actionDoc,
+          graphMap,
+          ruleset,
+          allowEventFallback,
+        });
+        simState = applied.state;
+        if (actionDoc.index <= cursorIndex) continue;
+
+        await insertTimelineProjectionIfMissing(ctx, {
+          gameId,
+          index: actionDoc.index,
+          actionId: actionDoc._id,
+          action: applied.action,
+          actionType: applied.actionType,
+          actorId: actionDoc.playerId ?? null,
+          events: (Array.isArray(actionDoc.events) ? actionDoc.events : []) as GameEvent[],
+          state: simState,
+          replayError: applied.replayError,
+          createdAt: actionDoc.createdAt,
+        });
+        cursorIndex = actionDoc.index;
+        written += 1;
+      }
+
+      const status = cursorIndex >= targetIndex ? "complete" : "running";
+      await ctx.db.patch(backfill._id, {
+        status,
+        cursorIndex,
+        projectionVersion: HISTORY_PROJECTION_VERSION,
+        updatedAt: Date.now(),
+      });
+
+      if (status !== "complete" && written > 0) {
+        await ctx.scheduler.runAfter(0, (internal as any).gameplay.backfillHistoryTimelineChunk, {
+          gameId,
+          batchSize: chunkLimit,
+        });
+      }
+
+      return { status, cursorIndex, written };
+    } catch (error) {
+      await ctx.db.patch(backfill._id, {
+        status: "failed",
+        error: error instanceof Error ? error.message : "Unknown backfill error",
+        updatedAt: Date.now(),
+      });
+      throw error;
+    }
+  },
+});
+
+export const verifyHistoryTimelineBackfillInternal = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const games = await ctx.db
+      .query("games")
+      .withIndex("by_status_timingMode_turnDeadlineAt", (q) => q.eq("status", "active"))
+      .collect();
+    const incomplete: Array<{
+      gameId: Id<"games">;
+      latestActionIndex: number;
+      latestFrameIndex: number | null;
+      backfillStatus: string | null;
+    }> = [];
+
+    for (const game of games) {
+      const latestAction = await ctx.db
+        .query("gameActions")
+        .withIndex("by_gameId_index", (q) => q.eq("gameId", game._id))
+        .order("desc")
+        .first();
+      const latestFrame = await ctx.db
+        .query("gameTimelineFrames")
+        .withIndex("by_gameId_index", (q) => q.eq("gameId", game._id))
+        .order("desc")
+        .first();
+      const frames = await ctx.db
+        .query("gameTimelineFrames")
+        .withIndex("by_gameId_index", (q) => q.eq("gameId", game._id))
+        .order("asc")
+        .take((latestAction?.index ?? -1) + 2);
+      const backfill = await ctx.db
+        .query("gameHistoryBackfills")
+        .withIndex("by_gameId", (q) => q.eq("gameId", game._id))
+        .unique();
+      const latestActionIndex = latestAction?.index ?? -1;
+      const latestFrameIndex = latestFrame?.index ?? null;
+      if (
+        latestFrameIndex !== latestActionIndex ||
+        latestFrame?.projectionVersion !== HISTORY_PROJECTION_VERSION ||
+        frames.length !== latestActionIndex + 2 ||
+        frames.some((frame, i) =>
+          frame.projectionVersion !== HISTORY_PROJECTION_VERSION ||
+          frame.index !== i - 1
+        )
+      ) {
+        incomplete.push({
+          gameId: game._id,
+          latestActionIndex,
+          latestFrameIndex,
+          backfillStatus: backfill?.status ?? null,
+        });
+      }
+    }
+
+    return {
+      checked: games.length,
+      complete: games.length - incomplete.length,
+      incomplete,
+    };
   },
 });

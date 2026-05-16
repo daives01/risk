@@ -73,6 +73,7 @@ export type HistoryFrame = {
   actionType: string;
   label: string;
   actorId: string | null;
+  events?: Array<{ type: string; [key: string]: unknown }>;
   turnRound: number;
   turnPlayerId: string;
   turnPhase: Phase;

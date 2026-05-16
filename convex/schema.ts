@@ -132,6 +132,47 @@ export default defineSchema({
     .index("by_gameId", ["gameId"])
     .index("by_gameId_index", ["gameId", "index"])
     .index("by_gameId_playerId", ["gameId", "playerId"]),
+  gameTimelineFrames: defineTable({
+    gameId: v.id("games"),
+    index: v.number(),
+    actionId: v.optional(v.id("gameActions")),
+    projectionVersion: v.number(),
+    actionType: v.string(),
+    label: v.string(),
+    actorId: v.union(v.string(), v.null()),
+    events: v.optional(v.any()),
+    turnRound: v.number(),
+    turnPlayerId: v.string(),
+    turnPhase: v.string(),
+    hasCapture: v.boolean(),
+    eliminatedPlayerIds: v.array(v.string()),
+    state: v.any(),
+    replayError: v.optional(v.union(v.string(), v.null())),
+    createdAt: v.number(),
+  }).index("by_gameId_index", ["gameId", "index"]),
+  gameTimelineSnapshots: defineTable({
+    gameId: v.id("games"),
+    index: v.number(),
+    projectionVersion: v.number(),
+    state: v.any(),
+    createdAt: v.number(),
+  }).index("by_gameId_index", ["gameId", "index"]),
+  gameHistoryBackfills: defineTable({
+    gameId: v.id("games"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("running"),
+      v.literal("complete"),
+      v.literal("failed"),
+    ),
+    cursorIndex: v.number(),
+    targetIndex: v.number(),
+    projectionVersion: v.number(),
+    error: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_gameId", ["gameId"])
+    .index("by_status_updatedAt", ["status", "updatedAt"]),
   gameChatMessages: defineTable({
     gameId: v.id("games"),
     channel: v.union(v.literal("all"), v.literal("global"), v.literal("team"), v.literal("dm")),
