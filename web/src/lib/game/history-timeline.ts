@@ -1,4 +1,4 @@
-import type { HistoryFrame, HistoryTimelineEntry, HistoryWindow, PublicState, TimelineStatePatch } from "@/lib/game/types";
+import type { HistoryFrame, HistoryWindow, PublicState, TimelineStatePatch } from "@/lib/game/types";
 
 export function applyTimelineStatePatch(previous: PublicState, patch: TimelineStatePatch): PublicState {
   const territories = { ...previous.territories };
@@ -38,32 +38,6 @@ export function applyTimelineStatePatch(previous: PublicState, patch: TimelineSt
   }
 
   return next;
-}
-
-export function reconstructHistoryFrames(entries: HistoryTimelineEntry[] | null | undefined): HistoryFrame[] {
-  if (!entries?.length) return [];
-
-  const frames: HistoryFrame[] = [];
-  let state: PublicState | null = null;
-
-  for (const entry of entries) {
-    if (entry.checkpointState) {
-      state = entry.checkpointState;
-    } else if (entry.statePatch && state) {
-      state = applyTimelineStatePatch(state, entry.statePatch);
-    } else {
-      state = null;
-      continue;
-    }
-
-    frames.push({
-      index: entry.index,
-      events: entry.events,
-      state,
-    });
-  }
-
-  return frames;
 }
 
 export function reconstructHistoryWindow(window: HistoryWindow | null | undefined): HistoryFrame[] {

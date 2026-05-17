@@ -823,6 +823,7 @@ export const resign = mutation({
 });
 
 type RawEvent = Record<string, unknown>;
+const MAX_HISTORY_WINDOW_ACTIONS = 100;
 
 function redactEvents(events: RawEvent[]): RawEvent[] {
   return events.map((e) => {
@@ -845,55 +846,6 @@ function redactAction(action: Record<string, unknown>): Record<string, unknown> 
   }
   return action;
 }
-
-export const listRecentActions = query({
-  args: {
-    gameId: v.id("games"),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, { gameId, limit }) => {
-    const take = limit ?? 20;
-    const actions = await ctx.db
-      .query("gameActions")
-      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
-      .order("desc")
-      .take(take);
-    return actions.reverse().map((a) => ({
-      _id: a._id,
-      _creationTime: a._creationTime,
-      gameId: a.gameId,
-      index: a.index,
-      playerId: a.playerId,
-      action: redactAction(a.action as Record<string, unknown>),
-      events: redactEvents(a.events as RawEvent[]),
-      createdAt: a.createdAt,
-    }));
-  },
-});
-
-export const listActions = query({
-  args: {
-    gameId: v.id("games"),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, { gameId, limit }) => {
-    const actions = await ctx.db
-      .query("gameActions")
-      .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
-      .order("desc")
-      .take(limit ?? 50);
-    return actions.reverse().map((a) => ({
-      _id: a._id,
-      _creationTime: a._creationTime,
-      gameId: a.gameId,
-      index: a.index,
-      playerId: a.playerId,
-      action: redactAction(a.action as Record<string, unknown>),
-      events: redactEvents(a.events as RawEvent[]),
-      createdAt: a.createdAt,
-    }));
-  },
-});
 
 export const getHistorySummary = query({
   args: {
@@ -1067,7 +1019,7 @@ export const getHistoryWindow = query({
       .withIndex("by_gameId_index", (q) =>
         q.eq("gameId", gameId).gt("index", snapshotIndex).lte("index", windowEnd),
       )
-      .collect();
+      .take(MAX_HISTORY_WINDOW_ACTIONS);
 
     return {
       latestIndex,

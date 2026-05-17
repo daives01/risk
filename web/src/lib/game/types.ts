@@ -91,13 +91,6 @@ export type TimelineStatePatch = {
   stateVersion?: number;
 };
 
-export type HistoryTimelineEntry = {
-  index: number;
-  events?: Array<{ type: string; [key: string]: unknown }>;
-  checkpointState?: PublicState;
-  statePatch?: TimelineStatePatch;
-};
-
 export type HistoryWindow = {
   latestIndex: number;
   snapshotIndex: number | null;

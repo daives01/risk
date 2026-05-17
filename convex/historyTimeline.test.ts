@@ -4,9 +4,7 @@ import {
   applyTimelineStatePatch,
   buildTimelineStatePatch,
   describeTimelineStep,
-  shouldStoreTimelineCheckpoint,
   summarizeTimelineFrame,
-  TIMELINE_CHECKPOINT_INTERVAL,
   type TimelinePublicState,
 } from "./historyTimeline";
 
@@ -100,10 +98,4 @@ describe("history timeline compact states", () => {
     expect(applyTimelineStatePatch(previous, patch)).toEqual(next);
   });
 
-  test("marks the start frame and interval frames as checkpoints", () => {
-    expect(shouldStoreTimelineCheckpoint(-1)).toBe(true);
-    expect(shouldStoreTimelineCheckpoint(0)).toBe(true);
-    expect(shouldStoreTimelineCheckpoint(TIMELINE_CHECKPOINT_INTERVAL - 1)).toBe(false);
-    expect(shouldStoreTimelineCheckpoint(TIMELINE_CHECKPOINT_INTERVAL)).toBe(true);
-  });
 });

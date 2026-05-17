@@ -21,15 +21,6 @@ export function clampHistoryFrameIndex(currentIndex: number, historyCount: numbe
   return Math.min(currentIndex, maxIndex);
 }
 
-export function resolveHistoryOpenFrameIndex(
-  currentIndex: number,
-  lastTurnEndIndex: number,
-  historyMaxIndex: number,
-): number {
-  if (currentIndex !== 0) return currentIndex;
-  return Math.min(lastTurnEndIndex, historyMaxIndex);
-}
-
 export function buildHistoryFrameLabel({
   action,
   graphMap,

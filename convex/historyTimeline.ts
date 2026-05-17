@@ -1,7 +1,5 @@
 import type { GameEvent, GameState } from "risk-engine";
 
-export const TIMELINE_CHECKPOINT_INTERVAL = 100;
-
 export type TimelinePublicState = {
   players: Record<string, { status: string; teamId?: string }>;
   turnOrder: string[];
@@ -42,10 +40,6 @@ export type TimelineStatePatch = {
 
 function sameJson(left: unknown, right: unknown) {
   return JSON.stringify(left) === JSON.stringify(right);
-}
-
-export function shouldStoreTimelineCheckpoint(index: number) {
-  return index === -1 || index % TIMELINE_CHECKPOINT_INTERVAL === 0;
 }
 
 export function buildTimelineStatePatch(

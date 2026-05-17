@@ -3,7 +3,6 @@ import { describe, expect, test } from "bun:test";
 import {
   buildHistoryEvents,
   clampHistoryFrameIndex,
-  resolveHistoryOpenFrameIndex,
 } from "../use-game-history";
 import type { GameAction } from "../../../../lib/game/types";
 
@@ -67,10 +66,7 @@ describe("useGameHistory helpers", () => {
     expect(events[0]?.text).toBe("Alex placed 6 armies: North America +3, South America +3");
   });
 
-  test("clamps frame index and chooses latest turn frame when opening history", () => {
+  test("clamps frame index", () => {
     expect(clampHistoryFrameIndex(8, 3)).toBe(2);
-    expect(resolveHistoryOpenFrameIndex(0, 5, 7)).toBe(5);
-    expect(resolveHistoryOpenFrameIndex(0, 9, 7)).toBe(7);
-    expect(resolveHistoryOpenFrameIndex(3, 9, 7)).toBe(3);
   });
 });
