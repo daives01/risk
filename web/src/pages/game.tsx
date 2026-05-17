@@ -31,7 +31,7 @@ import { formatTurnTimer } from "@/lib/game/turn-timer";
 import { useGameActions } from "@/lib/game/use-game-actions";
 import { useGameRuntimeQueries, useGameViewQueries } from "@/lib/game/use-game-queries";
 import { useGameShortcuts } from "@/lib/game/use-game-shortcuts";
-import { HistoryScrubber } from "@/components/game/history-scrubber";
+import { ReplayControlBand } from "@/components/game/replay-control-band";
 import { GameHeader } from "@/pages/game/components/GameHeader";
 import { GameMapSection } from "@/pages/game/components/GameMapSection";
 import { GameModals } from "@/pages/game/components/GameModals";
@@ -114,7 +114,7 @@ export default function GamePage() {
     return (window as { __RISK_HISTORY_DEBUG?: boolean }).__RISK_HISTORY_DEBUG === true;
   }, [location.search]);
   const { data: session, isPending: sessionPending } = authClient.useSession();
-  const { mapPanelRef, mapPanelHeight } = useMapPanelSize();
+  const { mapPanelRef } = useMapPanelSize();
 
   const typedGameId = gameId as Id<"games"> | undefined;
   const { playerView, publicView } = useGameViewQueries(session, sessionPending, typedGameId);
@@ -125,7 +125,14 @@ export default function GamePage() {
   const [chatEditingMessageId, setChatEditingMessageId] = useState<string | null>(null);
   const [chatEditingChannel, setChatEditingChannel] = useState<ChatChannel | null>(null);
   const [historyEnabled, setHistoryEnabled] = useState(false);
-  const { mapDoc, historySummary, historyTimeline, timelineActions, chatMessages } = useGameRuntimeQueries(
+  const {
+    mapDoc,
+    historySummary,
+    historyTimeline,
+    timelineActions,
+    loadHistoryAroundIndex,
+    chatMessages,
+  } = useGameRuntimeQueries(
     typedGameId,
     !!session,
     historyEnabled,
@@ -191,6 +198,7 @@ export default function GamePage() {
   const reinforcementDraftVersionRef = useRef<number | null>(null);
   const troopDeltaResumeTimeoutRef = useRef<number | null>(null);
   const historyDebugRef = useRef<{ framePos: number; signature: string; staleRun: number } | null>(null);
+  const historyLazyLoadTimeoutRef = useRef<number | null>(null);
   const actionButtonCooldownTimeoutRef = useRef<number | null>(null);
   const stopAutoAttackRef = useRef<() => void>(() => undefined);
   const setOccupyMoveRef = useRef<Dispatch<SetStateAction<number>>>(() => undefined);
@@ -231,16 +239,18 @@ export default function GamePage() {
     setHistoryPlaying,
     historyFrameIndex,
     setHistoryFrameIndex,
-    historyFrames,
-    historyEvents,
+    activeHistoryFrame,
+    activeHistoryFrameLoaded,
     historyMaxIndex,
     historyAtEnd,
     historyAttackEdgeIds,
-    activeHistoryEventIndex,
+    activeHistoryFrameLabel,
+    lastTurnEndIndex,
     historyCount,
   } = useGameHistory({
     historyTimeline,
     timelineActions,
+    totalHistoryCount: (historySummary?.latestActionIndex ?? -1) + 2,
     graphMap,
     playerMap,
     myEnginePlayerId: myEnginePlayerId ?? undefined,
@@ -1289,6 +1299,7 @@ export default function GamePage() {
     historyOpen,
     historyAtEnd,
     historyMaxIndex,
+    historyLastTurnIndex: lastTurnEndIndex,
     isMyTurn,
     phase,
     cardsOpen,
@@ -1345,7 +1356,7 @@ export default function GamePage() {
     onUndoPlacement: handleUndoPlacement,
   });
 
-  const displayState = historyOpen ? (historyFrames[historyFrameIndex]?.state ?? state) : state;
+  const displayState = historyOpen ? (activeHistoryFrame?.state ?? state) : state;
   const highlightedTerritoryIds = useMemo(() => {
     if (!displayState) return new Set<string>();
     const selectedIds = resolveHighlightedTerritoryIds(displayState, highlightFilter);
@@ -1450,11 +1461,31 @@ export default function GamePage() {
     setHistoryPlaying(false);
   }, [historyOpen, isMapFullscreen, setHistoryOpen, setHistoryPlaying]);
 
-  const debugTerritories = historyOpen ? historyFrames[historyFrameIndex]?.state?.territories : displayedTerritories;
+  useEffect(() => {
+    if (historyLazyLoadTimeoutRef.current !== null) {
+      window.clearTimeout(historyLazyLoadTimeoutRef.current);
+      historyLazyLoadTimeoutRef.current = null;
+    }
+    if (!historyOpen || activeHistoryFrameLoaded) return;
+    historyLazyLoadTimeoutRef.current = window.setTimeout(() => {
+      loadHistoryAroundIndex(historyFrameIndex);
+      historyLazyLoadTimeoutRef.current = null;
+    }, 140);
+  }, [activeHistoryFrameLoaded, historyFrameIndex, historyOpen, loadHistoryAroundIndex]);
+
+  useEffect(() => {
+    return () => {
+      if (historyLazyLoadTimeoutRef.current !== null) {
+        window.clearTimeout(historyLazyLoadTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const debugTerritories = historyOpen ? activeHistoryFrame?.state?.territories : displayedTerritories;
 
   useEffect(() => {
     if (!historyDebugEnabled || !historyOpen) return;
-    const frame = historyFrames[historyFrameIndex];
+    const frame = activeHistoryFrame;
     const signature = territorySignature(debugTerritories);
     const prev = historyDebugRef.current;
     const staleRun = prev && prev.signature === signature && prev.framePos !== historyFrameIndex
@@ -1479,7 +1510,7 @@ export default function GamePage() {
         staleRun,
       });
     }
-  }, [debugTerritories, historyDebugEnabled, historyFrameIndex, historyFrames, historyOpen]);
+  }, [activeHistoryFrame, debugTerritories, historyDebugEnabled, historyFrameIndex, historyOpen]);
 
   if (!typedGameId) {
     return <div className="page-shell flex items-center justify-center">Invalid game URL</div>;
@@ -1548,12 +1579,6 @@ export default function GamePage() {
   const showSignInCta = !sessionPending && !session;
   const loginHref = `/login?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`;
   const winnerName = winnerId ? getPlayerName(winnerId, playerMap) : "Unknown";
-  const onSelectHistoryEvent = (index: number) => {
-    const frameIndex = historyFrames.findIndex((frame) => frame.index === index);
-    if (frameIndex < 0) return;
-    setHistoryFrameIndex(frameIndex);
-    setHistoryPlaying(false);
-  };
   const battleOverlay =
     !historyOpen && isMyTurn && (phase === "Occupy" || (phase === "Attack" && !!state.pending)) && state.pending
       ? {
@@ -1662,17 +1687,6 @@ export default function GamePage() {
         onIncreasePlaceCount={() => setPlaceCount((prev) => Math.min(Math.max(1, uncommittedReinforcements), prev + 1))}
         onUndoPlacement={handleUndoPlacement}
         winnerName={winnerName}
-        historyFrameIndex={historyFrameIndex}
-        historyCount={historyCount}
-        historyMaxIndex={historyMaxIndex}
-        historyAtEnd={historyAtEnd}
-        historyPlaying={historyPlaying}
-        onHistoryFrameIndexChange={setHistoryFrameIndex}
-        onToggleHistoryPlaying={() => setHistoryPlaying((prev) => !prev)}
-        onResetHistory={() => {
-          setHistoryFrameIndex(0);
-          setHistoryPlaying(false);
-        }}
         cardsOpenDisabled={isSpectator || historyOpen}
         myCardCount={myCardCount}
         onOpenCards={() => setCardsOpen(true)}
@@ -1688,17 +1702,6 @@ export default function GamePage() {
         historyToggleDisabled={historySummary?.latestActionIndex == null}
         isMapFullscreen={isMapFullscreen}
         showBackHome
-        renderHistoryScrubber={() => (
-          <HistoryScrubber
-            min={0}
-            max={historyMaxIndex}
-            value={historyFrameIndex}
-            onChange={(value) => {
-              setHistoryFrameIndex(value);
-              setHistoryPlaying(false);
-            }}
-          />
-        )}
         onConfirmPlacements={() => {
           void handleConfirmPlacements();
         }}
@@ -1708,6 +1711,39 @@ export default function GamePage() {
         delegatedPlayerName={isDelegationEligible ? delegatedPlayerName : null}
         onStopDelegation={handleStopDelegation}
       />
+
+      {historyOpen && !isMapFullscreen && (
+        <ReplayControlBand
+          className="page-container max-w-none"
+          frameIndex={historyFrameIndex}
+          frameCount={historyCount}
+          frameMaxIndex={historyMaxIndex}
+          atEnd={historyAtEnd}
+          playing={historyPlaying}
+          activeLabel={activeHistoryFrameLabel}
+          onFrameIndexChange={(value) => {
+            setHistoryFrameIndex(value);
+            setHistoryPlaying(false);
+          }}
+          onPreviousFrame={() => {
+            setHistoryFrameIndex((prev) => Math.max(0, prev - 1));
+            setHistoryPlaying(false);
+          }}
+          onNextFrame={() => {
+            setHistoryFrameIndex((prev) => Math.min(historyMaxIndex, prev + 1));
+            setHistoryPlaying(false);
+          }}
+          onTogglePlaying={() => setHistoryPlaying((prev) => !prev)}
+          onJumpSinceLastTurn={() => {
+            setHistoryFrameIndex(lastTurnEndIndex);
+            setHistoryPlaying(false);
+          }}
+          onResetToLatest={() => {
+            setHistoryFrameIndex(historyMaxIndex);
+            setHistoryPlaying(false);
+          }}
+        />
+      )}
 
       <div
         className={cn(
@@ -1724,7 +1760,6 @@ export default function GamePage() {
         >
           <GameMapSection
             mapPanelRef={mapPanelRef}
-            mapPanelHeight={mapPanelHeight}
             mapMaxHeight={isMapFullscreen ? MAP_FULLSCREEN_MAX_HEIGHT : MAP_MAX_HEIGHT}
             graphMap={graphMap}
             mapVisual={mapVisual}
@@ -1764,9 +1799,6 @@ export default function GamePage() {
             getPlayerLabel={resolvePlayerLabel}
             getPlayerGroupId={resolvePlayerGroupId}
             battleOverlay={battleOverlay}
-            historyEvents={historyEvents}
-            activeHistoryEventIndex={activeHistoryEventIndex}
-            onSelectHistoryEvent={onSelectHistoryEvent}
           />
         </div>
         {!isMapFullscreen && (

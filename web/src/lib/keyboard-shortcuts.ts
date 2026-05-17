@@ -1,5 +1,6 @@
 export function isTypingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
+  if (target instanceof HTMLInputElement && target.type === "range") return false;
   return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
 }
 

@@ -1003,6 +1003,25 @@ export const getHistoryWindow = query({
     beforeIndex: v.optional(v.number()),
   },
   handler: async (ctx, { gameId, beforeIndex }) => {
+    if (typeof beforeIndex === "number" && beforeIndex <= 0) {
+      const startSnapshot = await ctx.db
+        .query("gameStateSnapshots")
+        .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId).eq("index", -1))
+        .unique();
+      const latestAction = await ctx.db
+        .query("gameActions")
+        .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))
+        .order("desc")
+        .first();
+      return {
+        latestIndex: latestAction?.index ?? -1,
+        snapshotIndex: startSnapshot?.index ?? null,
+        snapshotPublicState: startSnapshot?.publicState ?? null,
+        actions: [],
+        hasPrevious: false,
+      };
+    }
+
     const latestAction = await ctx.db
       .query("gameActions")
       .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId))

@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect, react-hooks/preserve-manual-memoization */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatEvent } from "@/lib/game/display";
 import { findLastTurnEndForPlayer } from "@/lib/game/history-navigation";
 import type { GameAction, HistoryFrame } from "@/lib/game/types";
@@ -28,6 +28,20 @@ export function resolveHistoryOpenFrameIndex(
 ): number {
   if (currentIndex !== 0) return currentIndex;
   return Math.min(lastTurnEndIndex, historyMaxIndex);
+}
+
+export function buildHistoryFrameLabel({
+  action,
+  graphMap,
+  playerMap,
+}: {
+  action: GameAction | null | undefined;
+  graphMap: BuildHistoryEventsOptions["graphMap"];
+  playerMap: BuildHistoryEventsOptions["playerMap"];
+}) {
+  if (!action) return "Start of game";
+  const events = buildHistoryEvents({ timelineActions: [action], graphMap, playerMap });
+  return events.at(-1)?.text ?? `Action ${action.index}`;
 }
 
 export function buildHistoryEvents({ timelineActions, graphMap, playerMap }: BuildHistoryEventsOptions) {
@@ -167,6 +181,7 @@ export function buildHistoryEvents({ timelineActions, graphMap, playerMap }: Bui
 interface UseGameHistoryOptions {
   historyTimeline: HistoryFrame[] | null | undefined;
   timelineActions: GameAction[] | null | undefined;
+  totalHistoryCount?: number;
   graphMap:
     | {
       territories: Record<string, { name?: string }>;
@@ -182,6 +197,7 @@ interface UseGameHistoryOptions {
 export function useGameHistory({
   historyTimeline,
   timelineActions,
+  totalHistoryCount,
   graphMap,
   playerMap,
   myEnginePlayerId,
@@ -190,13 +206,24 @@ export function useGameHistory({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyPlaying, setHistoryPlaying] = useState(false);
   const [historyFrameIndex, setHistoryFrameIndex] = useState(0);
+  const wasHistoryOpenRef = useRef(false);
 
   const historyFrames = useMemo(() => historyTimeline ?? [], [historyTimeline]);
-  const historyCount = historyFrames.length;
+  const loadedFramesByPosition = useMemo(() => {
+    const framesByPosition = new Map<number, HistoryFrame>();
+    for (const frame of historyFrames) {
+      framesByPosition.set(frame.index + 1, frame);
+    }
+    return framesByPosition;
+  }, [historyFrames]);
+  const historyCount = Math.max(totalHistoryCount ?? historyFrames.length, historyFrames.length);
   const historyMaxIndex = Math.max(0, historyCount - 1);
   const historyAtEnd = historyFrameIndex >= historyMaxIndex;
   const lastTurnEndIndex = useMemo(
-    () => findLastTurnEndForPlayer(historyFrames, myEnginePlayerId),
+    () => {
+      const loadedFrameIndex = findLastTurnEndForPlayer(historyFrames, myEnginePlayerId);
+      return (historyFrames[loadedFrameIndex]?.index ?? -1) + 1;
+    },
     [historyFrames, myEnginePlayerId],
   );
 
@@ -207,12 +234,29 @@ export function useGameHistory({
 
   const activeHistoryEventIndex = useMemo(() => {
     if (!historyOpen) return null;
-    return historyFrames[historyFrameIndex]?.index ?? null;
-  }, [historyFrameIndex, historyFrames, historyOpen]);
+    return historyFrameIndex - 1;
+  }, [historyFrameIndex, historyOpen]);
+
+  const activeHistoryFrame = useMemo(() => {
+    const exactFrame = loadedFramesByPosition.get(historyFrameIndex);
+    if (exactFrame) return exactFrame;
+
+    let nearestFrame: HistoryFrame | null = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const [position, frame] of loadedFramesByPosition) {
+      const distance = Math.abs(position - historyFrameIndex);
+      if (distance < nearestDistance) {
+        nearestFrame = frame;
+        nearestDistance = distance;
+      }
+    }
+    return nearestFrame;
+  }, [historyFrameIndex, loadedFramesByPosition]);
+  const activeHistoryFrameLoaded = loadedFramesByPosition.has(historyFrameIndex);
 
   const historyAttackEdgeIds = useMemo(() => {
     if (!timelineActions?.length) return null;
-    const frame = historyFrames[historyFrameIndex];
+    const frame = loadedFramesByPosition.get(historyFrameIndex);
     if (!frame) return null;
     const action = timelineActions.find((entry) => entry.index === frame.index);
     if (!action) return null;
@@ -228,7 +272,15 @@ export function useGameHistory({
     }
 
     return null;
-  }, [historyFrameIndex, historyFrames, timelineActions]);
+  }, [historyFrameIndex, loadedFramesByPosition, timelineActions]);
+
+  const activeHistoryFrameLabel = useMemo(() => {
+    if (!historyOpen) return null;
+    if (!activeHistoryFrameLoaded) return "Loading replay frame...";
+    const frame = loadedFramesByPosition.get(historyFrameIndex);
+    const action = frame ? timelineActions?.find((entry) => entry.index === frame.index) : null;
+    return buildHistoryFrameLabel({ action, graphMap, playerMap });
+  }, [activeHistoryFrameLoaded, graphMap, historyFrameIndex, historyOpen, loadedFramesByPosition, playerMap, timelineActions]);
 
   useEffect(() => {
     if (!historyOpen) {
@@ -240,8 +292,15 @@ export function useGameHistory({
 
   useEffect(() => {
     if (!historyOpen) return;
-    setHistoryFrameIndex((prev) => resolveHistoryOpenFrameIndex(prev, lastTurnEndIndex, historyMaxIndex));
-  }, [historyMaxIndex, historyOpen, lastTurnEndIndex]);
+    if (wasHistoryOpenRef.current) return;
+    wasHistoryOpenRef.current = true;
+    setHistoryFrameIndex(historyMaxIndex);
+  }, [historyMaxIndex, historyOpen]);
+
+  useEffect(() => {
+    if (historyOpen) return;
+    wasHistoryOpenRef.current = false;
+  }, [historyOpen]);
 
   useEffect(() => {
     if (!historyOpen || !historyPlaying) return;
@@ -267,11 +326,15 @@ export function useGameHistory({
     historyFrameIndex,
     setHistoryFrameIndex,
     historyFrames,
+    activeHistoryFrame,
+    activeHistoryFrameLoaded,
     historyEvents,
     historyMaxIndex,
     historyAtEnd,
     historyAttackEdgeIds,
     activeHistoryEventIndex,
+    activeHistoryFrameLabel,
+    lastTurnEndIndex,
     historyCount,
   };
 }

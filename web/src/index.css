@@ -352,6 +352,14 @@
     border-right: 0;
   }
 
+  .replay-control-band {
+    border-top: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--app-border);
+    border-left: 0;
+    background: var(--app-surface);
+  }
+
   .game-body {
     min-height: calc(100vh - 3rem);
     padding: 1rem 1rem 1.25rem;

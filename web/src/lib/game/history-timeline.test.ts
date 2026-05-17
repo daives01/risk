@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 import { describe, expect, test } from "bun:test";
-import { reconstructHistoryFrames } from "./history-timeline";
+import { mergeHistoryWindowActions, reconstructHistoryFrames, reconstructHistoryWindows } from "./history-timeline";
 import type { PublicState } from "./types";
 
 const checkpoint: PublicState = {
@@ -69,5 +69,63 @@ describe("history timeline reconstruction", () => {
 
     expect(frames.map((frame) => frame.index)).toEqual([100, 101, 200]);
     expect(frames[2]?.state).toEqual(laterCheckpoint);
+  });
+
+  test("combines cached history windows in frame order", () => {
+    const laterCheckpoint = {
+      ...checkpoint,
+      stateVersion: 9,
+    };
+
+    const frames = reconstructHistoryWindows([
+      {
+        latestIndex: 101,
+        snapshotIndex: 100,
+        snapshotPublicState: laterCheckpoint,
+        actions: [{
+          _id: "a101",
+          index: 101,
+          events: [],
+          publicStatePatch: { stateVersion: 10 },
+        }],
+        hasPrevious: true,
+      },
+      {
+        latestIndex: 99,
+        snapshotIndex: -1,
+        snapshotPublicState: checkpoint,
+        actions: [{
+          _id: "a99",
+          index: 99,
+          events: [],
+          publicStatePatch: { stateVersion: 8 },
+        }],
+        hasPrevious: false,
+      },
+    ]);
+
+    expect(frames.map((frame) => frame.index)).toEqual([-1, 99, 100, 101]);
+    expect(frames.at(-1)?.state.stateVersion).toBe(10);
+  });
+
+  test("dedupes merged window actions by index", () => {
+    const actions = mergeHistoryWindowActions([
+      {
+        latestIndex: 1,
+        snapshotIndex: -1,
+        snapshotPublicState: checkpoint,
+        actions: [{ _id: "older", index: 1, events: [] }],
+        hasPrevious: false,
+      },
+      {
+        latestIndex: 1,
+        snapshotIndex: -1,
+        snapshotPublicState: checkpoint,
+        actions: [{ _id: "newer", index: 1, events: [] }],
+        hasPrevious: false,
+      },
+    ]);
+
+    expect(actions).toEqual([{ _id: "newer", index: 1, events: [] }]);
   });
 });

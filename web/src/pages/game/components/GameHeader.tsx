@@ -9,18 +9,10 @@ import {
   History,
   Info,
   Layers,
-  Pause,
-  Play,
-  SkipBack,
-  SkipForward,
-  SlidersHorizontal,
   Settings,
   Undo2,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { HistoryScrubber } from "@/components/game/history-scrubber";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface GameHeaderProps {
@@ -46,14 +38,6 @@ interface GameHeaderProps {
   onIncreasePlaceCount: () => void;
   onUndoPlacement: () => void;
   winnerName: string;
-  historyFrameIndex: number;
-  historyCount: number;
-  historyMaxIndex: number;
-  historyAtEnd: boolean;
-  historyPlaying: boolean;
-  onHistoryFrameIndexChange: (updater: (previous: number) => number) => void;
-  onToggleHistoryPlaying: () => void;
-  onResetHistory: () => void;
   cardsOpenDisabled: boolean;
   myCardCount: number;
   onOpenCards: () => void;
@@ -64,7 +48,6 @@ interface GameHeaderProps {
   historyToggleDisabled: boolean;
   isMapFullscreen: boolean;
   showBackHome: boolean;
-  renderHistoryScrubber?: () => ReactNode;
   onConfirmPlacements: () => void;
   onEndAttackPhase: () => void;
   actionButtonsDisabled: boolean;
@@ -96,14 +79,6 @@ export function GameHeader({
   onIncreasePlaceCount,
   onUndoPlacement,
   winnerName,
-  historyFrameIndex,
-  historyCount,
-  historyMaxIndex,
-  historyAtEnd,
-  historyPlaying,
-  onHistoryFrameIndexChange,
-  onToggleHistoryPlaying,
-  onResetHistory,
   cardsOpenDisabled,
   myCardCount,
   onOpenCards,
@@ -114,7 +89,6 @@ export function GameHeader({
   historyToggleDisabled,
   isMapFullscreen,
   showBackHome,
-  renderHistoryScrubber,
   onConfirmPlacements,
   onEndAttackPhase,
   actionButtonsDisabled,
@@ -252,46 +226,6 @@ export function GameHeader({
       )}
 
       <div className="ml-auto flex flex-nowrap items-center gap-1.5">
-        {historyOpen && (
-          <div className="flex flex-nowrap items-center gap-1.5">
-            <Button
-              size="xs"
-              type="button"
-              variant="outline"
-              title="Previous frame ([)"
-              disabled={historyFrameIndex <= 0}
-              onClick={() => onHistoryFrameIndexChange((prev) => Math.max(0, prev - 1))}
-            >
-              <SkipBack className="size-4" />
-            </Button>
-            <Button
-              size="xs"
-              type="button"
-              variant="outline"
-              title="Play/Pause (P)"
-              disabled={historyAtEnd}
-              onClick={onToggleHistoryPlaying}
-            >
-              {historyPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
-            </Button>
-            <Button
-              size="xs"
-              type="button"
-              variant="outline"
-              title="Next frame (])"
-              disabled={historyAtEnd}
-              onClick={() => onHistoryFrameIndexChange((prev) => Math.min(historyMaxIndex, prev + 1))}
-            >
-              <SkipForward className="size-4" />
-            </Button>
-            <Button size="xs" type="button" variant="outline" title="Reset history (R)" onClick={onResetHistory}>
-              Reset
-            </Button>
-            <span className="rounded border bg-background/70 px-2 py-1 text-xs text-muted-foreground">
-              {historyFrameIndex + 1}/{historyCount}
-            </span>
-          </div>
-        )}
         <TooltipProvider>
           {!historyOpen && isMyTurn && isPlacementMode && (
             <Button
@@ -368,30 +302,6 @@ export function GameHeader({
             </TooltipTrigger>
             <TooltipContent>Toggle map info (I)</TooltipContent>
           </Tooltip>
-          {historyOpen && (
-            <Popover>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <PopoverTrigger asChild>
-                    <Button
-                      size="icon-sm"
-                      variant="outline"
-                      aria-label="Open timeline scrubber"
-                      className="enabled:cursor-pointer"
-                    >
-                      <SlidersHorizontal className="size-4" aria-hidden="true" />
-                    </Button>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent>Timeline scrubber</TooltipContent>
-              </Tooltip>
-              <PopoverContent align="end" side="bottom" className="w-[min(90vw,420px)] p-3">
-                {renderHistoryScrubber ? renderHistoryScrubber() : (
-                  <HistoryScrubber min={0} max={historyMaxIndex} value={historyFrameIndex} onChange={() => null} />
-                )}
-              </PopoverContent>
-            </Popover>
-          )}
           {!isMapFullscreen && (
             <Tooltip>
               <TooltipTrigger asChild>

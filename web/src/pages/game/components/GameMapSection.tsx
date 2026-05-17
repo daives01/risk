@@ -1,12 +1,10 @@
 import { MapCanvas } from "@/components/game/map-canvas";
-import { GameEventsCard } from "@/components/game/game-panels";
 import type { ComponentProps, RefObject } from "react";
 import type { PublicState } from "@/lib/game/types";
 import { cn } from "@/lib/utils";
 
 interface GameMapSectionProps {
   mapPanelRef: RefObject<HTMLDivElement | null>;
-  mapPanelHeight: number | null;
   mapMaxHeight: string;
   graphMap: {
     territories: Record<string, { name?: string }>;
@@ -50,14 +48,10 @@ interface GameMapSectionProps {
   getPlayerLabel?: (playerId: string) => string;
   getPlayerGroupId?: (playerId: string) => string;
   battleOverlay: ComponentProps<typeof MapCanvas>["battleOverlay"];
-  historyEvents: Array<{ key: string; text: string; index: number }>;
-  activeHistoryEventIndex: number | null;
-  onSelectHistoryEvent: (index: number) => void;
 }
 
 export function GameMapSection({
   mapPanelRef,
-  mapPanelHeight,
   mapMaxHeight,
   graphMap,
   mapVisual,
@@ -93,9 +87,6 @@ export function GameMapSection({
   getPlayerLabel,
   getPlayerGroupId,
   battleOverlay,
-  historyEvents,
-  activeHistoryEventIndex,
-  onSelectHistoryEvent,
 }: GameMapSectionProps) {
   return (
     <div
@@ -151,40 +142,7 @@ export function GameMapSection({
             battleOverlay={battleOverlay}
           />
         </div>
-        <div
-          className={`hidden min-h-0 shrink-0 overflow-hidden transition-[width,transform,opacity] duration-220 ease-out [@media(orientation:landscape)]:flex ${historyOpen && !isMapFullscreen
-            ? "w-[min(34vw,300px)] translate-x-0 opacity-100"
-            : "pointer-events-none w-0 translate-x-10 opacity-0"
-            }`}
-          style={{
-            height: mapPanelHeight ?? mapMaxHeight,
-            maxHeight: mapMaxHeight,
-          }}
-          aria-hidden={!historyOpen}
-        >
-          <div className="h-full min-h-0 w-[min(34vw,300px)] overflow-hidden">
-            <GameEventsCard
-              events={historyEvents}
-              activeIndex={activeHistoryEventIndex}
-              onSelectEvent={onSelectHistoryEvent}
-            />
-          </div>
-        </div>
       </div>
-
-      {!isMapFullscreen && (
-        <div className="grid w-full gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          {historyOpen && (
-            <div className="h-[25vh] min-h-0 overflow-hidden [@media(orientation:landscape)]:hidden">
-              <GameEventsCard
-                events={historyEvents}
-                activeIndex={activeHistoryEventIndex}
-                onSelectEvent={onSelectHistoryEvent}
-              />
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

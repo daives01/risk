@@ -6,6 +6,7 @@ interface UseGameShortcutsOptions {
   historyOpen: boolean;
   historyAtEnd: boolean;
   historyMaxIndex: number;
+  historyLastTurnIndex: number;
   isMyTurn: boolean;
   phase: Phase;
   cardsOpen: boolean;
@@ -46,6 +47,7 @@ export function useGameShortcuts({
   historyOpen,
   historyAtEnd,
   historyMaxIndex,
+  historyLastTurnIndex,
   isMyTurn,
   phase,
   cardsOpen,
@@ -119,25 +121,31 @@ export function useGameShortcuts({
       }
 
       if (historyOpen) {
-        if (event.key === "[") {
+        if (key === ",") {
+          event.preventDefault();
+          onSetHistoryFrameIndex(historyLastTurnIndex);
+          onSetHistoryPlaying(false);
+          return;
+        }
+        if (key === ".") {
+          event.preventDefault();
+          onSetHistoryFrameIndex(historyMaxIndex);
+          onSetHistoryPlaying(false);
+          return;
+        }
+        if (key === "j") {
           event.preventDefault();
           onSetHistoryFrameIndex((prev) => Math.max(0, prev - 1));
           return;
         }
-        if (event.key === "]") {
+        if (key === "l") {
           event.preventDefault();
           onSetHistoryFrameIndex((prev) => Math.min(historyMaxIndex, prev + 1));
           return;
         }
-        if (key === "p" && !historyAtEnd) {
+        if (key === "k" && !historyAtEnd) {
           event.preventDefault();
           onSetHistoryPlaying((prev) => !prev);
-          return;
-        }
-        if (key === "r") {
-          event.preventDefault();
-          onSetHistoryFrameIndex(0);
-          onSetHistoryPlaying(false);
           return;
         }
       }
@@ -255,6 +263,7 @@ export function useGameShortcuts({
     fortifyCount,
     hasPendingOccupy,
     historyAtEnd,
+    historyLastTurnIndex,
     historyMaxIndex,
     historyOpen,
     isMyTurn,

@@ -88,3 +88,27 @@ export function reconstructHistoryWindow(window: HistoryWindow | null | undefine
 
   return frames;
 }
+
+export function reconstructHistoryWindows(windows: Array<HistoryWindow | null | undefined>): HistoryFrame[] {
+  const framesByIndex = new Map<number, HistoryFrame>();
+
+  for (const window of windows) {
+    for (const frame of reconstructHistoryWindow(window)) {
+      framesByIndex.set(frame.index, frame);
+    }
+  }
+
+  return Array.from(framesByIndex.values()).sort((left, right) => left.index - right.index);
+}
+
+export function mergeHistoryWindowActions(windows: Array<HistoryWindow | null | undefined>) {
+  const actionsByIndex = new Map<number, HistoryWindow["actions"][number]>();
+
+  for (const window of windows) {
+    for (const action of window?.actions ?? []) {
+      actionsByIndex.set(action.index, action);
+    }
+  }
+
+  return Array.from(actionsByIndex.values()).sort((left, right) => left.index - right.index);
+}
