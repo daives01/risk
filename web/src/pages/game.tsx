@@ -38,9 +38,9 @@ import { GameModals } from "@/pages/game/components/GameModals";
 import { GameSidePanels } from "@/pages/game/components/GameSidePanels";
 import { useEndgameModal } from "@/pages/game/hooks/use-endgame-modal";
 import { useGameAutoAttack } from "@/pages/game/hooks/use-game-auto-attack";
-import { useGameHistory } from "@/pages/game/hooks/use-game-history";
 import { useGameOccupy } from "@/pages/game/hooks/use-game-occupy";
 import { useMapPanelSize } from "@/pages/game/hooks/use-map-panel-size";
+import { useReplayMode } from "@/pages/game/hooks/use-replay-mode";
 import { useRotatingHints } from "@/pages/game/hooks/use-rotating-hints";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -124,21 +124,12 @@ export default function GamePage() {
   const [chatDraft, setChatDraft] = useState("");
   const [chatEditingMessageId, setChatEditingMessageId] = useState<string | null>(null);
   const [chatEditingChannel, setChatEditingChannel] = useState<ChatChannel | null>(null);
-  const [historyEnabled, setHistoryEnabled] = useState(false);
   const {
     mapDoc,
-    historySummary,
-    historyTimeline,
-    timelineActions,
-    canLoadOlderHistory,
-    historyLoadingOlder,
-    loadOlderHistory,
-    loadHistoryAroundIndex,
     chatMessages,
   } = useGameRuntimeQueries(
     typedGameId,
     !!session,
-    historyEnabled,
     view?.mapId,
   );
   const { graphMap, mapVisual, mapImageUrl } = adaptMapDoc(mapDoc);
@@ -201,8 +192,6 @@ export default function GamePage() {
   const reinforcementDraftVersionRef = useRef<number | null>(null);
   const troopDeltaResumeTimeoutRef = useRef<number | null>(null);
   const historyDebugRef = useRef<{ framePos: number; signature: string; staleRun: number } | null>(null);
-  const historyLazyLoadTimeoutRef = useRef<number | null>(null);
-  const [jumpSinceLastTurnPending, setJumpSinceLastTurnPending] = useState(false);
   const actionButtonCooldownTimeoutRef = useRef<number | null>(null);
   const stopAutoAttackRef = useRef<() => void>(() => undefined);
   const setOccupyMoveRef = useRef<Dispatch<SetStateAction<number>>>(() => undefined);
@@ -238,79 +227,28 @@ export default function GamePage() {
     !!myEnginePlayerId;
   const {
     historyOpen,
-    setHistoryOpen,
     historyPlaying,
     setHistoryPlaying,
     historyFrameIndex,
     setHistoryFrameIndex,
     activeHistoryFrame,
-    activeHistoryFrameLoaded,
     historyMaxIndex,
     historyAtEnd,
     historyAttackEdgeIds,
     activeHistoryFrameLabel,
-    lastTurnEndIndex,
-    lastTurnEndLoaded,
     historyCount,
-  } = useGameHistory({
-    historyTimeline,
+    historySummary,
     timelineActions,
-    totalHistoryCount: (historySummary?.latestActionIndex ?? -1) + 2,
+    toggleReplayMode,
+    jumpSinceLastTurn,
+  } = useReplayMode({
+    typedGameId,
+    isMapFullscreen,
     graphMap,
     playerMap,
     myEnginePlayerId: myEnginePlayerId ?? undefined,
     playbackIntervalMs: HISTORY_PLAYBACK_INTERVAL_MS,
   });
-
-  const jumpSinceLastTurn = useCallback(() => {
-    setHistoryPlaying(false);
-    if (lastTurnEndLoaded || !canLoadOlderHistory) {
-      setJumpSinceLastTurnPending(false);
-      setHistoryFrameIndex(lastTurnEndIndex);
-      return;
-    }
-    setJumpSinceLastTurnPending(true);
-    if (!historyLoadingOlder) {
-      loadOlderHistory();
-    }
-  }, [
-    canLoadOlderHistory,
-    historyLoadingOlder,
-    lastTurnEndIndex,
-    lastTurnEndLoaded,
-    loadOlderHistory,
-    setHistoryFrameIndex,
-    setHistoryPlaying,
-  ]);
-
-  useEffect(() => {
-    if (!jumpSinceLastTurnPending) return;
-    if (lastTurnEndLoaded || !canLoadOlderHistory) {
-      setJumpSinceLastTurnPending(false);
-      setHistoryFrameIndex(lastTurnEndIndex);
-      return;
-    }
-    if (!historyLoadingOlder) {
-      loadOlderHistory();
-    }
-  }, [
-    canLoadOlderHistory,
-    historyLoadingOlder,
-    jumpSinceLastTurnPending,
-    lastTurnEndIndex,
-    lastTurnEndLoaded,
-    loadOlderHistory,
-    setHistoryFrameIndex,
-  ]);
-  const toggleHistory = useCallback(() => {
-    if (isMapFullscreen) return;
-    setHistoryOpen((prev) => {
-      const next = !prev;
-      setHistoryEnabled(next);
-      return next;
-    });
-    setHistoryPlaying(false);
-  }, [isMapFullscreen, setHistoryOpen, setHistoryPlaying]);
 
   const handleToggleGameDelegation = useCallback(async (allow: boolean) => {
     if (!typedGameId) return;
@@ -1363,7 +1301,7 @@ export default function GamePage() {
     occupyMaxMove: state?.pending?.maxMove ?? 1,
     canSetFortify: canSetFortifyShortcut,
     maxFortifyCount: maxFortifyMove,
-    onToggleHistory: toggleHistory,
+    onToggleHistory: toggleReplayMode,
     onToggleShortcutCheatSheet: () => setShortcutsOpen((prev) => !prev),
     onJumpSinceLastTurn: jumpSinceLastTurn,
     onSetHistoryPlaying: setHistoryPlaying,
@@ -1498,34 +1436,6 @@ export default function GamePage() {
       document.documentElement.style.overflow = previousHtmlOverflow;
     };
   }, [isMapFullscreen]);
-
-  useEffect(() => {
-    if (!isMapFullscreen) return;
-    if (!historyOpen) return;
-    setHistoryOpen(false);
-    setHistoryEnabled(false);
-    setHistoryPlaying(false);
-  }, [historyOpen, isMapFullscreen, setHistoryOpen, setHistoryPlaying]);
-
-  useEffect(() => {
-    if (historyLazyLoadTimeoutRef.current !== null) {
-      window.clearTimeout(historyLazyLoadTimeoutRef.current);
-      historyLazyLoadTimeoutRef.current = null;
-    }
-    if (!historyOpen || activeHistoryFrameLoaded) return;
-    historyLazyLoadTimeoutRef.current = window.setTimeout(() => {
-      loadHistoryAroundIndex(historyFrameIndex);
-      historyLazyLoadTimeoutRef.current = null;
-    }, 140);
-  }, [activeHistoryFrameLoaded, historyFrameIndex, historyOpen, loadHistoryAroundIndex]);
-
-  useEffect(() => {
-    return () => {
-      if (historyLazyLoadTimeoutRef.current !== null) {
-        window.clearTimeout(historyLazyLoadTimeoutRef.current);
-      }
-    };
-  }, []);
 
   const debugTerritories = historyOpen ? activeHistoryFrame?.state?.territories : displayedTerritories;
 
@@ -1743,7 +1653,7 @@ export default function GamePage() {
             setInfoPinnedTerritoryId(null);
           }
         }}
-        onToggleHistory={toggleHistory}
+        onToggleHistory={toggleReplayMode}
         onOpenSettings={() => setSettingsOpen(true)}
         historyToggleDisabled={historySummary?.latestActionIndex == null}
         isMapFullscreen={isMapFullscreen}

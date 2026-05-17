@@ -1,7 +1,6 @@
 import { useQuery } from "convex/react";
 import { api } from "@backend/_generated/api";
 import type { Id } from "@backend/_generated/dataModel";
-import { useReplayWindows } from "@/lib/game/use-replay-windows";
 import type { ChatMessage } from "@/lib/game/types";
 
 export function useGameViewQueries(
@@ -27,11 +26,9 @@ export function useGameViewQueries(
 export function useGameRuntimeQueries(
   typedGameId: Id<"games"> | undefined,
   isAuthenticated: boolean,
-  historyEnabled: boolean,
   mapId?: string,
 ) {
   const mapDoc = useQuery(api.maps.getByMapId, mapId ? { mapId } : "skip");
-  const replayWindows = useReplayWindows(typedGameId, historyEnabled);
 
   const chatMessages = useQuery(
     api.gameChat.listVisibleMessages,
@@ -45,7 +42,6 @@ export function useGameRuntimeQueries(
 
   return {
     mapDoc,
-    ...replayWindows,
     chatMessages,
   };
 }
