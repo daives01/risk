@@ -65,23 +65,27 @@ export function findNextEliminationFrame(frames: HistoryFrame[], currentIndex: n
 }
 
 export function findLastTurnEndForPlayer(frames: HistoryFrame[], playerId: string | null | undefined) {
-  if (!playerId || frames.length === 0) return 0;
+  return resolveLastTurnEndForPlayer(frames, playerId).frameIndex;
+}
+
+export function resolveLastTurnEndForPlayer(frames: HistoryFrame[], playerId: string | null | undefined) {
+  if (!playerId || frames.length === 0) return { frameIndex: 0, found: false };
 
   const maxIndex = Math.max(0, frames.length - 1);
   const hasPlayerFrame = frames.some((frame) => turnPlayerId(frame) === playerId);
-  if (!hasPlayerFrame) return 0;
+  if (!hasPlayerFrame) return { frameIndex: 0, found: false };
 
   const hasOtherPlayer = frames.some((frame) => turnPlayerId(frame) !== playerId);
-  if (!hasOtherPlayer) return maxIndex;
+  if (!hasOtherPlayer) return { frameIndex: maxIndex, found: true };
 
   for (let i = maxIndex; i >= 1; i -= 1) {
     const current = frames[i];
     const previous = frames[i - 1];
     if (!current || !previous) continue;
     if (turnPlayerId(previous) === playerId && turnPlayerId(current) !== playerId) {
-      return i;
+      return { frameIndex: i, found: true };
     }
   }
 
-  return 0;
+  return { frameIndex: 0, found: false };
 }

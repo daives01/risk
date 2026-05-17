@@ -121,7 +121,7 @@ export function GameHeader({
       <div className="flex min-h-12 flex-nowrap items-center gap-1.5 px-2 py-1.5 md:gap-2">
         {showBackHome && (
           <Button asChild size="sm" type="button" variant="outline" title="Back to home" className="hidden md:inline-flex">
-            <Link to="/" aria-label="Back to home">
+            <Link to="/home" aria-label="Back to home">
               <ArrowLeft className="size-4" />
             </Link>
           </Button>

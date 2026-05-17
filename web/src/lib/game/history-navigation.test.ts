@@ -7,6 +7,7 @@ import {
   findNextTurnBoundary,
   findLastTurnEndForPlayer,
   findPreviousTurnBoundary,
+  resolveLastTurnEndForPlayer,
 } from "./history-navigation";
 
 function frame(overrides: Omit<Partial<HistoryFrame>, "state"> & { state?: Partial<PublicState> }): HistoryFrame {
@@ -65,5 +66,15 @@ describe("history navigation", () => {
     expect(findLastTurnEndForPlayer(frames, "p1")).toBe(3);
     expect(findLastTurnEndForPlayer(frames, "p2")).toBe(5);
     expect(findLastTurnEndForPlayer(frames, "unknown")).toBe(0);
+  });
+
+  test("reports whether the player's last turn boundary is loaded", () => {
+    const recentFrames = [
+      frame({ index: 100, state: { turn: { currentPlayerId: "p2", phase: "Reinforcement", round: 10 } } }),
+      frame({ index: 101, state: { turn: { currentPlayerId: "p3", phase: "Reinforcement", round: 10 } } }),
+    ];
+
+    expect(resolveLastTurnEndForPlayer(recentFrames, "p1")).toEqual({ frameIndex: 0, found: false });
+    expect(resolveLastTurnEndForPlayer(frames, "p1")).toEqual({ frameIndex: 3, found: true });
   });
 });

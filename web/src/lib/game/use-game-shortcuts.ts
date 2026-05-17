@@ -6,7 +6,6 @@ interface UseGameShortcutsOptions {
   historyOpen: boolean;
   historyAtEnd: boolean;
   historyMaxIndex: number;
-  historyLastTurnIndex: number;
   isMyTurn: boolean;
   phase: Phase;
   cardsOpen: boolean;
@@ -27,6 +26,7 @@ interface UseGameShortcutsOptions {
   maxFortifyCount: number;
   onToggleHistory: () => void;
   onToggleShortcutCheatSheet: () => void;
+  onJumpSinceLastTurn: () => void;
   onSetHistoryPlaying: (next: boolean | ((prev: boolean) => boolean)) => void;
   onSetHistoryFrameIndex: (next: number | ((prev: number) => number)) => void;
   onSetPlaceCount: (count: number) => void;
@@ -47,7 +47,6 @@ export function useGameShortcuts({
   historyOpen,
   historyAtEnd,
   historyMaxIndex,
-  historyLastTurnIndex,
   isMyTurn,
   phase,
   cardsOpen,
@@ -68,6 +67,7 @@ export function useGameShortcuts({
   maxFortifyCount,
   onToggleHistory,
   onToggleShortcutCheatSheet,
+  onJumpSinceLastTurn,
   onSetHistoryPlaying,
   onSetHistoryFrameIndex,
   onSetPlaceCount,
@@ -123,8 +123,7 @@ export function useGameShortcuts({
       if (historyOpen) {
         if (key === ",") {
           event.preventDefault();
-          onSetHistoryFrameIndex(historyLastTurnIndex);
-          onSetHistoryPlaying(false);
+          onJumpSinceLastTurn();
           return;
         }
         if (key === ".") {
@@ -263,9 +262,9 @@ export function useGameShortcuts({
     fortifyCount,
     hasPendingOccupy,
     historyAtEnd,
-    historyLastTurnIndex,
     historyMaxIndex,
     historyOpen,
+    onJumpSinceLastTurn,
     isMyTurn,
     maxFortifyCount,
     maxAttackDice,

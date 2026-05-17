@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect, react-hooks/preserve-manual-memoization */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatEvent } from "@/lib/game/display";
-import { findLastTurnEndForPlayer } from "@/lib/game/history-navigation";
+import { resolveLastTurnEndForPlayer } from "@/lib/game/history-navigation";
 import type { GameAction, HistoryFrame } from "@/lib/game/types";
 
 interface BuildHistoryEventsOptions {
@@ -219,13 +219,13 @@ export function useGameHistory({
   const historyCount = Math.max(totalHistoryCount ?? historyFrames.length, historyFrames.length);
   const historyMaxIndex = Math.max(0, historyCount - 1);
   const historyAtEnd = historyFrameIndex >= historyMaxIndex;
-  const lastTurnEndIndex = useMemo(
-    () => {
-      const loadedFrameIndex = findLastTurnEndForPlayer(historyFrames, myEnginePlayerId);
-      return (historyFrames[loadedFrameIndex]?.index ?? -1) + 1;
-    },
-    [historyFrames, myEnginePlayerId],
-  );
+  const lastTurnEndTarget = useMemo(() => {
+    const loadedTarget = resolveLastTurnEndForPlayer(historyFrames, myEnginePlayerId);
+    return {
+      index: (historyFrames[loadedTarget.frameIndex]?.index ?? -1) + 1,
+      loaded: loadedTarget.found,
+    };
+  }, [historyFrames, myEnginePlayerId]);
 
   const historyEvents = useMemo(
     () => buildHistoryEvents({ timelineActions, graphMap, playerMap }),
@@ -334,7 +334,8 @@ export function useGameHistory({
     historyAttackEdgeIds,
     activeHistoryEventIndex,
     activeHistoryFrameLabel,
-    lastTurnEndIndex,
+    lastTurnEndIndex: lastTurnEndTarget.index,
+    lastTurnEndLoaded: lastTurnEndTarget.loaded,
     historyCount,
   };
 }

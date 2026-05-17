@@ -130,6 +130,9 @@ export default function GamePage() {
     historySummary,
     historyTimeline,
     timelineActions,
+    canLoadOlderHistory,
+    historyLoadingOlder,
+    loadOlderHistory,
     loadHistoryAroundIndex,
     chatMessages,
   } = useGameRuntimeQueries(
@@ -199,6 +202,7 @@ export default function GamePage() {
   const troopDeltaResumeTimeoutRef = useRef<number | null>(null);
   const historyDebugRef = useRef<{ framePos: number; signature: string; staleRun: number } | null>(null);
   const historyLazyLoadTimeoutRef = useRef<number | null>(null);
+  const [jumpSinceLastTurnPending, setJumpSinceLastTurnPending] = useState(false);
   const actionButtonCooldownTimeoutRef = useRef<number | null>(null);
   const stopAutoAttackRef = useRef<() => void>(() => undefined);
   const setOccupyMoveRef = useRef<Dispatch<SetStateAction<number>>>(() => undefined);
@@ -246,6 +250,7 @@ export default function GamePage() {
     historyAttackEdgeIds,
     activeHistoryFrameLabel,
     lastTurnEndIndex,
+    lastTurnEndLoaded,
     historyCount,
   } = useGameHistory({
     historyTimeline,
@@ -256,6 +261,47 @@ export default function GamePage() {
     myEnginePlayerId: myEnginePlayerId ?? undefined,
     playbackIntervalMs: HISTORY_PLAYBACK_INTERVAL_MS,
   });
+
+  const jumpSinceLastTurn = useCallback(() => {
+    setHistoryPlaying(false);
+    if (lastTurnEndLoaded || !canLoadOlderHistory) {
+      setJumpSinceLastTurnPending(false);
+      setHistoryFrameIndex(lastTurnEndIndex);
+      return;
+    }
+    setJumpSinceLastTurnPending(true);
+    if (!historyLoadingOlder) {
+      loadOlderHistory();
+    }
+  }, [
+    canLoadOlderHistory,
+    historyLoadingOlder,
+    lastTurnEndIndex,
+    lastTurnEndLoaded,
+    loadOlderHistory,
+    setHistoryFrameIndex,
+    setHistoryPlaying,
+  ]);
+
+  useEffect(() => {
+    if (!jumpSinceLastTurnPending) return;
+    if (lastTurnEndLoaded || !canLoadOlderHistory) {
+      setJumpSinceLastTurnPending(false);
+      setHistoryFrameIndex(lastTurnEndIndex);
+      return;
+    }
+    if (!historyLoadingOlder) {
+      loadOlderHistory();
+    }
+  }, [
+    canLoadOlderHistory,
+    historyLoadingOlder,
+    jumpSinceLastTurnPending,
+    lastTurnEndIndex,
+    lastTurnEndLoaded,
+    loadOlderHistory,
+    setHistoryFrameIndex,
+  ]);
   const toggleHistory = useCallback(() => {
     if (isMapFullscreen) return;
     setHistoryOpen((prev) => {
@@ -1299,7 +1345,6 @@ export default function GamePage() {
     historyOpen,
     historyAtEnd,
     historyMaxIndex,
-    historyLastTurnIndex: lastTurnEndIndex,
     isMyTurn,
     phase,
     cardsOpen,
@@ -1320,6 +1365,7 @@ export default function GamePage() {
     maxFortifyCount: maxFortifyMove,
     onToggleHistory: toggleHistory,
     onToggleShortcutCheatSheet: () => setShortcutsOpen((prev) => !prev),
+    onJumpSinceLastTurn: jumpSinceLastTurn,
     onSetHistoryPlaying: setHistoryPlaying,
     onSetHistoryFrameIndex: setHistoryFrameIndex,
     onSetPlaceCount: setPlaceCount,
@@ -1734,10 +1780,7 @@ export default function GamePage() {
             setHistoryPlaying(false);
           }}
           onTogglePlaying={() => setHistoryPlaying((prev) => !prev)}
-          onJumpSinceLastTurn={() => {
-            setHistoryFrameIndex(lastTurnEndIndex);
-            setHistoryPlaying(false);
-          }}
+          onJumpSinceLastTurn={jumpSinceLastTurn}
           onResetToLatest={() => {
             setHistoryFrameIndex(historyMaxIndex);
             setHistoryPlaying(false);
