@@ -24,3 +24,15 @@ export function resolveReplayWindowBeforeIndex(args: {
   );
   return windowEnd + 1;
 }
+
+export function resolveEarliestLoadedReplayWindowBoundary(windows: Array<HistoryWindow | null | undefined>) {
+  let earliestBoundary: number | null = null;
+
+  for (const window of windows) {
+    if (!window?.snapshotPublicState) continue;
+    const boundary = window.snapshotIndex ?? -1;
+    earliestBoundary = earliestBoundary === null ? boundary : Math.min(earliestBoundary, boundary);
+  }
+
+  return earliestBoundary;
+}

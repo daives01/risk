@@ -228,9 +228,7 @@ export default function GamePage() {
   const {
     historyOpen,
     historyPlaying,
-    setHistoryPlaying,
     historyFrameIndex,
-    setHistoryFrameIndex,
     activeHistoryFrame,
     historyMaxIndex,
     historyAtEnd,
@@ -239,8 +237,7 @@ export default function GamePage() {
     historyCount,
     historySummary,
     timelineActions,
-    toggleReplayMode,
-    jumpSinceLastTurn,
+    replayCommands,
   } = useReplayMode({
     typedGameId,
     isMapFullscreen,
@@ -1282,7 +1279,6 @@ export default function GamePage() {
   useGameShortcuts({
     historyOpen,
     historyAtEnd,
-    historyMaxIndex,
     isMyTurn,
     phase,
     cardsOpen,
@@ -1301,11 +1297,13 @@ export default function GamePage() {
     occupyMaxMove: state?.pending?.maxMove ?? 1,
     canSetFortify: canSetFortifyShortcut,
     maxFortifyCount: maxFortifyMove,
-    onToggleHistory: toggleReplayMode,
+    onToggleHistory: replayCommands.toggleReplayMode,
     onToggleShortcutCheatSheet: () => setShortcutsOpen((prev) => !prev),
-    onJumpSinceLastTurn: jumpSinceLastTurn,
-    onSetHistoryPlaying: setHistoryPlaying,
-    onSetHistoryFrameIndex: setHistoryFrameIndex,
+    onJumpSinceLastTurn: replayCommands.jumpSinceLastTurn,
+    onMoveHistoryPreviousFrame: replayCommands.moveToPreviousFrame,
+    onMoveHistoryNextFrame: replayCommands.moveToNextFrame,
+    onResetHistoryToLatest: replayCommands.resetToLatestFrame,
+    onToggleHistoryPlayback: replayCommands.togglePlayback,
     onSetPlaceCount: setPlaceCount,
     onSetAttackDice: setAttackDice,
     onSetOccupyMove: setOccupyMove,
@@ -1653,7 +1651,7 @@ export default function GamePage() {
             setInfoPinnedTerritoryId(null);
           }
         }}
-        onToggleHistory={toggleReplayMode}
+        onToggleHistory={replayCommands.toggleReplayMode}
         onOpenSettings={() => setSettingsOpen(true)}
         historyToggleDisabled={historySummary?.latestActionIndex == null}
         isMapFullscreen={isMapFullscreen}
@@ -1677,24 +1675,12 @@ export default function GamePage() {
           atEnd={historyAtEnd}
           playing={historyPlaying}
           activeLabel={activeHistoryFrameLabel}
-          onFrameIndexChange={(value) => {
-            setHistoryFrameIndex(value);
-            setHistoryPlaying(false);
-          }}
-          onPreviousFrame={() => {
-            setHistoryFrameIndex((prev) => Math.max(0, prev - 1));
-            setHistoryPlaying(false);
-          }}
-          onNextFrame={() => {
-            setHistoryFrameIndex((prev) => Math.min(historyMaxIndex, prev + 1));
-            setHistoryPlaying(false);
-          }}
-          onTogglePlaying={() => setHistoryPlaying((prev) => !prev)}
-          onJumpSinceLastTurn={jumpSinceLastTurn}
-          onResetToLatest={() => {
-            setHistoryFrameIndex(historyMaxIndex);
-            setHistoryPlaying(false);
-          }}
+          onFrameIndexChange={replayCommands.scrubToFrame}
+          onPreviousFrame={replayCommands.moveToPreviousFrame}
+          onNextFrame={replayCommands.moveToNextFrame}
+          onTogglePlaying={replayCommands.togglePlayback}
+          onJumpSinceLastTurn={replayCommands.jumpSinceLastTurn}
+          onResetToLatest={replayCommands.resetToLatestFrame}
         />
       )}
 

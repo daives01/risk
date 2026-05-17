@@ -2,6 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   REPLAY_WINDOW_SIZE,
+  resolveEarliestLoadedReplayWindowBoundary,
   resolveReplayWindowBeforeIndex,
   trimReplayWindowCache,
 } from "./replay-window-policy";
@@ -14,6 +15,24 @@ function windowAt(snapshotIndex: number): HistoryWindow {
     snapshotPublicState: null,
     actions: [],
     hasPrevious: snapshotIndex > -1,
+  };
+}
+
+function loadedWindowAt(snapshotIndex: number): HistoryWindow {
+  return {
+    ...windowAt(snapshotIndex),
+    snapshotPublicState: {
+      players: {},
+      territories: {},
+      turnOrder: [],
+      turn: { round: 1, currentPlayerId: "p1", phase: "Attack" },
+      capturedThisTurn: false,
+      tradesCompleted: 0,
+      deckCount: 0,
+      discardCount: 0,
+      handSizes: {},
+      stateVersion: 1,
+    },
   };
 }
 
@@ -35,5 +54,19 @@ describe("replay window policy", () => {
     });
 
     expect(Object.keys(cache)).toEqual(["second", "third", "fourth", "fifth"]);
+  });
+
+  test("uses raw loaded window boundaries instead of visible frame indexes for older paging", () => {
+    expect(resolveEarliestLoadedReplayWindowBoundary([
+      loadedWindowAt(200),
+      loadedWindowAt(300),
+    ])).toBe(200);
+  });
+
+  test("ignores windows that have not loaded their snapshot state yet", () => {
+    expect(resolveEarliestLoadedReplayWindowBoundary([
+      windowAt(100),
+      loadedWindowAt(200),
+    ])).toBe(200);
   });
 });

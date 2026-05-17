@@ -38,7 +38,7 @@ export function buildHistoryFrameLabel({
 export function buildHistoryEvents({ timelineActions, graphMap, playerMap }: BuildHistoryEventsOptions) {
   if (!timelineActions?.length) return [];
   const events: Array<{ key: string; text: string; index: number }> = [];
-  const ignoredEventTypes = new Set(["CardDrawn", "TurnEnded", "TurnAdvanced"]);
+  const ignoredEventTypes = new Set(["CardDrawn", "TurnEnded", "ReinforcementsGranted"]);
   const territoryLabel = (id: string) => graphMap?.territories[id]?.name ?? id;
   const playerLabel = (id: string | null) =>
     playerMap.find((player) => player.enginePlayerId === id)?.displayName ?? id ?? "Unknown";
@@ -207,9 +207,15 @@ export function useGameHistory({
     }
     return framesByPosition;
   }, [historyFrames]);
+  const loadedFramePositions = useMemo(
+    () => Array.from(loadedFramesByPosition.keys()).sort((left, right) => left - right),
+    [loadedFramesByPosition],
+  );
   const historyCount = Math.max(totalHistoryCount ?? historyFrames.length, historyFrames.length);
   const historyMaxIndex = Math.max(0, historyCount - 1);
-  const historyAtEnd = historyFrameIndex >= historyMaxIndex;
+  const historyAtEnd =
+    historyFrameIndex >= historyMaxIndex ||
+    !loadedFramePositions.some((position) => position > historyFrameIndex);
   const lastTurnEndTarget = useMemo(() => {
     const loadedTarget = resolveLastTurnEndForPlayer(historyFrames, myEnginePlayerId);
     return {
@@ -303,11 +309,11 @@ export function useGameHistory({
           setHistoryPlaying(false);
           return prev;
         }
-        return prev + 1;
+        return loadedFramePositions.find((position) => position > prev) ?? prev;
       });
     }, playbackIntervalMs);
     return () => clearInterval(timer);
-  }, [historyCount, historyOpen, historyPlaying, playbackIntervalMs]);
+  }, [historyCount, historyOpen, historyPlaying, loadedFramePositions, playbackIntervalMs]);
 
   return {
     historyOpen,

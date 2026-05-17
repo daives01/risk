@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@backend/_generated/api";
 import type { Id } from "@backend/_generated/dataModel";
 import { mergeHistoryWindowActions, reconstructHistoryWindows } from "@/lib/game/history-timeline";
-import { resolveReplayWindowBeforeIndex, trimReplayWindowCache } from "@/lib/game/replay-window-policy";
+import {
+  resolveEarliestLoadedReplayWindowBoundary,
+  resolveReplayWindowBeforeIndex,
+  trimReplayWindowCache,
+} from "@/lib/game/replay-window-policy";
 import type { GameAction, HistoryWindow } from "@/lib/game/types";
 
 function getHistoryWindowKey(window: HistoryWindow) {
@@ -106,7 +110,7 @@ export function useReplayWindows(
     [historyWindows],
   );
 
-  const earliestLoadedHistoryIndex = historyTimeline[0]?.index ?? null;
+  const earliestLoadedHistoryIndex = resolveEarliestLoadedReplayWindowBoundary(historyWindows);
   const canLoadOlderHistory =
     earliestLoadedHistoryIndex !== null &&
     earliestLoadedHistoryIndex > -1 &&
@@ -115,6 +119,7 @@ export function useReplayWindows(
     olderHistoryBeforeIndex !== null &&
     earliestLoadedHistoryIndex !== null &&
     olderHistoryBeforeIndex <= earliestLoadedHistoryIndex;
+  const historyLoadingTarget = targetHistoryBeforeIndex !== null && !targetHistoryWindow;
 
   const loadOlderHistory = useCallback(() => {
     if (earliestLoadedHistoryIndex === null || earliestLoadedHistoryIndex <= -1) return;
@@ -136,6 +141,7 @@ export function useReplayWindows(
     timelineActions,
     canLoadOlderHistory,
     historyLoadingOlder,
+    historyLoadingTarget,
     loadOlderHistory,
     loadHistoryAroundIndex,
   };

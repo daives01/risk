@@ -45,6 +45,8 @@ export function formatEvent(event: Record<string, unknown>, playerMap: PlayerRef
       return `${playerName(event.playerId)} ended their turn`;
     case "TurnAdvanced":
       return `${playerName(event.nextPlayerId)} starts round ${event.round}`;
+    case "TurnTimedOut":
+      return `${playerName(event.playerId)} ran out of time`;
     case "PlayerEliminated":
       return `${playerName(event.eliminatedId)} was eliminated`;
     case "GameEnded":

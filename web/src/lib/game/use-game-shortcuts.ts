@@ -5,7 +5,6 @@ import { hasCommandModifier, isTypingTarget } from "@/lib/keyboard-shortcuts";
 interface UseGameShortcutsOptions {
   historyOpen: boolean;
   historyAtEnd: boolean;
-  historyMaxIndex: number;
   isMyTurn: boolean;
   phase: Phase;
   cardsOpen: boolean;
@@ -27,8 +26,10 @@ interface UseGameShortcutsOptions {
   onToggleHistory: () => void;
   onToggleShortcutCheatSheet: () => void;
   onJumpSinceLastTurn: () => void;
-  onSetHistoryPlaying: (next: boolean | ((prev: boolean) => boolean)) => void;
-  onSetHistoryFrameIndex: (next: number | ((prev: number) => number)) => void;
+  onMoveHistoryPreviousFrame: () => void;
+  onMoveHistoryNextFrame: () => void;
+  onResetHistoryToLatest: () => void;
+  onToggleHistoryPlayback: () => void;
   onSetPlaceCount: (count: number) => void;
   onSetAttackDice: (dice: number) => void;
   onSetOccupyMove: (count: number) => void;
@@ -46,7 +47,6 @@ interface UseGameShortcutsOptions {
 export function useGameShortcuts({
   historyOpen,
   historyAtEnd,
-  historyMaxIndex,
   isMyTurn,
   phase,
   cardsOpen,
@@ -68,8 +68,10 @@ export function useGameShortcuts({
   onToggleHistory,
   onToggleShortcutCheatSheet,
   onJumpSinceLastTurn,
-  onSetHistoryPlaying,
-  onSetHistoryFrameIndex,
+  onMoveHistoryPreviousFrame,
+  onMoveHistoryNextFrame,
+  onResetHistoryToLatest,
+  onToggleHistoryPlayback,
   onSetPlaceCount,
   onSetAttackDice,
   onSetOccupyMove,
@@ -116,7 +118,6 @@ export function useGameShortcuts({
       if (key === "h") {
         event.preventDefault();
         onToggleHistory();
-        onSetHistoryPlaying(false);
         return;
       }
 
@@ -128,23 +129,22 @@ export function useGameShortcuts({
         }
         if (key === ".") {
           event.preventDefault();
-          onSetHistoryFrameIndex(historyMaxIndex);
-          onSetHistoryPlaying(false);
+          onResetHistoryToLatest();
           return;
         }
         if (key === "j") {
           event.preventDefault();
-          onSetHistoryFrameIndex((prev) => Math.max(0, prev - 1));
+          onMoveHistoryPreviousFrame();
           return;
         }
         if (key === "l") {
           event.preventDefault();
-          onSetHistoryFrameIndex((prev) => Math.min(historyMaxIndex, prev + 1));
+          onMoveHistoryNextFrame();
           return;
         }
         if (key === "k" && !historyAtEnd) {
           event.preventDefault();
-          onSetHistoryPlaying((prev) => !prev);
+          onToggleHistoryPlayback();
           return;
         }
       }
@@ -262,7 +262,6 @@ export function useGameShortcuts({
     fortifyCount,
     hasPendingOccupy,
     historyAtEnd,
-    historyMaxIndex,
     historyOpen,
     onJumpSinceLastTurn,
     isMyTurn,
@@ -278,14 +277,16 @@ export function useGameShortcuts({
     onCloseSettings,
     onSetAttackDice,
     onSetFortifyCount,
-    onSetHistoryFrameIndex,
-    onSetHistoryPlaying,
+    onMoveHistoryNextFrame,
+    onMoveHistoryPreviousFrame,
+    onResetHistoryToLatest,
     onSetOccupyMove,
     onSetPlaceCount,
     onToggleInfoOverlay,
     onToggleFullscreen,
     onToggleShortcutCheatSheet,
     onToggleHistory,
+    onToggleHistoryPlayback,
     onToggleCards,
     onToggleSettings,
     onUndoPlacement,

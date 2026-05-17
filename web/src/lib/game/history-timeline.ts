@@ -1,5 +1,18 @@
 import type { HistoryFrame, HistoryWindow, PublicState, TimelineStatePatch } from "@/lib/game/types";
 
+const VISIBLE_REPLAY_EVENT_TYPES = new Set([
+  "AttackResolved",
+  "CardsTraded",
+  "FortifyResolved",
+  "GameEnded",
+  "OccupyResolved",
+  "PlayerEliminated",
+  "ReinforcementsPlaced",
+  "TerritoryCaptured",
+  "TurnAdvanced",
+  "TurnTimedOut",
+]);
+
 export function applyTimelineStatePatch(previous: PublicState, patch: TimelineStatePatch): PublicState {
   const territories = { ...previous.territories };
   for (const [territoryId, changes] of Object.entries(patch.territories ?? {})) {
@@ -40,19 +53,37 @@ export function applyTimelineStatePatch(previous: PublicState, patch: TimelineSt
   return next;
 }
 
+function hasBoardPatch(patch: TimelineStatePatch) {
+  return Object.keys(patch.territories ?? {}).length > 0;
+}
+
+function hasVisibleReplayEvent(events: Array<{ type: string; [key: string]: unknown }>) {
+  return events.some((event) => VISIBLE_REPLAY_EVENT_TYPES.has(event.type));
+}
+
+export function isVisibleReplayAction(action: HistoryWindow["actions"][number]) {
+  if (hasVisibleReplayEvent(action.events)) return true;
+  if (!action.publicStatePatch) return false;
+  return hasBoardPatch(action.publicStatePatch);
+}
+
 export function reconstructHistoryWindow(window: HistoryWindow | null | undefined): HistoryFrame[] {
   if (!window?.snapshotPublicState) return [];
 
-  const frames: HistoryFrame[] = [{
-    index: window.snapshotIndex ?? -1,
-    events: [],
-    state: window.snapshotPublicState,
-  }];
+  const snapshotIndex = window.snapshotIndex ?? -1;
+  const frames: HistoryFrame[] = snapshotIndex <= -1
+    ? [{
+      index: snapshotIndex,
+      events: [],
+      state: window.snapshotPublicState,
+    }]
+    : [];
   let state: PublicState = window.snapshotPublicState;
 
   for (const action of window.actions) {
     if (!action.publicStatePatch) continue;
     state = applyTimelineStatePatch(state, action.publicStatePatch);
+    if (!isVisibleReplayAction(action)) continue;
     frames.push({
       index: action.index,
       events: action.events,
@@ -80,6 +111,7 @@ export function mergeHistoryWindowActions(windows: Array<HistoryWindow | null | 
 
   for (const window of windows) {
     for (const action of window?.actions ?? []) {
+      if (!isVisibleReplayAction(action)) continue;
       actionsByIndex.set(action.index, action);
     }
   }
