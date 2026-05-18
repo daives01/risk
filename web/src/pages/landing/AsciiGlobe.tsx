@@ -31,6 +31,8 @@ const GLOBE_TUNING: GlobeTuning = {
 const DRAG_SENSITIVITY = 0.008;
 const MAX_SPIN_VELOCITY = 0.08;
 const SPIN_RETURN_EASE = 0.035;
+const SIXTY_FPS_FRAME_MS = 1000 / 60;
+const MAX_FRAME_SCALE = 4;
 
 function loadGlobeTexture(): Promise<GlobeTexture> {
   return new Promise((resolve, reject) => {
@@ -160,6 +162,7 @@ export function AsciiGlobe() {
   });
   const textureRef = useRef<GlobeTexture | null>(null);
   const frameIdRef = useRef(0);
+  const lastFrameTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -178,7 +181,13 @@ export function AsciiGlobe() {
     let prevW = 0;
     let prevH = 0;
 
-    const render = () => {
+    const render = (timestamp: number) => {
+      const previousTimestamp = lastFrameTimeRef.current ?? timestamp;
+      lastFrameTimeRef.current = timestamp;
+      const frameScale = Math.min(
+        MAX_FRAME_SCALE,
+        (timestamp - previousTimestamp) / SIXTY_FPS_FRAME_MS,
+      );
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
       const w = rect.width;
@@ -200,9 +209,10 @@ export function AsciiGlobe() {
 
         const s = stateRef.current;
         if (!s.isDragging) {
+          const returnEase = 1 - Math.pow(1 - SPIN_RETURN_EASE, frameScale);
           s.spinVelocity +=
-            (-GLOBE_TUNING.speed - s.spinVelocity) * SPIN_RETURN_EASE;
-          s.spin += s.spinVelocity;
+            (-GLOBE_TUNING.speed - s.spinVelocity) * returnEase;
+          s.spin += s.spinVelocity * frameScale;
         }
 
         renderGlobe(ctx, w, h, s.spin, textureRef.current, GLOBE_TUNING);
