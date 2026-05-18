@@ -156,7 +156,7 @@ export function GameHeader({
         </div>
       )}
 
-      {!historyOpen && !isMyTurn && currentHint && (
+      {!historyOpen && !isMyTurn && !showSignInCta && currentHint && (
         <div className="absolute left-1/2 hidden w-[min(60vw,640px)] -translate-x-1/2 items-center justify-center gap-2 text-xs text-muted-foreground md:flex">
           <Button
             type="button"

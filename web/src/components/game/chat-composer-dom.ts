@@ -156,7 +156,7 @@ export function createComposerMentionNode(token: string, display: string) {
   tag.dataset.chatTag = "true";
   tag.dataset.mentionToken = token;
   tag.dataset.mentionDisplay = display;
-  tag.className = "inline rounded border border-primary/35 bg-primary/10 px-1 font-semibold not-italic text-primary";
+  tag.className = "inline-flex align-baseline rounded border border-primary/35 bg-primary/10 px-1 font-semibold not-italic text-primary";
   tag.textContent = display;
   return tag;
 }
