@@ -11,6 +11,11 @@ import {
   setComposerCursor,
 } from "@/components/game/chat-composer-dom";
 import {
+  findActiveChatEmojiQuery,
+  findChatEmojiMatches,
+  type ChatEmojiOption,
+} from "@/lib/game/chat-emoji";
+import {
   findActiveChatMentionQuery,
   getMentionDisplayLabel,
   tokenizeChatText,
@@ -64,6 +69,7 @@ export function ChatComposer({
   const inputRef = useRef<HTMLDivElement | null>(null);
   const [slashSelectionIndex, setSlashSelectionIndex] = useState(0);
   const [mentionSelectionIndex, setMentionSelectionIndex] = useState(0);
+  const [emojiSelectionIndex, setEmojiSelectionIndex] = useState(0);
   const [draftCursor, setDraftCursor] = useState(draftText.length);
 
   const currentInputChannel = editingChannel ?? activeChannel;
@@ -110,6 +116,17 @@ export function ChatComposer({
   const showMentionMenu = mentionMatches.length > 0 && !!activeMentionQuery;
   const selectedMentionOption =
     mentionMatches[Math.min(mentionSelectionIndex, Math.max(0, mentionMatches.length - 1))] ?? null;
+  const activeEmojiQuery = useMemo(
+    () => findActiveChatEmojiQuery(draftText, draftCursor, editingMessageId),
+    [draftCursor, draftText, editingMessageId],
+  );
+  const emojiMatches = useMemo(
+    () => findChatEmojiMatches(activeEmojiQuery),
+    [activeEmojiQuery],
+  );
+  const showEmojiMenu = emojiMatches.length > 0 && !!activeEmojiQuery && !showMentionMenu;
+  const selectedEmojiOption =
+    emojiMatches[Math.min(emojiSelectionIndex, Math.max(0, emojiMatches.length - 1))] ?? null;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -149,6 +166,21 @@ export function ChatComposer({
     const nextCursor = activeMentionQuery.tokenStart + option.token.length + 1;
     onSetDraftText(nextText);
     setMentionSelectionIndex(0);
+    setDraftCursor(nextCursor);
+    window.requestAnimationFrame(() => {
+      renderComposerDraft(nextText, nextCursor);
+      inputRef.current?.focus();
+    });
+  };
+
+  const applyEmojiOption = (option: ChatEmojiOption) => {
+    if (!activeEmojiQuery) return;
+    const nextText = `${draftText.slice(0, activeEmojiQuery.tokenStart)}${option.unicode} ${
+      draftText.slice(activeEmojiQuery.cursor)
+    }`;
+    const nextCursor = activeEmojiQuery.tokenStart + option.unicode.length + 1;
+    onSetDraftText(nextText);
+    setEmojiSelectionIndex(0);
     setDraftCursor(nextCursor);
     window.requestAnimationFrame(() => {
       renderComposerDraft(nextText, nextCursor);
@@ -224,6 +256,30 @@ export function ChatComposer({
     if (showMentionMenu && (event.key === "Enter" || event.key === " ") && selectedMentionOption) {
       event.preventDefault();
       applyMentionOption(selectedMentionOption);
+      return;
+    }
+    if (showEmojiMenu && event.key === "ArrowDown") {
+      event.preventDefault();
+      setEmojiSelectionIndex((index) => (index + 1) % emojiMatches.length);
+      return;
+    }
+    if (showEmojiMenu && event.key === "ArrowUp") {
+      event.preventDefault();
+      setEmojiSelectionIndex((index) => (index - 1 + emojiMatches.length) % emojiMatches.length);
+      return;
+    }
+    if (showEmojiMenu && event.key === "Tab") {
+      event.preventDefault();
+      if (emojiMatches.length > 1) {
+        setEmojiSelectionIndex((index) => (index + 1) % emojiMatches.length);
+        return;
+      }
+      if (selectedEmojiOption) applyEmojiOption(selectedEmojiOption);
+      return;
+    }
+    if (showEmojiMenu && (event.key === "Enter" || event.key === " ") && selectedEmojiOption) {
+      event.preventDefault();
+      applyEmojiOption(selectedEmojiOption);
       return;
     }
     if (showSlashMenu && event.key === "ArrowDown") {
@@ -329,6 +385,32 @@ export function ChatComposer({
             })}
           </div>
         )}
+        {showEmojiMenu && activeEmojiQuery && (
+          <div className="absolute bottom-[calc(100%+0.35rem)] left-0 z-20 max-h-64 w-[min(22rem,100%)] overflow-y-auto border border-border/80 bg-popover p-1 text-xs text-popover-foreground shadow-md game-scrollbar">
+            {emojiMatches.map((option, index) => {
+              const isSelected = index === Math.min(emojiSelectionIndex, emojiMatches.length - 1);
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  className={`flex w-full items-center justify-between gap-3 px-2 py-1.5 text-left outline-none ${
+                    isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent/70"
+                  }`}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    applyEmojiOption(option);
+                  }}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="text-base leading-none">{option.unicode}</span>
+                    <span className="min-w-0 truncate">:{option.shortcode}:</span>
+                  </span>
+                  <span className="shrink-0 truncate text-[0.7rem] text-muted-foreground">{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
         {canSend && !editingMessageId ? (
           <Select
             value={selectValue}
@@ -395,6 +477,7 @@ export function ChatComposer({
           onInput={(event) => {
             setSlashSelectionIndex(0);
             setMentionSelectionIndex(0);
+            setEmojiSelectionIndex(0);
             syncDraftFromComposer(event.currentTarget);
           }}
           onClick={(event) => updateDraftCursorFromInput(event.currentTarget)}
