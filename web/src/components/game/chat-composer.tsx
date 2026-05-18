@@ -472,7 +472,7 @@ export function ChatComposer({
               : "Chat is read-only"
           }
           className={`relative flex h-9 min-w-0 flex-1 items-center gap-1 overflow-hidden whitespace-pre-wrap break-words rounded-none border border-input bg-transparent px-3 py-1 text-base leading-5 shadow-xs outline-none transition-[color,box-shadow] [scrollbar-width:none] empty:before:pointer-events-none empty:before:leading-5 empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)] focus-visible:border-input focus-visible:ring-0 disabled:pointer-events-none disabled:opacity-50 md:text-sm [&::-webkit-scrollbar]:hidden ${
-            isSpecialInputTarget ? "text-amber-400 italic empty:before:text-amber-400/55" : ""
+            isSpecialInputTarget ? "text-amber-400 empty:before:text-amber-400/55" : ""
           }`}
           onInput={(event) => {
             setSlashSelectionIndex(0);

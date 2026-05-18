@@ -131,7 +131,7 @@ export function GameChatCard({
                 <div
                   key={message._id}
                   className={`group relative text-left ${
-                    isSpecialMessage ? "text-amber-400 italic" : "text-foreground"
+                    isSpecialMessage ? "text-amber-400" : "text-foreground"
                   }`}
                 >
                   {message.isMine && canSend && (
