@@ -1618,71 +1618,73 @@ export default function GamePage() {
         isMapFullscreen && "game-map-fullscreen-shell flex h-dvh flex-col overflow-hidden md:overflow-hidden",
       )}
     >
-      <GameHeader
-        phaseTitle={phaseCopy.title}
-        actionHint={actionHint}
-        historyOpen={historyOpen}
-        isMyTurn={isMyTurn}
-        phase={phase}
-        hasPendingAttack={!!state.pending}
-        displayPhase={displayPhase}
-        uncommittedReinforcements={uncommittedReinforcements}
-        fortifyRemainingLabel={fortifyRemainingLabel}
-        currentTurnPlayerName={getPlayerName(resolvedDisplayState.turn.currentPlayerId, playerMap)}
-        showSignInCta={showSignInCta}
-        loginHref={loginHref}
-        currentHint={currentHint}
-        onRotateHintForward={rotateHintForward}
-        onRotateHintBack={rotateHintBack}
-        controlsDisabled={controlsDisabled}
-        placeCount={placeCount}
-        reinforcementDraftCount={reinforcementDrafts.length}
-        onDecreasePlaceCount={() => setPlaceCount((prev) => Math.max(1, prev - 1))}
-        onIncreasePlaceCount={() => setPlaceCount((prev) => Math.min(Math.max(1, uncommittedReinforcements), prev + 1))}
-        onUndoPlacement={handleUndoPlacement}
-        winnerName={winnerName}
-        cardsOpenDisabled={isSpectator || historyOpen}
-        myCardCount={myCardCount}
-        onOpenCards={() => setCardsOpen(true)}
-        infoOpen={infoOverlayEnabled}
-        onToggleInfo={() => {
-          if (!historyOpen) {
-            setInfoOverlayEnabled((prev) => !prev);
-            setInfoPinnedTerritoryId(null);
-          }
-        }}
-        onToggleHistory={replayCommands.toggleReplayMode}
-        onOpenSettings={() => setSettingsOpen(true)}
-        historyToggleDisabled={historySummary?.latestActionIndex == null}
-        isMapFullscreen={isMapFullscreen}
-        showBackHome
-        onConfirmPlacements={() => {
-          void handleConfirmPlacements();
-        }}
-        onEndAttackPhase={handleEndAttackPhase}
-        actionButtonsDisabled={actionButtonCooldownActive || placementSubmitting}
-        onEndTurn={handleEndTurn}
-        delegatedPlayerName={isDelegationEligible ? delegatedPlayerName : null}
-        onStopDelegation={handleStopDelegation}
-      />
-
-      {historyOpen && !isMapFullscreen && (
-        <ReplayControlBand
-          className="page-container max-w-none"
-          frameIndex={historyFrameIndex}
-          frameCount={historyCount}
-          frameMaxIndex={historyMaxIndex}
-          atEnd={historyAtEnd}
-          playing={historyPlaying}
-          activeLabel={activeHistoryFrameLabel}
-          onFrameIndexChange={replayCommands.scrubToFrame}
-          onPreviousFrame={replayCommands.moveToPreviousFrame}
-          onNextFrame={replayCommands.moveToNextFrame}
-          onTogglePlaying={replayCommands.togglePlayback}
-          onJumpSinceLastTurn={replayCommands.jumpSinceLastTurn}
-          onResetToLatest={replayCommands.resetToLatestFrame}
+      <div className="game-top-stack">
+        <GameHeader
+          phaseTitle={phaseCopy.title}
+          actionHint={actionHint}
+          historyOpen={historyOpen}
+          isMyTurn={isMyTurn}
+          phase={phase}
+          hasPendingAttack={!!state.pending}
+          displayPhase={displayPhase}
+          uncommittedReinforcements={uncommittedReinforcements}
+          fortifyRemainingLabel={fortifyRemainingLabel}
+          currentTurnPlayerName={getPlayerName(resolvedDisplayState.turn.currentPlayerId, playerMap)}
+          showSignInCta={showSignInCta}
+          loginHref={loginHref}
+          currentHint={currentHint}
+          onRotateHintForward={rotateHintForward}
+          onRotateHintBack={rotateHintBack}
+          controlsDisabled={controlsDisabled}
+          placeCount={placeCount}
+          reinforcementDraftCount={reinforcementDrafts.length}
+          onDecreasePlaceCount={() => setPlaceCount((prev) => Math.max(1, prev - 1))}
+          onIncreasePlaceCount={() => setPlaceCount((prev) => Math.min(Math.max(1, uncommittedReinforcements), prev + 1))}
+          onUndoPlacement={handleUndoPlacement}
+          winnerName={winnerName}
+          cardsOpenDisabled={isSpectator || historyOpen}
+          myCardCount={myCardCount}
+          onOpenCards={() => setCardsOpen(true)}
+          infoOpen={infoOverlayEnabled}
+          onToggleInfo={() => {
+            if (!historyOpen) {
+              setInfoOverlayEnabled((prev) => !prev);
+              setInfoPinnedTerritoryId(null);
+            }
+          }}
+          onToggleHistory={replayCommands.toggleReplayMode}
+          onOpenSettings={() => setSettingsOpen(true)}
+          historyToggleDisabled={historySummary?.latestActionIndex == null}
+          isMapFullscreen={isMapFullscreen}
+          showBackHome
+          onConfirmPlacements={() => {
+            void handleConfirmPlacements();
+          }}
+          onEndAttackPhase={handleEndAttackPhase}
+          actionButtonsDisabled={actionButtonCooldownActive || placementSubmitting}
+          onEndTurn={handleEndTurn}
+          delegatedPlayerName={isDelegationEligible ? delegatedPlayerName : null}
+          onStopDelegation={handleStopDelegation}
         />
-      )}
+
+        {historyOpen && !isMapFullscreen && (
+          <ReplayControlBand
+            className="page-container max-w-none"
+            frameIndex={historyFrameIndex}
+            frameCount={historyCount}
+            frameMaxIndex={historyMaxIndex}
+            atEnd={historyAtEnd}
+            playing={historyPlaying}
+            activeLabel={activeHistoryFrameLabel}
+            onFrameIndexChange={replayCommands.scrubToFrame}
+            onPreviousFrame={replayCommands.moveToPreviousFrame}
+            onNextFrame={replayCommands.moveToNextFrame}
+            onTogglePlaying={replayCommands.togglePlayback}
+            onJumpSinceLastTurn={replayCommands.jumpSinceLastTurn}
+            onResetToLatest={replayCommands.resetToLatestFrame}
+          />
+        )}
+      </div>
 
       <div
         className={cn(

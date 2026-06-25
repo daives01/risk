@@ -346,6 +346,10 @@
     padding: 0;
   }
 
+  .game-top-stack {
+    position: static;
+  }
+
   .game-header {
     position: static;
     border-left: 0;
@@ -385,7 +389,7 @@
 }
 
 @media (min-width: 768px) {
-  .game-header {
+  .game-top-stack {
     position: sticky;
     top: 0;
     z-index: 20;
