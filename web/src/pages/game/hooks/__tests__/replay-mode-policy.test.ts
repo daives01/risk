@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   resolveReplayFrameCommand,
   resolveSinceLastTurnStep,
+  shouldRequestMissingReplayFrame,
   shouldRequestMissingHistoryFrame,
 } from "../replay-mode-policy";
 
@@ -79,6 +80,18 @@ describe("Replay Mode policy", () => {
     expect(shouldRequestMissingHistoryFrame({
       historyOpen: true,
       activeHistoryFrameLoaded: true,
+    })).toBe(false);
+  });
+
+  test("frame navigation requests a missing gap instead of jumping to another loaded island", () => {
+    expect(shouldRequestMissingReplayFrame({
+      requestedFrameIndex: 102,
+      loadedFramePositions: [100, 101, 603, 604],
+    })).toBe(true);
+
+    expect(shouldRequestMissingReplayFrame({
+      requestedFrameIndex: 603,
+      loadedFramePositions: [100, 101, 603, 604],
     })).toBe(false);
   });
 });

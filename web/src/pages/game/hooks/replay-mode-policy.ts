@@ -51,3 +51,13 @@ export function shouldRequestMissingHistoryFrame({
 }) {
   return historyOpen && !activeHistoryFrameLoaded;
 }
+
+export function shouldRequestMissingReplayFrame({
+  requestedFrameIndex,
+  loadedFramePositions,
+}: {
+  requestedFrameIndex: number;
+  loadedFramePositions: readonly number[];
+}) {
+  return !loadedFramePositions.includes(requestedFrameIndex);
+}

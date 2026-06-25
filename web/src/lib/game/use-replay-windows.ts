@@ -109,6 +109,17 @@ export function useReplayWindows(
       })) satisfies GameAction[],
     [historyWindows],
   );
+  const loadedFramePositions = useMemo(() => {
+    const positions = new Set<number>();
+    for (const window of historyWindows) {
+      if (!window.snapshotPublicState) continue;
+      positions.add((window.snapshotIndex ?? -1) + 1);
+      for (const action of window.actions) {
+        positions.add(action.index + 1);
+      }
+    }
+    return Array.from(positions).sort((left, right) => left - right);
+  }, [historyWindows]);
 
   const earliestLoadedHistoryIndex = resolveEarliestLoadedReplayWindowBoundary(historyWindows);
   const canLoadOlderHistory =
@@ -139,6 +150,7 @@ export function useReplayWindows(
     historySummary,
     historyTimeline,
     timelineActions,
+    loadedFramePositions,
     canLoadOlderHistory,
     historyLoadingOlder,
     historyLoadingTarget,

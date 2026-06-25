@@ -6,6 +6,7 @@ import { useGameHistory } from "@/pages/game/hooks/use-game-history";
 import {
   resolveReplayFrameCommand,
   resolveSinceLastTurnStep,
+  shouldRequestMissingReplayFrame,
   shouldRequestMissingHistoryFrame,
 } from "@/pages/game/hooks/replay-mode-policy";
 
@@ -40,6 +41,7 @@ export function useReplayMode({
     historySummary,
     historyTimeline,
     timelineActions,
+    loadedFramePositions,
     canLoadOlderHistory,
     historyLoadingOlder,
     historyLoadingTarget,
@@ -90,6 +92,31 @@ export function useReplayMode({
     if (next === undefined) return previous;
     return frameIndex - previous <= next - frameIndex ? previous : next;
   }, [resolvePreviousVisibleFramePosition, visibleFramePositions]);
+  const resolveVisibleFramePositionInsideLoadedRange = useCallback((
+    frameIndex: number,
+    direction: "previous" | "next" | "nearest" = "nearest",
+  ) => {
+    if (visibleFramePositions.includes(frameIndex)) return frameIndex;
+    const loadedPositionSet = new Set(loadedFramePositions);
+    const canReachWithoutGap = (from: number, to: number) => {
+      const start = Math.min(from, to);
+      const end = Math.max(from, to);
+      for (let position = start; position <= end; position += 1) {
+        if (!loadedPositionSet.has(position)) return false;
+      }
+      return true;
+    };
+    const previous = [...visibleFramePositions]
+      .reverse()
+      .find((position) => position < frameIndex && canReachWithoutGap(position, frameIndex));
+    const next = visibleFramePositions
+      .find((position) => position > frameIndex && canReachWithoutGap(position, frameIndex));
+    if (direction === "previous") return previous ?? next ?? frameIndex;
+    if (direction === "next") return next ?? previous ?? frameIndex;
+    if (previous === undefined) return next ?? frameIndex;
+    if (next === undefined) return previous;
+    return frameIndex - previous <= next - frameIndex ? previous : next;
+  }, [loadedFramePositions, visibleFramePositions]);
 
   const closeReplayMode = useCallback(() => {
     setHistoryOpen(false);
@@ -141,38 +168,46 @@ export function useReplayMode({
 
   const moveToPreviousFrame = useCallback(() => {
     const previousFrameIndex = resolveReplayFrameCommand("previous-frame", { frameIndex: historyFrameIndex, historyMaxIndex });
-    const previousVisibleFrameIndex = resolvePreviousVisibleFramePosition(historyFrameIndex);
-    if (previousVisibleFrameIndex !== null) {
-      setHistoryFrameIndex(previousVisibleFrameIndex);
+    if (shouldRequestMissingReplayFrame({ requestedFrameIndex: previousFrameIndex, loadedFramePositions })) {
+      setPendingScrubFrame({ frameIndex: previousFrameIndex, direction: "previous" });
+      loadHistoryAroundIndex(previousFrameIndex);
+      setHistoryFrameIndex(previousFrameIndex);
     } else {
-      if (canLoadOlderHistory && !historyLoadingOlder) {
-        setPendingPreviousFrameIndex(historyFrameIndex);
-        loadOlderHistory();
-      }
-      setHistoryFrameIndex(resolveVisibleFramePosition(previousFrameIndex, "previous"));
+      setHistoryFrameIndex(resolveVisibleFramePositionInsideLoadedRange(previousFrameIndex, "previous"));
     }
     setHistoryPlaying(false);
   }, [
-    canLoadOlderHistory,
     historyFrameIndex,
-    historyLoadingOlder,
     historyMaxIndex,
-    loadOlderHistory,
-    resolvePreviousVisibleFramePosition,
-    resolveVisibleFramePosition,
+    loadedFramePositions,
+    loadHistoryAroundIndex,
+    resolveVisibleFramePositionInsideLoadedRange,
     setHistoryFrameIndex,
     setHistoryPlaying,
   ]);
 
   const moveToNextFrame = useCallback(() => {
-    setHistoryFrameIndex((frameIndex) =>
-      resolveVisibleFramePosition(
-        resolveReplayFrameCommand("next-frame", { frameIndex, historyMaxIndex }),
-        "next",
-      )
-    );
+    const nextFrameIndex = resolveReplayFrameCommand("next-frame", {
+      frameIndex: historyFrameIndex,
+      historyMaxIndex,
+    });
+    if (shouldRequestMissingReplayFrame({ requestedFrameIndex: nextFrameIndex, loadedFramePositions })) {
+      setPendingScrubFrame({ frameIndex: nextFrameIndex, direction: "next" });
+      loadHistoryAroundIndex(nextFrameIndex);
+      setHistoryFrameIndex(nextFrameIndex);
+    } else {
+      setHistoryFrameIndex(resolveVisibleFramePositionInsideLoadedRange(nextFrameIndex, "next"));
+    }
     setHistoryPlaying(false);
-  }, [historyMaxIndex, resolveVisibleFramePosition, setHistoryFrameIndex, setHistoryPlaying]);
+  }, [
+    historyFrameIndex,
+    historyMaxIndex,
+    loadedFramePositions,
+    loadHistoryAroundIndex,
+    resolveVisibleFramePositionInsideLoadedRange,
+    setHistoryFrameIndex,
+    setHistoryPlaying,
+  ]);
 
   const resetToLatestFrame = useCallback(() => {
     setHistoryFrameIndex((frameIndex) =>
@@ -261,7 +296,7 @@ export function useReplayMode({
     if (!pendingScrubFrame) return;
     if (!activeHistoryFrameLoaded && (historyLoadingOlder || historyLoadingTarget)) return;
 
-    const resolvedFrameIndex = resolveVisibleFramePosition(
+    const resolvedFrameIndex = resolveVisibleFramePositionInsideLoadedRange(
       pendingScrubFrame.frameIndex,
       pendingScrubFrame.direction,
     );
@@ -274,7 +309,7 @@ export function useReplayMode({
     historyLoadingOlder,
     historyLoadingTarget,
     pendingScrubFrame,
-    resolveVisibleFramePosition,
+    resolveVisibleFramePositionInsideLoadedRange,
     setHistoryFrameIndex,
   ]);
 
