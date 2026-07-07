@@ -15,6 +15,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { canEditLobbyPlayerColor, getLobbyColorOptions } from "@/lib/lobby-player-colors";
+import {
+  CARD_INCREMENT_PRESET_ENTRIES,
+  CARD_INCREMENT_PRESETS,
+  resolveCardIncrementPresetKey,
+  type CardIncrementPresetKey,
+} from "@/lib/game/ruleset-summary";
 
 type RulesetOverridesInput = {
   fortify: { fortifyMode: "adjacent" | "connected"; maxFortifiesPerTurn?: number };
@@ -25,24 +31,6 @@ type RulesetOverridesInput = {
     allowFortifyThroughTeammates: boolean;
   };
 };
-
-const CARD_INCREMENT_PRESETS = {
-  classic: {
-    label: "Classic (4,6,8,10,12,15 then +5)",
-    tradeValues: [4, 6, 8, 10, 12, 15],
-    tradeValueOverflow: "continueByFive" as const,
-  },
-  flat: {
-    label: "Flat (5 every trade)",
-    tradeValues: [5],
-    tradeValueOverflow: "repeatLast" as const,
-  },
-  fast: {
-    label: "Fast (6,8,10,12,15,20 then +5)",
-    tradeValues: [6, 8, 10, 12, 15, 20],
-    tradeValueOverflow: "continueByFive" as const,
-  },
-} as const;
 
 const FORTIFY_MODE_OPTIONS = [
   { value: "connected", label: "Connected" },
@@ -100,23 +88,6 @@ function RulesSwitch({
       <Switch checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
     </label>
   );
-}
-
-function resolveCardPresetKey(
-  tradeValues?: number[],
-  tradeValueOverflow?: "repeatLast" | "continueByFive",
-): keyof typeof CARD_INCREMENT_PRESETS {
-  if (!tradeValues) return "classic";
-  for (const [key, preset] of Object.entries(CARD_INCREMENT_PRESETS) as Array<
-    [keyof typeof CARD_INCREMENT_PRESETS, (typeof CARD_INCREMENT_PRESETS)[keyof typeof CARD_INCREMENT_PRESETS]]
-  >) {
-    if (preset.tradeValueOverflow !== (tradeValueOverflow ?? "continueByFive")) continue;
-    if (preset.tradeValues.length !== tradeValues.length) continue;
-    if (preset.tradeValues.every((value, index) => value === tradeValues[index])) {
-      return key;
-    }
-  }
-  return "classic";
 }
 
 function PlayerColorPicker({
@@ -245,7 +216,7 @@ export default function LobbyPage() {
   const [fortifyMode, setFortifyMode] = useState<"adjacent" | "connected">("connected");
   const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | "unlimited">(3);
   const [forcedTradeHandSize, setForcedTradeHandSize] = useState(5);
-  const [cardIncrementPreset, setCardIncrementPreset] = useState<keyof typeof CARD_INCREMENT_PRESETS>("classic");
+  const [cardIncrementPreset, setCardIncrementPreset] = useState<CardIncrementPresetKey>("classic");
   const [allowPlaceOnTeammate, setAllowPlaceOnTeammate] = useState(true);
   const [allowFortifyWithTeammate, setAllowFortifyWithTeammate] = useState(true);
   const [allowFortifyThroughTeammates, setAllowFortifyThroughTeammates] = useState(true);
@@ -271,7 +242,7 @@ export default function LobbyPage() {
     );
     setForcedTradeHandSize(overrides?.cards?.forcedTradeHandSize ?? 5);
     setCardIncrementPreset(
-      resolveCardPresetKey(overrides?.cards?.tradeValues, overrides?.cards?.tradeValueOverflow),
+      resolveCardIncrementPresetKey(overrides?.cards?.tradeValues, overrides?.cards?.tradeValueOverflow),
     );
     setAllowPlaceOnTeammate(overrides?.teams?.allowPlaceOnTeammate ?? true);
     setAllowFortifyWithTeammate(overrides?.teams?.allowFortifyWithTeammate ?? true);
@@ -749,15 +720,13 @@ export default function LobbyPage() {
                         <span className="text-muted-foreground">Card reward increment</span>
                         <Select
                           value={cardIncrementPreset}
-                          onValueChange={(value) => setCardIncrementPreset(value as keyof typeof CARD_INCREMENT_PRESETS)}
+                          onValueChange={(value) => setCardIncrementPreset(value as CardIncrementPresetKey)}
                         >
                           <SelectTrigger className="h-8 w-[220px] text-xs sm:w-[360px]">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {(Object.entries(CARD_INCREMENT_PRESETS) as Array<
-                              [keyof typeof CARD_INCREMENT_PRESETS, (typeof CARD_INCREMENT_PRESETS)[keyof typeof CARD_INCREMENT_PRESETS]]
-                            >).map(([key, preset]) => (
+                            {CARD_INCREMENT_PRESET_ENTRIES.map(([key, preset]) => (
                               <SelectItem key={key} value={key}>
                                 {preset.label}
                               </SelectItem>

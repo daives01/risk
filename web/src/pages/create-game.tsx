@@ -12,6 +12,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+  CARD_INCREMENT_PRESET_ENTRIES,
+  CARD_INCREMENT_PRESETS,
+  type CardIncrementPresetKey,
+} from "@/lib/game/ruleset-summary";
 
 type RulesetOverridesInput = {
   fortify: { fortifyMode: "adjacent" | "connected"; maxFortifiesPerTurn?: number };
@@ -36,24 +41,6 @@ const TIMING_MODE_OPTIONS: Array<{ value: GameTimingMode; label: string }> = [
   { value: "async_1d", label: "Async (1 day / turn)" },
   { value: "async_3d", label: "Async (3 days / turn)" },
 ];
-
-const CARD_INCREMENT_PRESETS = {
-  classic: {
-    label: "Classic (4,6,8,10,12,15 then +5)",
-    tradeValues: [4, 6, 8, 10, 12, 15],
-    tradeValueOverflow: "continueByFive" as const,
-  },
-  flat: {
-    label: "Flat (5 every trade)",
-    tradeValues: [5],
-    tradeValueOverflow: "repeatLast" as const,
-  },
-  fast: {
-    label: "Fast (6,8,10,12,15,20 then +5)",
-    tradeValues: [6, 8, 10, 12, 15, 20],
-    tradeValueOverflow: "continueByFive" as const,
-  },
-} as const;
 
 const FORTIFY_MODE_OPTIONS = [
   { value: "connected", label: "Connected path" },
@@ -122,7 +109,7 @@ export default function CreateGamePage() {
   const [fortifyMode, setFortifyMode] = useState<"adjacent" | "connected">("connected");
   const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | "unlimited">(1);
   const [forcedTradeHandSize, setForcedTradeHandSize] = useState(5);
-  const [cardIncrementPreset, setCardIncrementPreset] = useState<keyof typeof CARD_INCREMENT_PRESETS>("classic");
+  const [cardIncrementPreset, setCardIncrementPreset] = useState<CardIncrementPresetKey>("classic");
   const [allowPlaceOnTeammate, setAllowPlaceOnTeammate] = useState(true);
   const [allowFortifyWithTeammate, setAllowFortifyWithTeammate] = useState(true);
   const [allowFortifyThroughTeammates, setAllowFortifyThroughTeammates] = useState(true);
@@ -443,14 +430,14 @@ export default function CreateGamePage() {
                   <Select
                     value={cardIncrementPreset}
                     onValueChange={(value) =>
-                      setCardIncrementPreset(value as keyof typeof CARD_INCREMENT_PRESETS)
+                      setCardIncrementPreset(value as CardIncrementPresetKey)
                     }
                   >
                     <SelectTrigger id="cardIncrementPreset">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {(Object.entries(CARD_INCREMENT_PRESETS) as Array<[keyof typeof CARD_INCREMENT_PRESETS, (typeof CARD_INCREMENT_PRESETS)[keyof typeof CARD_INCREMENT_PRESETS]]>).map(([key, preset]) => (
+                      {CARD_INCREMENT_PRESET_ENTRIES.map(([key, preset]) => (
                         <SelectItem key={key} value={key}>
                           {preset.label}
                         </SelectItem>
