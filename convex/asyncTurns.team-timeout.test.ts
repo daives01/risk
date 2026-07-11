@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { defaultRuleset } from "risk-engine";
-import type { CardId, GameState, GraphMap, PlayerId, RulesetConfig, TeamId } from "risk-engine";
+import type { CardId, GameState, GraphMap, PlayerId, RulesetConfig, TeamId, TerritoryId } from "risk-engine";
 import { applyTimeoutTurnResolution } from "./asyncTurns";
 
 const P1 = "p1" as PlayerId;
@@ -72,6 +72,13 @@ function makeState(): GameState {
 }
 
 describe("team timeout behavior", () => {
+  test("timeout policy consumes stored engine RNG deterministically", () => {
+    const first = applyTimeoutTurnResolution({ state: makeState(), playerId: P1, graphMap: map, ruleset: teamRuleset });
+    const second = applyTimeoutTurnResolution({ state: makeState(), playerId: P1, graphMap: map, ruleset: teamRuleset });
+
+    expect(first?.actionLogs.map((log) => log.action)).toEqual(second?.actionLogs.map((log) => log.action));
+    expect(first?.nextState.rng.index).toBe(5);
+  });
   test("timed-out reinforcements are auto-placed only on timed-out player's territories", () => {
     const resolution = applyTimeoutTurnResolution({
       state: makeState(),
@@ -115,5 +122,27 @@ describe("team timeout behavior", () => {
     ).toBe(true);
     expect(resolution?.nextState.turn.currentPlayerId).toBe(P2);
     expect(resolution?.nextState.turn.phase).toBe("Reinforcement");
+  });
+
+  test("timed-out pending occupation completes the ordinary turn sequence", () => {
+    const resolution = applyTimeoutTurnResolution({
+      state: {
+        ...makeState(),
+        turn: { currentPlayerId: P1, phase: "Occupy", round: 1 },
+        reinforcements: undefined,
+        pending: { type: "Occupy", from: "t1" as TerritoryId, to: "t2" as TerritoryId, minMove: 1, maxMove: 1 },
+        territories: {
+          ...makeState().territories,
+          t1: { ownerId: P1, armies: 3 },
+          t2: { ownerId: P1, armies: 0 },
+        },
+      },
+      playerId: P1,
+      graphMap: map,
+      ruleset: teamRuleset,
+    });
+
+    expect(resolution?.actionLogs.map((log) => log.action.type)).toEqual(["Occupy", "EndAttackPhase", "EndTurn"]);
+    expect(resolution?.nextState.turn.currentPlayerId).toBe(P2);
   });
 });

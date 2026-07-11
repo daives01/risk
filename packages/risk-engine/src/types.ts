@@ -29,7 +29,8 @@ export type Action =
   | OccupyAction
   | Fortify
   | EndAttackPhase
-  | EndTurn;
+  | EndTurn
+  | Resign;
 
 export interface TradeCards {
   readonly type: "TradeCards";
@@ -67,6 +68,10 @@ export interface EndAttackPhase {
 
 export interface EndTurn {
   readonly type: "EndTurn";
+}
+
+export interface Resign {
+  readonly type: "Resign";
 }
 
 // ── Events (engine → consumer) ───────────────────────────────────────

@@ -40,9 +40,21 @@ _Avoid_: User, engine player
 An active or finished play session created from a lobby.
 _Avoid_: Lobby, match setup
 
+**Game Transition**:
+One authoritative change from a **Game**'s current state to its next state, caused by an in-game action, resignation, or turn timeout. A Game Transition records one or more **History Frames** and may advance the turn or finish the Game.
+_Avoid_: Database update, state patch, action handler
+
+**Game Transition Source**:
+The origin responsible for a **Game Transition**: a **User** acting as their own **Engine Player**, a User acting as a delegated Engine Player, or the system resolving a turn timeout.
+_Avoid_: Request source, caller, action owner
+
 **Engine Player**:
 The in-game player identity used by the deterministic game engine after a game starts.
 _Avoid_: User, lobby player
+
+**Resignation**:
+An in-game action in which an **Engine Player** leaves active play, giving up their territories and cards and potentially advancing the turn or finishing the **Game**.
+_Avoid_: Logout, leave lobby, elimination request
 
 **Replay Timeline**:
 The ordered sequence of historical in-game action frames for a **Game**.
@@ -87,7 +99,12 @@ _Avoid_: Overlay, side panel, live mode
 - A **Local Smoke Run** uses the **Smoke Harness**
 - A **User** can become a **Lobby Player** by joining a **Lobby**
 - A **Lobby** can produce exactly one **Game** when started
+- A **Game Transition** changes exactly one **Game** from one authoritative state to the next
+- A **Game Transition** records one or more **History Frames**
+- A **Game Transition** has exactly one **Game Transition Source**
 - A **Lobby Player** is mapped to exactly one **Engine Player** when the **Game** starts
+- A **Resignation** changes one living **Engine Player** to defeated
+- A **Resignation** causes a **Game Transition**
 - A **Game** contains exactly one **Replay Timeline**
 - A **Replay Timeline** contains one or more **History Frames**
 - A **Turn Boundary** separates contiguous ranges of **History Frames**

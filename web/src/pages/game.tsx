@@ -593,7 +593,7 @@ export default function GamePage() {
 
   const submitAction = useCallback(
     async (
-      action: Action,
+      action: Exclude<Action, { type: "Resign" }>,
       options?: {
         preserveSelection?: boolean;
         preserveAttackDice?: boolean;

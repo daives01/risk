@@ -93,6 +93,37 @@ function makeAttackState(overrides?: Partial<GameState>): GameState {
   });
 }
 
+describe("Resign", () => {
+  test("defeats the player and ends a last-player-standing game", () => {
+    const state = makeAttackState({
+      territories: {
+        [T1]: { ownerId: P1, armies: 3 },
+        [T2]: { ownerId: P2, armies: 2 },
+      },
+      cardsById: { c1: { kind: "A" } },
+      hands: { [P1]: ["c1" as CardId], [P2]: [] },
+    });
+
+    const result = applyAction(
+      state,
+      P1,
+      { type: "Resign" },
+      testMap,
+      defaultRuleset.combat,
+      defaultRuleset.fortify,
+      defaultRuleset.cards,
+      defaultRuleset.teams,
+    );
+
+    expect(result.state.players[P1]?.status).toBe("defeated");
+    expect(result.state.territories[T1]?.ownerId).toBe("neutral");
+    expect(result.state.hands[P1]).toEqual([]);
+    expect(result.state.deck.discard).toEqual(["c1"]);
+    expect(result.state.turn.phase).toBe("GameOver");
+    expect(result.events).toContainEqual({ type: "GameEnded", winningPlayerId: P2 });
+  });
+});
+
 function place(territoryId: TerritoryId, count: number): PlaceReinforcements {
   return { type: "PlaceReinforcements", territoryId, count };
 }

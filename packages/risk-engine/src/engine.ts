@@ -22,6 +22,7 @@ import type {
   PlaceReinforcements,
   ReinforcementsGranted,
   ReinforcementsPlaced,
+  Resign,
   TerritoryCaptured,
   TerritoryId,
   TradeCards,
@@ -494,6 +495,7 @@ function handleOccupy(
     ...state,
     territories: newTerritories,
     pending: undefined,
+    turn: state.turn.phase === "Occupy" ? { ...state.turn, phase: "Attack" } : state.turn,
     stateVersion: state.stateVersion + 1,
   };
 
@@ -985,6 +987,82 @@ function handleEndTurn(
   return { state: newState, events };
 }
 
+function handleResign(
+  state: GameState,
+  playerId: PlayerId,
+  action: Resign,
+  map: GraphMap,
+  teamsConfig?: TeamsConfig,
+): ActionResult {
+  void action;
+  const player = state.players[playerId];
+  if (!player || player.status !== "alive") {
+    throw new ActionError("Player has already been eliminated");
+  }
+
+  const players = { ...state.players, [playerId]: { ...player, status: "defeated" as const } };
+  const territories = Object.fromEntries(Object.entries(state.territories).map(([id, territory]) => [
+    id,
+    territory.ownerId === playerId ? { ...territory, ownerId: "neutral" as const } : territory,
+  ]));
+  const cards = state.hands[playerId] ?? [];
+  const hands = { ...state.hands, [playerId]: [] as readonly CardId[] };
+  const deck = { ...state.deck, discard: [...state.deck.discard, ...cards] };
+  const winner = resolveWinner(players, state.turnOrder, teamsConfig);
+
+  let turn = winner ? { ...state.turn, phase: "GameOver" as const } : state.turn;
+  let reinforcements = state.reinforcements;
+  let capturedThisTurn = state.capturedThisTurn;
+  if (!winner && state.turn.currentPlayerId === playerId) {
+    const currentIndex = state.turnOrder.indexOf(playerId);
+    let nextIndex = currentIndex;
+    let wrapped = false;
+    do {
+      nextIndex = (nextIndex + 1) % state.turnOrder.length;
+      if (nextIndex <= currentIndex) wrapped = true;
+    } while (players[state.turnOrder[nextIndex]!]!.status !== "alive");
+    const nextPlayerId = state.turnOrder[nextIndex]!;
+    const granted = calculateReinforcements(
+      { ...state, players, territories },
+      nextPlayerId,
+      map,
+      teamsConfig,
+      state.turnOrder,
+    );
+    turn = {
+      currentPlayerId: nextPlayerId,
+      phase: "Reinforcement",
+      round: wrapped ? state.turn.round + 1 : state.turn.round,
+    };
+    reinforcements = { remaining: granted.total, sources: granted.sources };
+    capturedThisTurn = false;
+  }
+
+  const events: GameEvent[] = [{
+    type: "PlayerEliminated",
+    eliminatedId: playerId,
+    byId: playerId,
+    cardsTransferred: cards,
+  }];
+  if (winner) events.push({ type: "GameEnded", ...winner });
+
+  return {
+    state: {
+      ...state,
+      players,
+      territories,
+      hands,
+      deck,
+      turn,
+      reinforcements,
+      pending: winner || state.turn.currentPlayerId === playerId ? undefined : state.pending,
+      capturedThisTurn,
+      stateVersion: state.stateVersion + 1,
+    },
+    events,
+  };
+}
+
 // ── Dispatcher ────────────────────────────────────────────────────────
 
 export function applyAction(
@@ -1019,6 +1097,9 @@ export function applyAction(
     case "TradeCards":
       if (!cardsConfig) throw new ActionError("CardsConfig is required for TradeCards actions");
       return handleTradeCards(state, playerId, action, cardsConfig);
+    case "Resign":
+      if (!map) throw new ActionError("GraphMap is required for Resign actions");
+      return handleResign(state, playerId, action, map, teamsConfig);
   }
 }
 

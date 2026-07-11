@@ -1,77 +1,15 @@
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import { applyAction, type Action, type GameState, type GraphMap, type PlayerId, type RulesetConfig, type TerritoryId } from "risk-engine";
+import type { GameState, GraphMap, PlayerId, RulesetConfig } from "risk-engine";
 import { internal, components } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { resolveEffectiveRuleset, type RulesetOverrides } from "./rulesets";
-import { computeTurnDeadlineAt, didTurnAdvance, isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
+import { isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
 import { yourTurnEmailHtml } from "./emails";
-import { readGameStateNullable, readGraphMap } from "./typeAdapters";
-import { scheduleTurnTimeout } from "./turnTimeoutScheduling";
+import { readGameStateNullable } from "./typeAdapters";
 import {
-  insertGameStateSnapshotIfMissing,
   getGameStateDoc,
-  publicGameStateProjection,
-  readCurrentPrivateGameState,
-  upsertCurrentGameState,
 } from "./gameState";
-import { buildTimelineStatePatch } from "./historyTimeline";
-
-function getGameRuleset(game: {
-  teamModeEnabled?: boolean;
-  rulesetOverrides?: RulesetOverrides;
-  effectiveRuleset?: RulesetConfig;
-}): RulesetConfig {
-  return resolveEffectiveRuleset(game);
-}
-
-function extractGameWinner(events: unknown[]): {
-  winningPlayerId?: string;
-  winningTeamId?: string;
-} {
-  for (const event of events) {
-    if (!event || typeof event !== "object") continue;
-    const typedEvent = event as { type?: unknown; winningPlayerId?: unknown; winningTeamId?: unknown };
-    if (typedEvent.type !== "GameEnded") continue;
-    const winningPlayerId =
-      typeof typedEvent.winningPlayerId === "string" ? typedEvent.winningPlayerId : undefined;
-    const winningTeamId =
-      typeof typedEvent.winningTeamId === "string" ? typedEvent.winningTeamId : undefined;
-    return { ...(winningPlayerId ? { winningPlayerId } : {}), ...(winningTeamId ? { winningTeamId } : {}) };
-  }
-  return {};
-}
-
-function resolveTurnRolloverPatch(args: {
-  timingMode: GameTimingMode;
-  excludeWeekends: boolean;
-  previousState: GameState;
-  nextState: GameState;
-  now: number;
-}) {
-  if (!isAsyncTimingMode(args.timingMode) || args.nextState.turn.phase === "GameOver") {
-    return {
-      turnStartedAt: undefined as number | undefined,
-      turnDeadlineAt: undefined as number | undefined,
-      shouldNotify: false,
-    };
-  }
-  if (!didTurnAdvance(args.previousState, args.nextState)) {
-    return {
-      turnStartedAt: undefined as number | undefined,
-      turnDeadlineAt: undefined as number | undefined,
-      shouldNotify: false,
-    };
-  }
-  const turnStartedAt = args.now;
-  return {
-    turnStartedAt,
-    turnDeadlineAt:
-      computeTurnDeadlineAt(turnStartedAt, args.timingMode, args.excludeWeekends) ??
-      undefined,
-    shouldNotify: true,
-  };
-}
+import { applyTimeoutPolicy, executeGameTransition, GameTransitionRejected } from "./gameTransition";
 
 export function applyTimeoutTurnResolution(args: {
   state: GameState;
@@ -79,113 +17,18 @@ export function applyTimeoutTurnResolution(args: {
   graphMap: GraphMap;
   ruleset: RulesetConfig;
 }) {
-  let workingState = args.state;
-  const pickRandomOwnedReinforcementTargets = (remaining: number) => {
-    const ownedTerritoryIds = Object.keys(workingState.territories)
-      .sort()
-      .filter((territoryId) => workingState.territories[territoryId]?.ownerId === args.playerId);
-    if (ownedTerritoryIds.length === 0) return null;
-    const allocations = new Map<TerritoryId, number>();
-    for (let count = 0; count < remaining; count += 1) {
-      const territoryId = ownedTerritoryIds[Math.floor(Math.random() * ownedTerritoryIds.length)] as TerritoryId;
-      allocations.set(territoryId, (allocations.get(territoryId) ?? 0) + 1);
-    }
-    return allocations;
+  const frames = applyTimeoutPolicy(args);
+  if (!frames) return null;
+  return {
+    nextState: frames[frames.length - 1]!.afterState,
+    actionLogs: frames.map((frame) => ({
+      action: frame.action,
+      events: [...frame.events],
+      publicStatePatch: {},
+      beforeVersion: frame.beforeState.stateVersion,
+      afterVersion: frame.afterState.stateVersion,
+    })),
   };
-  const actionLogs: Array<{
-    action: Action;
-    events: unknown[];
-    publicStatePatch: unknown;
-    beforeVersion: number;
-    afterVersion: number;
-  }> = [];
-
-  const apply = (action: Action) => {
-    const result = applyAction(
-      workingState,
-      args.playerId,
-      action,
-      args.graphMap,
-      args.ruleset.combat,
-      args.ruleset.fortify,
-      args.ruleset.cards,
-      args.ruleset.teams,
-      action.type === "PlaceReinforcements" || action.type === "EndAttackPhase"
-        ? {
-          ...(action.type === "PlaceReinforcements"
-            ? { allowPlacementWithoutForcedTrade: true }
-            : {}),
-          ...(action.type === "EndAttackPhase"
-            ? { allowTurnAdvanceWithoutForcedTrade: true }
-            : {}),
-        }
-        : undefined,
-    );
-    actionLogs.push({
-      action,
-      events: [...result.events],
-      publicStatePatch: buildTimelineStatePatch(
-        publicGameStateProjection(workingState),
-        publicGameStateProjection(result.state),
-      ),
-      beforeVersion: workingState.stateVersion,
-      afterVersion: result.state.stateVersion,
-    });
-    workingState = result.state;
-  };
-
-  const endTurnIfPossible = () => {
-    if (workingState.turn.currentPlayerId !== args.playerId) return;
-    if (workingState.turn.phase === "Attack") {
-      apply({ type: "EndAttackPhase" });
-    }
-    if (workingState.turn.phase === "Fortify") {
-      apply({ type: "EndTurn" });
-    }
-  };
-
-  switch (workingState.turn.phase) {
-    case "Reinforcement": {
-      const remaining = workingState.reinforcements?.remaining ?? 0;
-      if (remaining > 0) {
-        const allocations = pickRandomOwnedReinforcementTargets(remaining);
-        if (!allocations) return null;
-        for (const [territoryId, count] of allocations) {
-          apply({
-            type: "PlaceReinforcements",
-            territoryId,
-            count,
-          });
-        }
-      }
-      endTurnIfPossible();
-      break;
-    }
-    case "Attack":
-    case "Fortify": {
-      endTurnIfPossible();
-      break;
-    }
-    case "Occupy": {
-      if (!workingState.pending || workingState.pending.type !== "Occupy") {
-        return null;
-      }
-      apply({
-        type: "Occupy",
-        moveArmies: workingState.pending.minMove,
-      });
-      if (workingState.turn.currentPlayerId === args.playerId) {
-        apply({ type: "EndTurn" });
-      }
-      break;
-    }
-    case "GameOver":
-    case "Setup":
-      return null;
-  }
-
-  if (actionLogs.length === 0) return null;
-  return { nextState: workingState, actionLogs };
 }
 
 async function processExpiredTurnForGame(ctx: any, args: {
@@ -193,126 +36,32 @@ async function processExpiredTurnForGame(ctx: any, args: {
   expectedPlayerId: string;
   expectedTurnStartedAt: number;
 }) {
-  const now = Date.now();
-  const game = await ctx.db.get(args.gameId);
-  if (
-    !game ||
-    game.status !== "active" ||
-    !isAsyncTimingMode((game.timingMode ?? "realtime") as GameTimingMode) ||
-    !game.turnDeadlineAt ||
-    game.turnDeadlineAt > now ||
-    game.turnStartedAt !== args.expectedTurnStartedAt
-  ) {
-    return { processed: false, reason: "stale_or_inactive" as const };
-  }
-
-  const state = await readCurrentPrivateGameState(ctx, game);
-  if (!state || state.turn.phase === "GameOver") {
-    return { processed: false, reason: "game_over" as const };
-  }
-
-  const timedOutPlayerId = state.turn.currentPlayerId as PlayerId;
-  if (timedOutPlayerId !== args.expectedPlayerId) {
-    return { processed: false, reason: "player_changed" as const };
-  }
-
-  const mapDoc = await ctx.db
-    .query("maps")
-    .withIndex("by_mapId", (q: any) => q.eq("mapId", game.mapId))
-    .unique();
-  if (!mapDoc) return { processed: false, reason: "map_missing" as const };
-
-  const ruleset = getGameRuleset({
-    teamModeEnabled: game.teamModeEnabled,
-    rulesetOverrides: game.rulesetOverrides as RulesetOverrides | undefined,
-    effectiveRuleset: game.effectiveRuleset as RulesetConfig | undefined,
-  });
-  const resolution = applyTimeoutTurnResolution({
-    state,
-    playerId: timedOutPlayerId,
-    graphMap: readGraphMap(mapDoc.graphMap),
-    ruleset,
-  });
-  if (!resolution) return { processed: false, reason: "no_resolution" as const };
-
-  const actionHead = await ctx.db
-    .query("gameActions")
-    .withIndex("by_gameId_index", (q: any) => q.eq("gameId", game._id))
-    .order("desc")
-    .first();
-  let actionIndex = actionHead ? actionHead.index + 1 : 0;
-
-  for (let idx = 0; idx < resolution.actionLogs.length; idx++) {
-    const actionLog = resolution.actionLogs[idx]!;
-    const events = idx === 0
-      ? [{ type: "TurnTimedOut", playerId: timedOutPlayerId }, ...actionLog.events]
-      : actionLog.events;
-    await ctx.db.insert("gameActions", {
-      gameId: game._id,
-      index: actionIndex,
-      playerId: timedOutPlayerId,
-      action: actionLog.action,
-      events,
-      publicStatePatch: actionLog.publicStatePatch,
-      stateVersionBefore: actionLog.beforeVersion,
-      stateVersionAfter: actionLog.afterVersion,
-      createdAt: now,
+  try {
+    await executeGameTransition(ctx, {
+      gameId: args.gameId,
+      source: { type: "system_timeout", playerId: args.expectedPlayerId as PlayerId },
+      intent: {
+        type: "timeout",
+        expectedPlayerId: args.expectedPlayerId as PlayerId,
+        expectedTurnStartedAt: args.expectedTurnStartedAt,
+      },
     });
-    actionIndex += 1;
+    return { processed: true as const };
+  } catch (error) {
+    if (error instanceof GameTransitionRejected) {
+      const reason = error.reason === "no_timeout_resolution"
+        ? "no_resolution"
+        : error.reason === "map_missing"
+          ? "map_missing"
+          : error.reason === "state_missing" || error.reason === "game_over"
+            ? "game_over"
+            : error.reason === "timeout_player_changed"
+              ? "player_changed"
+            : "stale_or_inactive";
+      return { processed: false as const, reason };
+    }
+    throw error;
   }
-  await insertGameStateSnapshotIfMissing(ctx, {
-    gameId: game._id,
-    index: actionIndex - 1,
-    state: resolution.nextState,
-    createdAt: now,
-  });
-
-  const isGameOver = resolution.nextState.turn.phase === "GameOver";
-  const winner = isGameOver
-    ? extractGameWinner(
-        resolution.actionLogs.flatMap((actionLog) => actionLog.events),
-      )
-    : {};
-  const rollover = resolveTurnRolloverPatch({
-    timingMode: (game.timingMode ?? "realtime") as GameTimingMode,
-    excludeWeekends: game.excludeWeekends ?? false,
-    previousState: state,
-    nextState: resolution.nextState,
-    now,
-  });
-  const turnTimeoutJobId = await scheduleTurnTimeout({
-    scheduler: ctx.scheduler,
-    gameId: game._id,
-    turnDeadlineAt: rollover.turnDeadlineAt,
-    turnStartedAt: rollover.turnStartedAt,
-    expectedPlayerId: rollover.turnStartedAt
-      ? resolution.nextState.turn.currentPlayerId
-      : undefined,
-  });
-
-  await upsertCurrentGameState(ctx, {
-    gameId: game._id,
-    state: resolution.nextState,
-    updatedAt: now,
-  });
-  await ctx.db.patch(game._id, {
-    ...(isGameOver
-      ? { status: "finished" as const, finishedAt: now, ...winner }
-      : {}),
-    turnStartedAt: rollover.turnStartedAt,
-    turnDeadlineAt: rollover.turnDeadlineAt,
-    turnTimeoutJobId,
-  });
-
-  if (rollover.shouldNotify && rollover.turnStartedAt) {
-    await ctx.scheduler.runAfter(0, (internal as any).turnNotifications.sendTurnNotifications, {
-      gameId: game._id,
-      expectedPlayerId: resolution.nextState.turn.currentPlayerId,
-      turnStartedAt: rollover.turnStartedAt,
-    });
-  }
-
-  return { processed: true as const };
 }
 
 export const processExpiredTurn = internalMutation({
@@ -321,11 +70,8 @@ export const processExpiredTurn = internalMutation({
     expectedPlayerId: v.string(),
     expectedTurnStartedAt: v.number(),
   },
-  handler: async (ctx, args) => {
-    return await processExpiredTurnForGame(ctx as any, args);
-  },
+  handler: async (ctx, args) => await processExpiredTurnForGame(ctx, args),
 });
-
 export const sendYourTurnEmail = internalAction({
   args: {
     gameId: v.id("games"),

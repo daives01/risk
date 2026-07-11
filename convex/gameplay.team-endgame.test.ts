@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { defaultRuleset } from "risk-engine";
+import { applyAction, defaultRuleset } from "risk-engine";
 import type { CardId, GameState, GraphMap, PlayerId, RulesetConfig, TeamId, TerritoryId } from "risk-engine";
-import { applyResignStateTransition } from "./gameplay";
 
 const P1 = "p1" as PlayerId;
 const P2 = "p2" as PlayerId;
@@ -80,7 +79,7 @@ function makeState(overrides?: Partial<GameState>): GameState {
 describe("team endgame resign behavior", () => {
   test("resigning only defeats the player and neutralizes only their territories", () => {
     const initial = makeState();
-    const next = applyResignStateTransition(initial, P1, map, teamRuleset);
+    const next = applyAction(initial, P1, { type: "Resign" }, map, teamRuleset.combat, teamRuleset.fortify, teamRuleset.cards, teamRuleset.teams).state;
 
     expect(next.players[P1]?.status).toBe("defeated");
     expect(next.players[P2]?.status).toBe("alive");
@@ -110,7 +109,7 @@ describe("team endgame resign behavior", () => {
       reinforcements: { remaining: 3, sources: { territory: 3 } },
     });
 
-    const next = applyResignStateTransition(initial, P3, map, teamRuleset);
+    const next = applyAction(initial, P3, { type: "Resign" }, map, teamRuleset.combat, teamRuleset.fortify, teamRuleset.cards, teamRuleset.teams).state;
     expect(next.players[P3]?.status).toBe("defeated");
     expect(next.turn.phase).toBe("GameOver");
   });
