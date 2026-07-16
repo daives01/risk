@@ -1,7 +1,6 @@
-import { Dices, Flag, Handshake, Users } from "lucide-react";
+import { Flag, Handshake, Users } from "lucide-react";
 import { useState } from "react";
 import type { KeyboardEvent } from "react";
-import { combineDieFaceCounts, summarizeDieFaceCounts, type DiceRollCounts, type DieFaceCounts } from "risk-engine";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -9,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { HighlightFilter } from "@/lib/game/highlighting";
 import type { PlayerPanelStats } from "@/lib/game/player-stats";
 import type { PlayerRef, PublicState } from "@/lib/game/types";
+import { DiceLuckPopover, type LuckPlayer } from "./dice-luck-popover";
 
 interface PlayersCardProps {
   playerStats: PlayerPanelStats[];
@@ -36,74 +36,6 @@ function toTitleCase(value: string) {
   return value.slice(0, 1).toUpperCase() + value.slice(1).toLowerCase();
 }
 
-function formatAverage(counts: DieFaceCounts) {
-  const summary = summarizeDieFaceCounts(counts);
-  return summary.average === null ? "—" : summary.average.toFixed(2);
-}
-
-function HistogramRow({ label, counts }: { label: string; counts: DieFaceCounts }) {
-  const summary = summarizeDieFaceCounts(counts);
-  return (
-    <div className="space-y-0.5">
-      <div className="flex items-center justify-between gap-4">
-        <span className="font-medium">{label}</span>
-        <span className="tabular-nums text-muted-foreground">{formatAverage(counts)} avg · {summary.diceCount} dice</span>
-      </div>
-      <div className="whitespace-nowrap font-mono text-[10px] text-muted-foreground">
-        1:{counts.ones} · 2:{counts.twos} · 3:{counts.threes} · 4:{counts.fours} · 5:{counts.fives} · 6:{counts.sixes}
-      </div>
-    </div>
-  );
-}
-
-function DiceLuckPopover({ counts }: { counts: DiceRollCounts | null | undefined }) {
-  const combined = counts ? combineDieFaceCounts(counts.attack, counts.defense) : null;
-  const summary = combined ? summarizeDieFaceCounts(combined) : null;
-  const deviation = summary?.deviationFromExpected;
-  const deviationLabel = deviation === null || deviation === undefined
-    ? null
-    : `${deviation >= 0 ? "+" : ""}${deviation.toFixed(2)} vs expected`;
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          size="icon-xs"
-          variant="ghost"
-          aria-label="View dice luck"
-          title="Dice luck"
-          className="text-muted-foreground hover:text-foreground"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <Dices className="size-3.5" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-72 space-y-3 p-3 text-xs" onClick={(event) => event.stopPropagation()}>
-        <div>
-          <div className="font-semibold">Dice luck</div>
-          {!counts ? (
-            <div className="mt-1 text-muted-foreground">Luck data unavailable</div>
-          ) : summary?.diceCount === 0 ? (
-            <div className="mt-1 text-muted-foreground">No dice rolled yet</div>
-          ) : (
-            <div className="mt-1 flex items-baseline justify-between gap-3">
-              <span className="text-lg font-semibold tabular-nums">{summary?.average?.toFixed(2)} avg</span>
-              <span className="tabular-nums text-muted-foreground">{deviationLabel} · {summary?.diceCount} dice</span>
-            </div>
-          )}
-        </div>
-        {counts && (
-          <div className="space-y-2 border-t pt-2">
-            <HistogramRow label="Attack" counts={counts.attack} />
-            <HistogramRow label="Defense" counts={counts.defense} />
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 export function GamePlayersCard({
   playerStats,
   displayState,
@@ -127,6 +59,15 @@ export function GamePlayersCard({
 }: PlayersCardProps) {
   const [resignOpen, setResignOpen] = useState(false);
   const tableMinWidthClass = teamModeEnabled ? "min-w-[28.5rem]" : "min-w-[21.5rem]";
+  const luckPlayers: LuckPlayer[] = playerMap.flatMap((player) => player.enginePlayerId
+    ? [{
+        id: player.enginePlayerId,
+        name: getPlayerName(player.enginePlayerId, playerMap),
+        color: getPlayerColor(player.enginePlayerId, displayState.turnOrder),
+        teamId: player.teamId,
+        counts: player.diceRollCounts,
+      }]
+    : []);
 
   const handleRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, playerId: string) => {
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -220,7 +161,14 @@ export function GamePlayersCard({
                             <span className={`block min-w-0 truncate font-semibold ${isDefeated ? "line-through" : ""}`}>
                               {playerName}
                             </span>
-                            <DiceLuckPopover counts={playerRef?.diceRollCounts} />
+                            {player.playerId === myPlayerId && (
+                              <DiceLuckPopover
+                                counts={playerRef?.diceRollCounts}
+                                players={luckPlayers}
+                                teamMode={teamModeEnabled}
+                                teamNames={teamNames}
+                              />
+                            )}
                           </span>
                         </div>
                       </td>

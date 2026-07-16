@@ -91,6 +91,17 @@
   }
 }
 
+@keyframes dice-bar-rise {
+  from {
+    opacity: 0.35;
+    transform: scaleY(0);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
 @layer components {
   .app-shell {
     min-height: 100vh;
