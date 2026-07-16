@@ -5,7 +5,7 @@ import {
   seedPreRefactorIndividualGame,
   seedPreRefactorAsyncGame,
   seedPreRefactorTeamGame,
-} from "./testFixtures/preRefactorGames";
+} from "./testFixtures/preRefactorGames.test";
 
 describe("pre-refactor Game compatibility", () => {
   test("an active individual Game accepts its next transition and remains replayable", async () => {
