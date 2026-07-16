@@ -3,6 +3,10 @@ dist/
 bun.lockb
 *.tsbuildinfo
 .env.local
+.playwright/
+playwright-report/
+test-results/
 
 .agents/
+.worktrees/
 skills-lock.json

@@ -85,7 +85,7 @@ function RulesSwitch({
   return (
     <label className="flex items-center justify-between gap-3 border border-border/75 bg-background/65 px-3 py-2">
       <span className="text-sm text-foreground">{label}</span>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
+      <Switch aria-label={label} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
     </label>
   );
 }

@@ -158,6 +158,7 @@ export function GameModals({
                   <label className="flex items-center justify-between gap-3">
                     <span className="text-sm text-muted-foreground">Allow teammates to play my turns</span>
                     <Switch
+                      aria-label="Allow teammates to play my turns"
                       checked={allowTeammatesToAct}
                       onCheckedChange={onToggleDelegation}
                     />
