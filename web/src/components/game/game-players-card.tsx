@@ -164,6 +164,7 @@ export function GamePlayersCard({
                             {player.playerId === myPlayerId && (
                               <DiceLuckPopover
                                 counts={playerRef?.diceRollCounts}
+                                color={color}
                                 players={luckPlayers}
                                 teamMode={teamModeEnabled}
                                 teamNames={teamNames}

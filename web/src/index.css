@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@keyframes luck-destination-reveal {
+  0%, 55% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
