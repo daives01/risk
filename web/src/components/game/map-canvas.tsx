@@ -7,6 +7,8 @@ import { NumberStepper } from "@/components/ui/number-stepper";
 import { TerritoryTooltip } from "@/components/game/territory-tooltip";
 import { computeBattleOverlayPlacement } from "@/lib/game/battle-overlay-placement";
 import { useMapPanZoomInteraction } from "@/lib/game/use-map-pan-zoom-interaction";
+import { AttackDicePrototype, FortifyMovePrototype, OccupyMovePrototype } from "@/pages/game/components/AttackDicePrototype";
+import type { AttackDiceResult } from "@/lib/game/attack-dice-result";
 
 interface GraphMapLike {
   territories: Record<string, { name?: string }>;
@@ -67,6 +69,7 @@ interface MapCanvasProps {
     toLabel: string | null;
     attackDice: number;
     maxDice: number;
+    maxDefendDice: number;
     autoRunning: boolean;
     resolving: boolean;
     disabled: boolean;
@@ -106,6 +109,7 @@ interface MapCanvasProps {
     onCancelSelection: () => void;
   }
   | null;
+  attackDicePrototypeResult?: AttackDiceResult | null;
 }
 
 interface FloatingTroopDelta {
@@ -149,6 +153,7 @@ export function MapCanvas({
   getPlayerLabel,
   getPlayerGroupId,
   battleOverlay,
+  attackDicePrototypeResult = null,
 }: MapCanvasProps) {
   const [rawHoveredTerritoryId, setHoveredTerritoryId] = useState<string | null>(null);
   const hoveredTerritoryId = infoOverlayEnabled ? null : rawHoveredTerritoryId;
@@ -481,6 +486,17 @@ export function MapCanvas({
   }, [getPlayerColor, showTroopDeltas, territories, troopDeltaDurationMs, turnOrder]);
 
   const overlayIsDraggable = !fullscreen;
+  const visibleAttackDiceResult = battleOverlay && attackDicePrototypeResult &&
+    battleOverlay.fromTerritoryId === attackDicePrototypeResult.fromId &&
+    battleOverlay.toTerritoryId === attackDicePrototypeResult.toId
+      ? attackDicePrototypeResult
+      : null;
+  const battleAttackerColor = battleOverlay
+    ? getPlayerColor(territories[battleOverlay.fromTerritoryId]?.ownerId ?? "neutral", turnOrder)
+    : undefined;
+  const battleDefenderColor = visibleAttackDiceResult?.defenderColor ?? (battleOverlay
+    ? getPlayerColor(territories[battleOverlay.toTerritoryId]?.ownerId ?? "neutral", turnOrder)
+    : undefined);
 
   const battleOverlayContent = battleOverlay ? (
     <>
@@ -535,19 +551,26 @@ export function MapCanvas({
         {battleOverlay.toLabel ? ` -> ${battleOverlay.toLabel}` : " -> select target"}
       </p>
       {battleOverlay.mode === "attack" ? (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {[1, 2, 3].map((dice) => (
-            <Button
-              key={dice}
-              type="button"
-              size="xs"
-              variant={battleOverlay.attackDice === dice ? "default" : "outline"}
-              disabled={dice > battleOverlay.maxDice || battleOverlay.resolving}
-              onClick={() => battleOverlay.onSetAttackDice(dice)}
-            >
-              {dice}
-            </Button>
+        <>
+          {import.meta.env.DEV && (
+            <AttackDicePrototype
+              result={visibleAttackDiceResult}
+              attackDice={battleOverlay.attackDice}
+              maxDice={battleOverlay.maxDice}
+              defenderDiceCount={visibleAttackDiceResult?.defendRolls.length ?? battleOverlay.maxDefendDice}
+              disabled={battleOverlay.disabled || battleOverlay.resolving}
+              rolling={battleOverlay.resolving && (!battleOverlay.autoRunning || !visibleAttackDiceResult)}
+              onSetAttackDice={battleOverlay.onSetAttackDice}
+              attackerColor={visibleAttackDiceResult?.attackerColor ?? battleAttackerColor}
+              defenderColor={battleDefenderColor}
+            />
+          )}
+          <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5">
+          {!import.meta.env.DEV && [1, 2, 3].map((dice) => (
+            <Button key={dice} type="button" size="xs" variant={battleOverlay.attackDice === dice ? "default" : "outline"} disabled={dice > battleOverlay.maxDice || battleOverlay.resolving} onClick={() => battleOverlay.onSetAttackDice(dice)}>{dice}</Button>
           ))}
+          {!battleOverlay.autoRunning && (
+            <>
           <Button
             type="button"
             size="xs"
@@ -558,6 +581,11 @@ export function MapCanvas({
               !battleOverlay.toLabel ||
               battleOverlay.maxDice < 1
             }
+            style={battleAttackerColor ? {
+              backgroundColor: battleAttackerColor,
+              borderColor: battleAttackerColor,
+              color: getReadableTextColor(battleAttackerColor),
+            } : undefined}
           >
             Attack
           </Button>
@@ -573,50 +601,82 @@ export function MapCanvas({
               !battleOverlay.toLabel ||
               (!battleOverlay.autoRunning && battleOverlay.maxDice < 3)
             }
+            style={battleAttackerColor ? {
+              backgroundColor: battleAttackerColor,
+              borderColor: battleAttackerColor,
+              color: getReadableTextColor(battleAttackerColor),
+            } : undefined}
           >
             Auto
           </Button>
+            </>
+          )}
           {battleOverlay.autoRunning && (
             <Button
               type="button"
               size="xs"
-              variant="outline"
+              variant="destructive"
               onClick={battleOverlay.onStopAutoAttack}
             >
               Stop
             </Button>
           )}
-        </div>
+          </div>
+        </>
       ) : battleOverlay.mode === "occupy" ? (
-        <div className="mt-2 flex items-center gap-1.5">
-          <NumberStepper
-            value={battleOverlay.occupyMove}
-            min={battleOverlay.minMove}
-            max={battleOverlay.maxMove}
-            onChange={battleOverlay.onSetOccupyMove}
-            disabled={battleOverlay.disabled}
-            size="xs"
-          />
-          <Button
-            type="button"
-            size="xs"
-            onClick={battleOverlay.onSubmitOccupy}
-            disabled={battleOverlay.disabled}
-          >
-            Move
-          </Button>
-          <Button
-            type="button"
-            size="xs"
-            variant="outline"
-            onClick={battleOverlay.onSubmitOccupyAll}
-            disabled={battleOverlay.disabled || battleOverlay.maxMove <= battleOverlay.minMove}
-          >
-            All
-          </Button>
-        </div>
+        <>
+          {import.meta.env.DEV && visibleAttackDiceResult ? (
+            <OccupyMovePrototype
+              result={visibleAttackDiceResult}
+              value={battleOverlay.occupyMove}
+              min={battleOverlay.minMove}
+              max={battleOverlay.maxMove}
+              disabled={battleOverlay.disabled}
+              onChange={battleOverlay.onSetOccupyMove}
+              onMove={battleOverlay.onSubmitOccupy}
+            />
+          ) : (
+            <div className="mt-2 flex items-center justify-end gap-1.5">
+              <NumberStepper value={battleOverlay.occupyMove} min={battleOverlay.minMove} max={battleOverlay.maxMove} onChange={battleOverlay.onSetOccupyMove} disabled={battleOverlay.disabled} size="xs" />
+              <Button
+                type="button"
+                size="xs"
+                onClick={battleOverlay.onSubmitOccupy}
+                disabled={battleOverlay.disabled}
+                style={visibleAttackDiceResult ? {
+                  backgroundColor: visibleAttackDiceResult.attackerColor,
+                  borderColor: visibleAttackDiceResult.attackerColor,
+                  color: getReadableTextColor(visibleAttackDiceResult.attackerColor),
+                } : undefined}
+              >
+                Move {battleOverlay.occupyMove}
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
+                onClick={battleOverlay.onSubmitOccupyAll}
+                disabled={battleOverlay.disabled || battleOverlay.maxMove <= battleOverlay.minMove}
+              >
+                All
+              </Button>
+            </div>
+          )}
+        </>
       ) : (
-        <div className="mt-2 flex items-center gap-1.5">
+        <>
+        {import.meta.env.DEV && battleAttackerColor && (
+          <FortifyMovePrototype
+            value={battleOverlay.fortifyCount}
+            min={battleOverlay.minCount}
+            max={battleOverlay.maxCount}
+            color={battleAttackerColor}
+            disabled={battleOverlay.disabled}
+            onChange={battleOverlay.onSetFortifyCount}
+            onFortify={battleOverlay.onSubmitFortify}
+          />
+        )}
+        {!import.meta.env.DEV && <div className="mt-2 flex items-center gap-1.5">
           <NumberStepper
             value={battleOverlay.fortifyCount}
             min={battleOverlay.minCount}
@@ -642,7 +702,8 @@ export function MapCanvas({
           >
             All
           </Button>
-        </div>
+        </div>}
+        </>
       )}
     </>
   ) : null;
@@ -932,7 +993,8 @@ export function MapCanvas({
               <div
                 ref={overlayPanelRef}
                 className={cn(
-                  "absolute z-20 w-[min(320px,92vw)] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm",
+                  "absolute z-20 rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm",
+                  "w-[min(232px,92vw)]",
                   "hidden sm:block",
                 )}
                 style={{
@@ -962,7 +1024,10 @@ export function MapCanvas({
         {fullscreen && battleOverlay && battleOverlayContent && (
           <div className="pointer-events-none fixed inset-x-0 top-0 z-30 flex justify-center px-3 pt-[calc(env(safe-area-inset-top)+5.5rem)] sm:absolute sm:inset-x-0 sm:top-3 sm:z-20 sm:px-3 sm:pt-[max(env(safe-area-inset-top),0.25rem)]">
             <div
-              className="pointer-events-auto w-[min(340px,calc(100vw-1.5rem))] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm sm:w-[min(340px,100%)]"
+              className={cn(
+                "pointer-events-auto rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm",
+                "w-[min(248px,calc(100vw-1.5rem))] sm:w-[min(248px,100%)]",
+              )}
               onPointerDown={(event) => {
                 if (panZoomEnabled) markInteractiveTargetPointerDown(event.pointerId);
                 event.stopPropagation();
@@ -975,7 +1040,10 @@ export function MapCanvas({
       </div>
       {!fullscreen && battleOverlay && battleOverlayContent && (
         <div className="mt-2 flex justify-center sm:hidden">
-          <div className="w-[min(320px,92vw)] rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm">
+          <div className={cn(
+            "rounded-lg border bg-card/95 p-2 shadow-lg backdrop-blur-sm",
+            "w-[min(248px,92vw)]",
+          )}>
             {battleOverlayContent}
           </div>
         </div>

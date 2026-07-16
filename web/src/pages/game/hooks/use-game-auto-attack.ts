@@ -40,8 +40,13 @@ export function useGameAutoAttack({
 }: UseGameAutoAttackOptions) {
   const [autoAttacking, setAutoAttacking] = useState(false);
   const autoAttackSubmittedVersionRef = useRef<number | null>(null);
+  const nextAutoAttackTimeoutRef = useRef<number | null>(null);
 
   const stopAutoAttack = useCallback(() => {
+    if (nextAutoAttackTimeoutRef.current !== null) {
+      window.clearTimeout(nextAutoAttackTimeoutRef.current);
+      nextAutoAttackTimeoutRef.current = null;
+    }
     autoAttackSubmittedVersionRef.current = null;
     setAutoAttacking(false);
   }, []);
@@ -63,16 +68,31 @@ export function useGameAutoAttack({
       return;
     }
     if (autoAttackSubmittedVersionRef.current === state.stateVersion) return;
-    autoAttackSubmittedVersionRef.current = state.stateVersion;
-    void submitAction(
-      {
-        type: "Attack",
-        from: selectedFrom as TerritoryId,
-        to: selectedTo as TerritoryId,
-        attackerDice: 3,
-      },
-      { preserveSelection: true, preserveAttackDice: true },
-    );
+    const hasPreviousAutoResult = autoAttackSubmittedVersionRef.current !== null;
+    const submitNextAttack = () => {
+      nextAutoAttackTimeoutRef.current = null;
+      autoAttackSubmittedVersionRef.current = state.stateVersion;
+      void submitAction(
+        {
+          type: "Attack",
+          from: selectedFrom as TerritoryId,
+          to: selectedTo as TerritoryId,
+          attackerDice: 3,
+        },
+        { preserveSelection: true, preserveAttackDice: true },
+      );
+    };
+    if (hasPreviousAutoResult) {
+      nextAutoAttackTimeoutRef.current = window.setTimeout(submitNextAttack, 500);
+      return () => {
+        if (nextAutoAttackTimeoutRef.current !== null) {
+          window.clearTimeout(nextAutoAttackTimeoutRef.current);
+          nextAutoAttackTimeoutRef.current = null;
+        }
+      };
+    } else {
+      submitNextAttack();
+    }
   }, [
     autoAttacking,
     historyOpen,
@@ -86,6 +106,12 @@ export function useGameAutoAttack({
     submitting,
     validToIds,
   ]);
+
+  useEffect(() => () => {
+    if (nextAutoAttackTimeoutRef.current !== null) {
+      window.clearTimeout(nextAutoAttackTimeoutRef.current);
+    }
+  }, []);
 
   return {
     autoAttacking,

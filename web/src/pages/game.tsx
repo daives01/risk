@@ -28,6 +28,7 @@ import { territorySignature } from "@/lib/game/history-debug";
 import { formatCardIncrementLabel } from "@/lib/game/ruleset-summary";
 import { findAutoTradeSet, type TradeSetsConfig } from "@/lib/game/trade-cards";
 import { formatTurnTimer } from "@/lib/game/turn-timer";
+import { buildAttackDiceResult, type AttackDiceResult } from "@/lib/game/attack-dice-result";
 import { useGameActions } from "@/lib/game/use-game-actions";
 import { useGameRuntimeQueries, useGameViewQueries } from "@/lib/game/use-game-queries";
 import { useGameShortcuts } from "@/lib/game/use-game-shortcuts";
@@ -172,6 +173,7 @@ export default function GamePage() {
   const [infoPinnedTerritoryId, setInfoPinnedTerritoryId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [attackSubmitting, setAttackSubmitting] = useState(false);
+  const [attackDicePrototypeResult, setAttackDicePrototypeResult] = useState<AttackDiceResult | null>(null);
   const [placementSubmitting, setPlacementSubmitting] = useState(false);
   const [recentAttackEdgeIds, setRecentAttackEdgeIds] = useState<Set<string> | null>(null);
   const recentAttackEventRef = useRef<string | null>(null);
@@ -288,6 +290,7 @@ export default function GamePage() {
     };
   } | null)?.teams;
   const effectiveRuleset = view?.effectiveRuleset as {
+    combat?: { maxDefendDice?: number };
     cards?: {
       forcedTradeHandSize?: number;
       tradeSets?: TradeSetsConfig;
@@ -298,6 +301,7 @@ export default function GamePage() {
   } | null;
   const effectiveCards = effectiveRuleset?.cards;
   const effectiveFortify = effectiveRuleset?.fortify;
+  const maxDefendDice = effectiveRuleset?.combat?.maxDefendDice ?? defaultRuleset.combat.maxDefendDice;
   const forcedTradeHandSize = effectiveCards?.forcedTradeHandSize ?? defaultRuleset.cards.forcedTradeHandSize;
   const tradeSets = effectiveCards?.tradeSets ?? defaultRuleset.cards.tradeSets;
   const tradeValues = effectiveCards?.tradeValues ?? [...defaultRuleset.cards.tradeValues];
@@ -634,12 +638,25 @@ export default function GamePage() {
           action.type === "TradeCards"
             ? { ...action, cardIds: [...action.cardIds] }
             : action;
-        await submitActionMutation({
+        const mutationResult = await submitActionMutation({
           gameId: typedGameId,
           expectedVersion: state.stateVersion,
           action: mutationAction,
           delegatedPlayerId: isDelegationEligible ? delegatedPlayerId : undefined,
         });
+        if (action.type === "Attack" && graphMap) {
+          const attackerOwnerId = state.territories[action.from]?.ownerId ?? "neutral";
+          const defenderOwnerId = state.territories[action.to]?.ownerId ?? "neutral";
+          setAttackDicePrototypeResult(buildAttackDiceResult(
+            mutationResult.events,
+            graphMap.territories,
+            `version-${mutationResult.newVersion}`,
+            {
+              attacker: getPlayerColor(attackerOwnerId, playerMap, state.turnOrder),
+              defender: getPlayerColor(defenderOwnerId, playerMap, state.turnOrder),
+            },
+          ));
+        }
         if (!isOptimisticAction) {
           resetAfterAction();
         }
@@ -654,7 +671,7 @@ export default function GamePage() {
         }
       }
     },
-    [delegatedPlayerId, isDelegationEligible, state, submitActionMutation, typedGameId],
+    [delegatedPlayerId, graphMap, isDelegationEligible, playerMap, state, submitActionMutation, typedGameId],
   );
 
   const {
@@ -745,7 +762,7 @@ export default function GamePage() {
 
         if (selectedFrom && validToIds.has(territoryId)) {
           setSelectedTo(territoryId);
-          setFortifyCount(1);
+          setFortifyCount(Math.max(1, (state.territories[selectedFrom]?.armies ?? 2) - 1));
           return;
         }
 
@@ -1009,6 +1026,7 @@ export default function GamePage() {
       stopAutoAttack();
       return;
     }
+    setAttackDicePrototypeResult(null);
     autoAttackSubmittedVersionRef.current = null;
     setAutoAttacking(true);
   }, [autoAttackSubmittedVersionRef, autoAttacking, setAutoAttacking, stopAutoAttack]);
@@ -1596,6 +1614,7 @@ export default function GamePage() {
             toLabel: graphMap.territories[selectedTo]?.name ?? selectedTo,
             attackDice,
             maxDice: Math.max(0, Math.min(3, (state.territories[selectedFrom]?.armies ?? 2) - 1)),
+            maxDefendDice: Math.min(maxDefendDice, state.territories[selectedTo]?.armies ?? 0),
             autoRunning: autoAttacking,
             resolving: attackSubmitting,
             disabled: controlsDisabled,
@@ -1740,6 +1759,7 @@ export default function GamePage() {
             getPlayerLabel={resolvePlayerLabel}
             getPlayerGroupId={resolvePlayerGroupId}
             battleOverlay={battleOverlay}
+            attackDicePrototypeResult={attackDicePrototypeResult}
           />
         </div>
         {!isMapFullscreen && (

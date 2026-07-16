@@ -2,6 +2,7 @@ import { MapCanvas } from "@/components/game/map-canvas";
 import type { ComponentProps, RefObject } from "react";
 import type { PublicState } from "@/lib/game/types";
 import { cn } from "@/lib/utils";
+import type { AttackDiceResult } from "@/lib/game/attack-dice-result";
 
 interface GameMapSectionProps {
   mapPanelRef: RefObject<HTMLDivElement | null>;
@@ -48,6 +49,7 @@ interface GameMapSectionProps {
   getPlayerLabel?: (playerId: string) => string;
   getPlayerGroupId?: (playerId: string) => string;
   battleOverlay: ComponentProps<typeof MapCanvas>["battleOverlay"];
+  attackDicePrototypeResult: AttackDiceResult | null;
 }
 
 export function GameMapSection({
@@ -87,6 +89,7 @@ export function GameMapSection({
   getPlayerLabel,
   getPlayerGroupId,
   battleOverlay,
+  attackDicePrototypeResult,
 }: GameMapSectionProps) {
   return (
     <div
@@ -140,6 +143,7 @@ export function GameMapSection({
             getPlayerLabel={getPlayerLabel}
             getPlayerGroupId={getPlayerGroupId}
             battleOverlay={battleOverlay}
+            attackDicePrototypeResult={attackDicePrototypeResult}
           />
         </div>
       </div>

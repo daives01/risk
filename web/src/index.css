@@ -547,3 +547,41 @@
     color: color-mix(in oklab, var(--app-accent), var(--foreground) 20%);
   }
 }
+/* Prototype attack control: smooth player-colored range without native gray chrome. */
+.player-slider {
+  appearance: none;
+  background: transparent;
+}
+
+.player-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--player-slider-color) 45%, transparent);
+}
+
+.player-slider::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  background: var(--player-slider-color);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
+}
+
+.player-slider::-moz-range-track {
+  height: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--player-slider-color) 45%, transparent);
+}
+
+.player-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--player-slider-color);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
+}

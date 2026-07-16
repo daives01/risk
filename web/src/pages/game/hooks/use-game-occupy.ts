@@ -27,11 +27,13 @@ export function useGameOccupy({
 }: UseGameOccupyOptions) {
   const [occupyMove, setOccupyMove] = useState(1);
   const autoOccupySubmittedKeyRef = useRef<string | null>(null);
+  const pendingMinMove = pending?.minMove;
+  const pendingMaxMove = pending?.maxMove;
 
   useEffect(() => {
-    if (!pending) return;
-    setOccupyMove((prev) => Math.max(pending.minMove, Math.min(pending.maxMove, prev)));
-  }, [pending]);
+    if (pendingMinMove === undefined || pendingMaxMove === undefined) return;
+    setOccupyMove(pendingMaxMove);
+  }, [pendingMaxMove, pendingMinMove, stateVersion]);
 
   useEffect(() => {
     if (

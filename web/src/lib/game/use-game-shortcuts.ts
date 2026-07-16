@@ -177,11 +177,8 @@ export function useGameShortcuts({
         return;
       }
 
-      if (!historyOpen && isMyTurn && !controlsDisabled && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
-        const delta = event.key === "ArrowUp" ? 1 : -1;
-        const isPlacementMode =
-          phase === "Reinforcement" ||
-          (phase === "Attack" && (maxPlaceCount > 0 || reinforcementDraftCount > 0));
+      if (!historyOpen && isMyTurn && !controlsDisabled && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+        const delta = event.key === "ArrowRight" ? 1 : -1;
         if (canSetOccupy) {
           event.preventDefault();
           const next = occupyMove + delta;
@@ -195,6 +192,13 @@ export function useGameShortcuts({
           onSetFortifyCount(Math.min(Math.max(1, next), maxFortifyCount));
           return;
         }
+      }
+
+      if (!historyOpen && isMyTurn && !controlsDisabled && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+        const delta = event.key === "ArrowUp" ? 1 : -1;
+        const isPlacementMode =
+          phase === "Reinforcement" ||
+          (phase === "Attack" && (maxPlaceCount > 0 || reinforcementDraftCount > 0));
         if (isPlacementMode && maxPlaceCount > 0) {
           event.preventDefault();
           const next = placeCount + delta;
