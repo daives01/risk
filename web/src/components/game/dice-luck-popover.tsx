@@ -195,8 +195,10 @@ function LuckComparisonField({ players, teams, mode, transitionTarget, selectedI
       if (!team) return [];
       const row = layout.rows.get(player.id) ?? 0;
       const playerTop = 25 + row * 30;
+      const teamRow = layout.teamLabelRows.get(team.team.id) ?? 0;
+      const teamTop = 25 + teamRow * 30;
       const merging = transitionTarget === "teams";
-      return [{ id: player.id, color: player.color, startLeft: merging ? left : team.left, startTop: merging ? playerTop : 58, endLeft: merging ? team.left : left, endTop: merging ? 58 : playerTop }];
+      return [{ id: player.id, color: player.color, startLeft: merging ? left : team.left, startTop: merging ? playerTop : teamTop, endLeft: merging ? team.left : left, endTop: merging ? teamTop : playerTop }];
     });
   }, [layout, transitionTarget]);
   const transitioning = transitionTarget !== null;
@@ -216,15 +218,16 @@ function LuckComparisonField({ players, teams, mode, transitionTarget, selectedI
         return <span key={`label:${player.id}`} className={`pointer-events-none absolute z-20 max-w-28 -translate-x-1/2 truncate rounded-sm bg-background/90 px-1.5 py-0.5 text-[10px] font-medium shadow-sm ${destinationClass}`} style={{ left: `${left}%`, top: `${8 + row * 30}%` }} title={player.name}>{player.name}</span>;
       })}
       {mode === "teams" && layout.teamPositions.map(({ team, left, colors }) => {
+        const row = layout.teamLabelRows.get(team.id) ?? 0;
         const stops = colors.map((color, index) => `${color} ${(index / colors.length) * 100}% ${((index + 1) / colors.length) * 100}%`).join(", ");
-        return <button key={team.id} type="button" onClick={() => onSelect(team.id)} className={`absolute top-[58%] z-20 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow-md ${destinationClass} ${selectedId === team.id ? "ring-2 ring-foreground/50 ring-offset-2 ring-offset-background" : ""}`} style={{ left: `${left}%`, background: colors.length > 1 ? `conic-gradient(${stops})` : colors[0] ?? team.color }} aria-label={`Select ${team.name}`} />;
+        return <button key={team.id} type="button" onClick={() => onSelect(team.id)} className={`absolute z-20 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow-md ${destinationClass} ${selectedId === team.id ? "ring-2 ring-foreground/50 ring-offset-2 ring-offset-background" : ""}`} style={{ left: `${left}%`, top: `${25 + row * 30}%`, background: colors.length > 1 ? `conic-gradient(${stops})` : colors[0] ?? team.color }} aria-label={`Select ${team.name}`} />;
       })}
       {mode === "teams" && layout.teamPositions.map(({ team, left }) => {
         const row = layout.teamLabelRows.get(team.id) ?? 0;
-        return <span key={`label:${team.id}`} className={`pointer-events-none absolute z-20 max-w-32 -translate-x-1/2 rounded-sm bg-background/90 px-2 py-1 text-[10px] font-semibold shadow-sm ${destinationClass}`} style={{ left: `${left}%`, top: `${17 + row * 24}%` }}>{team.name}</span>;
+        return <span key={`label:${team.id}`} className={`pointer-events-none absolute z-20 max-w-32 -translate-x-1/2 rounded-sm bg-background/90 px-2 py-1 text-[10px] font-semibold shadow-sm ${destinationClass}`} style={{ left: `${left}%`, top: `${8 + row * 30}%` }}>{team.name}</span>;
       })}
       {transitioning && <MergeTransition dots={transitionDots} merging={transitionTarget === "teams"} onComplete={onTransitionComplete} />}
-      <span className="absolute bottom-2 left-3 text-[9px] uppercase tracking-wider text-muted-foreground">Below</span><span className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[9px] font-semibold text-foreground/70">3.50</span><span className="absolute bottom-2 right-3 text-[9px] uppercase tracking-wider text-muted-foreground">Above</span>
+      <span className="absolute bottom-2 left-3 text-[9px] uppercase tracking-wider text-muted-foreground">Unlucky</span><span className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[9px] font-semibold text-foreground/70">0</span><span className="absolute bottom-2 right-3 text-[9px] uppercase tracking-wider text-muted-foreground">Lucky</span>
     </div>
   );
 }
