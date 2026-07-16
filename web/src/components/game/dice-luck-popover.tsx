@@ -16,6 +16,7 @@ import {
   toTeamLuckSubjectId,
   type TeamLuckSubjectId,
 } from "@/lib/game/luck-comparison-transition";
+import { assignLuckLabelRows } from "@/lib/game/luck-comparison-layout";
 
 const FACE_KEYS = ["ones", "twos", "threes", "fours", "fives", "sixes"] as const;
 
@@ -183,7 +184,8 @@ function LuckComparisonField({ players, teams, mode, transitionTarget, selectedI
       const colors = members.map(({ player }) => player.color);
       return { team, left, colors };
     });
-    return { positioned, rows, teamPositions };
+    const teamLabelRows = assignLuckLabelRows(teamPositions.map(({ team, left }) => ({ id: team.id, left })));
+    return { positioned, rows, teamPositions, teamLabelRows };
   }, [players, teams]);
   const transitionDots = useMemo<TransitionDot[]>(() => {
     if (!transitionTarget) return [];
@@ -217,7 +219,10 @@ function LuckComparisonField({ players, teams, mode, transitionTarget, selectedI
         const stops = colors.map((color, index) => `${color} ${(index / colors.length) * 100}% ${((index + 1) / colors.length) * 100}%`).join(", ");
         return <button key={team.id} type="button" onClick={() => onSelect(team.id)} className={`absolute top-[58%] z-20 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow-md ${destinationClass} ${selectedId === team.id ? "ring-2 ring-foreground/50 ring-offset-2 ring-offset-background" : ""}`} style={{ left: `${left}%`, background: colors.length > 1 ? `conic-gradient(${stops})` : colors[0] ?? team.color }} aria-label={`Select ${team.name}`} />;
       })}
-      {mode === "teams" && layout.teamPositions.map(({ team, left }) => <span key={`label:${team.id}`} className={`pointer-events-none absolute top-[29%] z-20 max-w-32 -translate-x-1/2 rounded-sm bg-background/90 px-2 py-1 text-[10px] font-semibold shadow-sm ${destinationClass}`} style={{ left: `${left}%` }}>{team.name}</span>)}
+      {mode === "teams" && layout.teamPositions.map(({ team, left }) => {
+        const row = layout.teamLabelRows.get(team.id) ?? 0;
+        return <span key={`label:${team.id}`} className={`pointer-events-none absolute z-20 max-w-32 -translate-x-1/2 rounded-sm bg-background/90 px-2 py-1 text-[10px] font-semibold shadow-sm ${destinationClass}`} style={{ left: `${left}%`, top: `${17 + row * 24}%` }}>{team.name}</span>;
+      })}
       {transitioning && <MergeTransition dots={transitionDots} merging={transitionTarget === "teams"} onComplete={onTransitionComplete} />}
       <span className="absolute bottom-2 left-3 text-[9px] uppercase tracking-wider text-muted-foreground">Below</span><span className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[9px] font-semibold text-foreground/70">3.50</span><span className="absolute bottom-2 right-3 text-[9px] uppercase tracking-wider text-muted-foreground">Above</span>
     </div>
