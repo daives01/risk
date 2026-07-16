@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { convexTest } from "convex-test";
-import type { GameState, PlayerId } from "risk-engine";
+import type { GameState, PlayerId, TerritoryId } from "risk-engine";
 import schema from "./schema";
 import { executeGameTransition, GameTransitionRejected } from "./gameTransition";
 
@@ -59,6 +59,12 @@ async function seed(phase: "Reinforcement" | "Attack" = "Attack") {
       createdAt: 1,
       startedAt: 1,
     });
+    await ctx.db.insert("gamePlayers", {
+      gameId, userId: "user-1", displayName: "Player 1", role: "host", joinedAt: 1, enginePlayerId: P1,
+    });
+    await ctx.db.insert("gamePlayers", {
+      gameId, userId: "user-2", displayName: "Player 2", role: "player", joinedAt: 1, enginePlayerId: P2,
+    });
     const initial = state(phase);
     await ctx.db.insert("gameStates", {
       gameId,
@@ -73,6 +79,31 @@ async function seed(phase: "Reinforcement" | "Attack" = "Attack") {
 }
 
 describe("Game Transition transaction", () => {
+  test("attributes attack and defense dice to Engine Players, including delegated actions", async () => {
+    const { t, gameId } = await seed();
+    await t.mutation((ctx) => executeGameTransition(ctx as any, {
+      gameId,
+      source: { type: "user", playerId: P1, actingUserId: "teammate-user", wasDelegated: true },
+      intent: { type: "action", action: { type: "Attack", from: "t1" as TerritoryId, to: "t2" as TerritoryId, attackerDice: 2 }, expectedVersion: 7 },
+      now: 1200,
+    }));
+
+    const result = await t.run(async (ctx) => {
+      const frame = await ctx.db.query("gameActions").unique();
+      const players = await ctx.db.query("gamePlayers").collect();
+      return { frame, players };
+    });
+    const event = (result.frame?.events as Array<{ type: string; attackRolls: number[]; defendRolls: number[] }>).find(
+      (candidate) => candidate.type === "AttackResolved",
+    )!;
+    const attacker = result.players.find((player) => player.enginePlayerId === P1)!;
+    const defender = result.players.find((player) => player.enginePlayerId === P2)!;
+    expect(Object.values(attacker.diceRollCounts!.attack).reduce((sum, value) => sum + value, 0)).toBe(event.attackRolls.length);
+    expect(Object.values(attacker.diceRollCounts!.defense).reduce((sum, value) => sum + value, 0)).toBe(0);
+    expect(Object.values(defender.diceRollCounts!.defense).reduce((sum, value) => sum + value, 0)).toBe(event.defendRolls.length);
+    expect(result.frame).toMatchObject({ playerId: P1, actingUserId: "teammate-user", wasDelegated: true });
+  });
+
   test("commits a direct action with provenance, patch, and current state atomically", async () => {
     const { t, gameId } = await seed();
     const result = await t.mutation((ctx) => executeGameTransition(ctx as any, {

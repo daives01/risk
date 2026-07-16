@@ -30,3 +30,11 @@ export { getLegalActions } from "./legal-actions.js";
 export type { LegalActionsConfig } from "./legal-actions.js";
 export { PLAYER_COLOR_NAME_BY_HEX, PLAYER_COLOR_PALETTE, NEUTRAL_PLAYER_COLOR } from "./colors.js";
 export type { PlayerColor } from "./colors.js";
+export {
+  addRollsToFaceCounts,
+  combineDieFaceCounts,
+  createEmptyDiceRollCounts,
+  createEmptyDieFaceCounts,
+  summarizeDieFaceCounts,
+} from "./dice-roll-counts.js";
+export type { DiceRollCounts, DieFaceCounts } from "./dice-roll-counts.js";

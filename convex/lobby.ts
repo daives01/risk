@@ -6,6 +6,7 @@ import {
   createRng,
   createDeck,
   calculateReinforcements,
+  createEmptyDiceRollCounts,
   PLAYER_COLOR_PALETTE,
   resolveInitialArmies,
 } from "risk-engine";
@@ -956,6 +957,7 @@ export const startGame = mutation({
       await ctx.db.patch(playerDocs[i]!._id, {
         enginePlayerId: playerIds[i],
         color: playerColors[playerDocs[i]!.userId]!,
+        diceRollCounts: createEmptyDiceRollCounts(),
         ...(teamMode.enabled
           ? { teamId: teamAssignmentsByUserId[playerDocs[i]!.userId]! }
           : { teamId: undefined }),

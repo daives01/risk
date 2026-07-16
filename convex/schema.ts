@@ -44,6 +44,20 @@ const mapPlayerLimits = v.object({
   maxPlayers: v.number(),
 });
 
+const dieFaceCounts = v.object({
+  ones: v.number(),
+  twos: v.number(),
+  threes: v.number(),
+  fours: v.number(),
+  fives: v.number(),
+  sixes: v.number(),
+});
+
+const diceRollCounts = v.object({
+  attack: dieFaceCounts,
+  defense: dieFaceCounts,
+});
+
 export default defineSchema({
   games: defineTable({
     name: v.string(),
@@ -102,6 +116,7 @@ export default defineSchema({
     enginePlayerId: v.optional(v.string()),
     teamId: v.optional(v.string()),
     allowTeammatesToAct: v.optional(v.boolean()),
+    diceRollCounts: v.optional(diceRollCounts),
   })
     .index("by_gameId", ["gameId"])
     .index("by_userId", ["userId"])

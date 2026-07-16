@@ -1,4 +1,4 @@
-import type { Phase } from "risk-engine";
+import type { DiceRollCounts, Phase } from "risk-engine";
 
 export type PublicState = {
   players: Record<string, { status: string; teamId?: string }>;
@@ -32,6 +32,7 @@ export type PlayerRef = {
   enginePlayerId: string | null;
   teamId?: string | null;
   allowTeammatesToAct?: boolean;
+  diceRollCounts?: DiceRollCounts | null;
 };
 
 export type MapVisual = {

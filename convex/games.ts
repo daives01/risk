@@ -38,6 +38,7 @@ export const getGameView = query({
       enginePlayerId: p.enginePlayerId ?? null,
       teamId: p.teamId ?? null,
       allowTeammatesToAct: p.allowTeammatesToAct ?? false,
+      diceRollCounts: p.diceRollCounts ?? null,
     }));
     const teamCount = game.teamModeEnabled ? Math.max(2, Math.min(game.teamCount ?? 2, Math.max(2, players.length))) : null;
     const teamIds = teamCount ? getTeamIds(teamCount) : [];
@@ -129,6 +130,7 @@ export const getGameViewAsPlayer = query({
       enginePlayerId: p.enginePlayerId ?? null,
       teamId: p.teamId ?? null,
       allowTeammatesToAct: p.allowTeammatesToAct ?? false,
+      diceRollCounts: p.diceRollCounts ?? null,
     }));
     const teamCount = game.teamModeEnabled ? Math.max(2, Math.min(game.teamCount ?? 2, Math.max(2, players.length))) : null;
     const teamIds = teamCount ? getTeamIds(teamCount) : [];
