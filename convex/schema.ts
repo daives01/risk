@@ -58,6 +58,19 @@ const diceRollCounts = v.object({
   defense: dieFaceCounts,
 });
 
+const combatLuckRoleStats = v.object({
+  battles: v.number(),
+  expectedOwnLosses: v.number(),
+  actualOwnLosses: v.number(),
+  expectedEnemyLosses: v.number(),
+  actualEnemyLosses: v.number(),
+});
+
+const combatLuckStats = v.object({
+  attack: combatLuckRoleStats,
+  defense: combatLuckRoleStats,
+});
+
 export default defineSchema({
   games: defineTable({
     name: v.string(),
@@ -117,6 +130,7 @@ export default defineSchema({
     teamId: v.optional(v.string()),
     allowTeammatesToAct: v.optional(v.boolean()),
     diceRollCounts: v.optional(diceRollCounts),
+    combatLuckStats: v.optional(combatLuckStats),
   })
     .index("by_gameId", ["gameId"])
     .index("by_userId", ["userId"])

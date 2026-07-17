@@ -39,6 +39,7 @@ export const getGameView = query({
       teamId: p.teamId ?? null,
       allowTeammatesToAct: p.allowTeammatesToAct ?? false,
       diceRollCounts: p.diceRollCounts ?? null,
+      combatLuckStats: p.combatLuckStats ?? null,
     }));
     const teamCount = game.teamModeEnabled ? Math.max(2, Math.min(game.teamCount ?? 2, Math.max(2, players.length))) : null;
     const teamIds = teamCount ? getTeamIds(teamCount) : [];
@@ -131,6 +132,7 @@ export const getGameViewAsPlayer = query({
       teamId: p.teamId ?? null,
       allowTeammatesToAct: p.allowTeammatesToAct ?? false,
       diceRollCounts: p.diceRollCounts ?? null,
+      combatLuckStats: p.combatLuckStats ?? null,
     }));
     const teamCount = game.teamModeEnabled ? Math.max(2, Math.min(game.teamCount ?? 2, Math.max(2, players.length))) : null;
     const teamIds = teamCount ? getTeamIds(teamCount) : [];

@@ -7,6 +7,7 @@ import {
   createDeck,
   calculateReinforcements,
   createEmptyDiceRollCounts,
+  createEmptyCombatLuckStats,
   PLAYER_COLOR_PALETTE,
   resolveInitialArmies,
 } from "risk-engine";
@@ -958,6 +959,7 @@ export const startGame = mutation({
         enginePlayerId: playerIds[i],
         color: playerColors[playerDocs[i]!.userId]!,
         diceRollCounts: createEmptyDiceRollCounts(),
+        combatLuckStats: createEmptyCombatLuckStats(),
         ...(teamMode.enabled
           ? { teamId: teamAssignmentsByUserId[playerDocs[i]!.userId]! }
           : { teamId: undefined }),

@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { HighlightFilter } from "@/lib/game/highlighting";
 import type { PlayerPanelStats } from "@/lib/game/player-stats";
 import type { PlayerRef, PublicState } from "@/lib/game/types";
-import { DiceLuckPopover, type LuckPlayer } from "./dice-luck-popover";
+import { GameLuckPopover, type GameLuckPlayer } from "./game-luck-popover";
 
 interface PlayersCardProps {
   playerStats: PlayerPanelStats[];
@@ -59,13 +59,14 @@ export function GamePlayersCard({
 }: PlayersCardProps) {
   const [resignOpen, setResignOpen] = useState(false);
   const tableMinWidthClass = teamModeEnabled ? "min-w-[28.5rem]" : "min-w-[21.5rem]";
-  const luckPlayers: LuckPlayer[] = playerMap.flatMap((player) => player.enginePlayerId
+  const luckPlayers: GameLuckPlayer[] = playerMap.flatMap((player) => player.enginePlayerId
     ? [{
         id: player.enginePlayerId,
         name: getPlayerName(player.enginePlayerId, playerMap),
         color: getPlayerColor(player.enginePlayerId, displayState.turnOrder),
         teamId: player.teamId,
         counts: player.diceRollCounts,
+        combat: player.combatLuckStats,
       }]
     : []);
 
@@ -162,9 +163,8 @@ export function GamePlayersCard({
                               {playerName}
                             </span>
                             {player.playerId === myPlayerId && (
-                              <DiceLuckPopover
-                                counts={playerRef?.diceRollCounts}
-                                color={color}
+                              <GameLuckPopover
+                                combat={playerRef?.combatLuckStats}
                                 players={luckPlayers}
                                 teamMode={teamModeEnabled}
                                 teamNames={teamNames}

@@ -1,7 +1,11 @@
 import {
   addRollsToFaceCounts,
+  addCombatOutcome,
+  createEmptyCombatLuckStats,
   createEmptyDiceRollCounts,
+  expectedCombatOutcome,
   type AttackResolved,
+  type CombatLuckStats,
   type DiceRollCounts,
   type GameState,
 } from "risk-engine";
@@ -22,8 +26,9 @@ function addCombatRolls(
   return { ...counts, [role]: addRollsToFaceCounts(counts[role], rolls) };
 }
 
-export function accumulateFrameDiceRollCounts(args: {
+export function accumulateFrameGameLuck(args: {
   countsByPlayerId: Map<string, DiceRollCounts>;
+  combatByPlayerId: Map<string, CombatLuckStats>;
   attackerId: string;
   beforeState: Pick<GameState, "territories"> | Pick<TimelinePublicState, "territories">;
   events: readonly unknown[];
@@ -40,10 +45,15 @@ export function accumulateFrameDiceRollCounts(args: {
     const defenderCounts = args.countsByPlayerId.get(defenderId) ?? createEmptyDiceRollCounts();
     args.countsByPlayerId.set(args.attackerId, addCombatRolls(attackerCounts, "attack", event.attackRolls));
     args.countsByPlayerId.set(defenderId, addCombatRolls(defenderCounts, "defense", event.defendRolls));
+    const expected = expectedCombatOutcome(event.attackDice, event.defendDice);
+    const attackerCombat = args.combatByPlayerId.get(args.attackerId) ?? createEmptyCombatLuckStats();
+    const defenderCombat = args.combatByPlayerId.get(defenderId) ?? createEmptyCombatLuckStats();
+    args.combatByPlayerId.set(args.attackerId, addCombatOutcome(attackerCombat, "attack", expected, event.attackerLosses, event.defenderLosses));
+    args.combatByPlayerId.set(defenderId, addCombatOutcome(defenderCombat, "defense", expected, event.attackerLosses, event.defenderLosses));
   }
 }
 
-export async function persistFrameDiceRollCounts(
+export async function persistFrameGameLuck(
   ctx: MutationCtx,
   args: {
     gameId: Id<"games">;
@@ -62,8 +72,14 @@ export async function persistFrameDiceRollCounts(
       .filter((player): player is typeof player & { enginePlayerId: string } => !!player.enginePlayerId)
       .map((player) => [player.enginePlayerId, player.diceRollCounts ?? createEmptyDiceRollCounts()]),
   );
-  accumulateFrameDiceRollCounts({
+  const combatByPlayerId = new Map(
+    players
+      .filter((player): player is typeof player & { enginePlayerId: string } => !!player.enginePlayerId)
+      .map((player) => [player.enginePlayerId, player.combatLuckStats ?? createEmptyCombatLuckStats()]),
+  );
+  accumulateFrameGameLuck({
     countsByPlayerId,
+    combatByPlayerId,
     attackerId: args.attackerId,
     beforeState: args.beforeState,
     events: args.events,
@@ -71,7 +87,8 @@ export async function persistFrameDiceRollCounts(
   for (const player of players) {
     if (!player.enginePlayerId) continue;
     const counts = countsByPlayerId.get(player.enginePlayerId);
-    if (counts) await ctx.db.patch(player._id, { diceRollCounts: counts });
+    const combat = combatByPlayerId.get(player.enginePlayerId);
+    if (counts || combat) await ctx.db.patch(player._id, { diceRollCounts: counts, combatLuckStats: combat });
   }
 }
 
@@ -84,15 +101,19 @@ export const backfillGame = internalMutation({
       .query("gameStateSnapshots")
       .withIndex("by_gameId_index", (q) => q.eq("gameId", gameId).eq("index", -1))
       .unique();
-    if (!initialSnapshot) throw new Error("Cannot backfill dice rolls: initial game-state snapshot is missing");
+    if (!initialSnapshot) throw new Error("Cannot backfill game luck: initial game-state snapshot is missing");
 
     const players = await ctx.db
       .query("gamePlayers")
       .withIndex("by_gameId", (q) => q.eq("gameId", gameId))
       .collect();
     const countsByPlayerId = new Map<string, DiceRollCounts>();
+    const combatByPlayerId = new Map<string, CombatLuckStats>();
     for (const player of players) {
-      if (player.enginePlayerId) countsByPlayerId.set(player.enginePlayerId, createEmptyDiceRollCounts());
+      if (player.enginePlayerId) {
+        countsByPlayerId.set(player.enginePlayerId, createEmptyDiceRollCounts());
+        combatByPlayerId.set(player.enginePlayerId, createEmptyCombatLuckStats());
+      }
     }
 
     const actions = await ctx.db
@@ -102,15 +123,16 @@ export const backfillGame = internalMutation({
       .collect();
     let state = initialSnapshot.publicState as TimelinePublicState;
     for (const action of actions) {
-      accumulateFrameDiceRollCounts({
+      accumulateFrameGameLuck({
         countsByPlayerId,
+        combatByPlayerId,
         attackerId: action.playerId,
         beforeState: state,
         events: Array.isArray(action.events) ? action.events : [],
         actionIndex: action.index,
       });
       if (!action.publicStatePatch) {
-        throw new Error(`Cannot backfill dice rolls: action ${action.index} has no public state patch`);
+        throw new Error(`Cannot backfill game luck: action ${action.index} has no public state patch`);
       }
       state = applyTimelineStatePatch(state, action.publicStatePatch as TimelineStatePatch);
     }
@@ -120,9 +142,10 @@ export const backfillGame = internalMutation({
     for (const player of players) {
       if (!player.enginePlayerId) continue;
       const counts = countsByPlayerId.get(player.enginePlayerId) ?? createEmptyDiceRollCounts();
+      const combat = combatByPlayerId.get(player.enginePlayerId) ?? createEmptyCombatLuckStats();
       attackDice += Object.values(counts.attack).reduce((sum, value) => sum + value, 0);
       defenseDice += Object.values(counts.defense).reduce((sum, value) => sum + value, 0);
-      await ctx.db.patch(player._id, { diceRollCounts: counts });
+      await ctx.db.patch(player._id, { diceRollCounts: counts, combatLuckStats: combat });
     }
 
     return {
@@ -130,6 +153,7 @@ export const backfillGame = internalMutation({
       playersUpdated: players.filter((player) => !!player.enginePlayerId).length,
       attackDice,
       defenseDice,
+      battles: [...combatByPlayerId.values()].reduce((sum, stats) => sum + stats.attack.battles, 0),
     };
   },
 });

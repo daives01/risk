@@ -23,7 +23,7 @@ import { buildTimelineStatePatch } from "./historyTimeline";
 import { resolveTurnTimingPatch } from "./gameplayTiming";
 import { isAsyncTimingMode, type GameTimingMode } from "./gameTiming";
 import { scheduleTurnTimeout } from "./turnTimeoutScheduling";
-import { persistFrameDiceRollCounts } from "./diceRollCounts";
+import { persistFrameGameLuck } from "./gameLuck";
 
 export type GameTransitionSource =
   | { type: "user"; playerId: PlayerId; actingUserId: string; wasDelegated: boolean }
@@ -221,7 +221,7 @@ export async function executeGameTransition(
       ...(args.source.type === "user" ? { actingUserId: args.source.actingUserId, wasDelegated: args.source.wasDelegated } : {}),
       stateVersionBefore: frame.beforeState.stateVersion, stateVersionAfter: frame.afterState.stateVersion, createdAt: now,
     });
-    await persistFrameDiceRollCounts(ctx, {
+    await persistFrameGameLuck(ctx, {
       gameId: args.gameId,
       attackerId: args.source.playerId,
       beforeState: frame.beforeState,

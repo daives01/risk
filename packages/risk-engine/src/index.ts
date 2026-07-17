@@ -38,3 +38,11 @@ export {
   summarizeDieFaceCounts,
 } from "./dice-roll-counts.js";
 export type { DiceRollCounts, DieFaceCounts } from "./dice-roll-counts.js";
+export {
+  addCombatOutcome,
+  combatLuckScore,
+  combineCombatLuckStats,
+  createEmptyCombatLuckStats,
+  expectedCombatOutcome,
+} from "./combat-luck.js";
+export type { CombatLuckRoleStats, CombatLuckStats, ExpectedCombatOutcome } from "./combat-luck.js";

@@ -101,6 +101,13 @@ describe("Game Transition transaction", () => {
     expect(Object.values(attacker.diceRollCounts!.attack).reduce((sum, value) => sum + value, 0)).toBe(event.attackRolls.length);
     expect(Object.values(attacker.diceRollCounts!.defense).reduce((sum, value) => sum + value, 0)).toBe(0);
     expect(Object.values(defender.diceRollCounts!.defense).reduce((sum, value) => sum + value, 0)).toBe(event.defendRolls.length);
+    expect(attacker.combatLuckStats!.attack.battles).toBe(1);
+    expect(defender.combatLuckStats!.defense.battles).toBe(1);
+    const attackerLuck = (attacker.combatLuckStats!.attack.actualEnemyLosses - attacker.combatLuckStats!.attack.expectedEnemyLosses)
+      + (attacker.combatLuckStats!.attack.expectedOwnLosses - attacker.combatLuckStats!.attack.actualOwnLosses);
+    const defenderLuck = (defender.combatLuckStats!.defense.actualEnemyLosses - defender.combatLuckStats!.defense.expectedEnemyLosses)
+      + (defender.combatLuckStats!.defense.expectedOwnLosses - defender.combatLuckStats!.defense.actualOwnLosses);
+    expect(attackerLuck).toBeCloseTo(-defenderLuck);
     expect(result.frame).toMatchObject({ playerId: P1, actingUserId: "teammate-user", wasDelegated: true });
   });
 

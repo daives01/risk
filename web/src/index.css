@@ -6,6 +6,11 @@
   100% { opacity: 1; }
 }
 
+@keyframes combat-outcome-dot-travel {
+  from { left: var(--combat-expected-left); }
+  to { left: var(--combat-actual-left); }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

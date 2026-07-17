@@ -1,0 +1,279 @@
+import { Dices, Shield, Swords, Users, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Dialog as DialogPrimitive } from "radix-ui";
+import {
+  combineDieFaceCounts,
+  combatLuckScore,
+  combineCombatLuckStats,
+  createEmptyCombatLuckStats,
+  createEmptyDiceRollCounts,
+  summarizeDieFaceCounts,
+  type DiceRollCounts,
+  type DieFaceCounts,
+  type CombatLuckStats,
+} from "risk-engine";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CombatLuckDetail, PersonalCombatLuck } from "./combat-luck-display";
+import { formatLuckScore, luckScoreStyle } from "./luck-score-presentation";
+import {
+  fromTeamLuckSubjectId,
+  resolveLuckComparisonPresentation,
+  toTeamLuckSubjectId,
+  type TeamLuckSubjectId,
+} from "@/lib/game/luck-comparison-transition";
+
+const FACE_KEYS = ["ones", "twos", "threes", "fours", "fives", "sixes"] as const;
+
+export interface GameLuckPlayer {
+  id: string;
+  name: string;
+  color: string;
+  teamId?: string | null;
+  counts?: DiceRollCounts | null;
+  combat?: CombatLuckStats | null;
+}
+
+interface GameLuckSubject extends GameLuckPlayer {
+  counts: DiceRollCounts;
+  diceCount: number;
+  luckScore: number | null;
+  combat: CombatLuckStats;
+  battles: number;
+}
+
+function getLuckLabel(deviation: number, diceCount: number) {
+  const noise = 1.7 / Math.sqrt(Math.max(diceCount, 1));
+  if (Math.abs(deviation) < noise * 0.45) return { label: "About even", tone: "text-foreground" };
+  if (deviation > noise * 1.35) return { label: "Very lucky", tone: "text-emerald-400" };
+  if (deviation > 0) return { label: "A little lucky", tone: "text-emerald-400" };
+  if (deviation < -noise * 1.35) return { label: "Very unlucky", tone: "text-rose-400" };
+  return { label: "A little unlucky", tone: "text-rose-400" };
+}
+
+function summarizeDiceLuck(counts: DieFaceCounts) {
+  const summary = summarizeDieFaceCounts(counts);
+  return { ...summary, deviation: summary.average === null ? null : summary.average - 3.5 };
+}
+
+function toSubject(id: string, name: string, color: string, counts: DiceRollCounts, combat: CombatLuckStats, metric: "dice" | "combat", teamId?: string | null): GameLuckSubject {
+  const summary = summarizeDiceLuck(combineDieFaceCounts(counts.attack, counts.defense));
+  const battles = combat.attack.battles + combat.defense.battles;
+  return { id, name, color, counts, combat, teamId, battles, diceCount: summary.diceCount, luckScore: metric === "dice" ? summary.deviation : battles === 0 ? null : combatLuckScore(combat) };
+}
+
+function aggregateCounts(players: GameLuckPlayer[]) {
+  return players.reduce((total, player) => {
+    if (!player.counts) return total;
+    return {
+      attack: combineDieFaceCounts(total.attack, player.counts.attack),
+      defense: combineDieFaceCounts(total.defense, player.counts.defense),
+    };
+  }, createEmptyDiceRollCounts());
+}
+
+function aggregateCombat(players: GameLuckPlayer[]) {
+  return players.reduce((total, player) => player.combat ? combineCombatLuckStats(total, player.combat) : total, createEmptyCombatLuckStats());
+}
+
+function FaceChart({ counts, tall = false, color }: { counts: DieFaceCounts; tall?: boolean; color?: string }) {
+  const values = FACE_KEYS.map((key) => counts[key]);
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const max = Math.max(...values, 1);
+  const expected = total / 6;
+  return (
+    <div className="grid grid-cols-6 gap-1.5" aria-label="Rolls by die face">
+      {values.map((count, index) => (
+        <div key={index} className="flex min-w-0 flex-col items-center gap-1">
+          <div className={`relative flex w-full items-end bg-muted/60 ${tall ? "h-24" : "h-10"}`}>
+            {total > 0 && <span className="absolute inset-x-0 z-10 border-t border-dashed border-muted-foreground/45" style={{ bottom: `${(expected / max) * 100}%` }} />}
+            <span className="w-full origin-bottom animate-[dice-bar-rise_420ms_cubic-bezier(0.22,1,0.36,1)_both] bg-primary/80 motion-reduce:animate-none" style={{ height: total === 0 ? 0 : `${Math.max((count / max) * 100, 3)}%`, backgroundColor: color }} title={`${count} rolls`} />
+          </div>
+          <span className="text-[10px] font-semibold text-muted-foreground">{index + 1}</span>
+          {tall && <span className="text-[10px] tabular-nums">{count}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RoleStat({ icon, label, counts }: { icon: React.ReactNode; label: string; counts: DieFaceCounts }) {
+  const summary = summarizeDiceLuck(counts);
+  return (
+    <div className="border border-border/70 bg-background/50 p-3">
+      <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">{icon}{label}</div>
+      <div className="mt-2 flex items-end justify-between">
+        <span className="text-xl font-semibold tabular-nums" style={summary.deviation === null ? undefined : luckScoreStyle(summary.deviation)}>{summary.deviation === null ? "—" : formatLuckScore(summary.deviation)}</span>
+        <span className="text-[10px] tabular-nums text-muted-foreground">{summary.diceCount} dice</span>
+      </div>
+    </div>
+  );
+}
+
+interface TransitionDot {
+  id: string;
+  color: string;
+  startLeft: number;
+  startTop: number;
+  endLeft: number;
+  endTop: number;
+}
+
+function MergeTransition({ dots, merging, onComplete }: { dots: TransitionDot[]; merging: boolean; onComplete: () => void }) {
+  const layerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      onComplete();
+      return;
+    }
+    let cancelled = false;
+    const animations = [...layer.querySelectorAll<HTMLElement>("[data-transition-dot]")].map((element, index) => {
+      const dot = dots[index]!;
+      const dx = ((dot.endLeft - dot.startLeft) / 100) * layer.clientWidth;
+      const dy = ((dot.endTop - dot.startTop) / 100) * layer.clientHeight;
+      return element.animate([
+        { transform: "translate3d(-50%, -50%, 0)", opacity: merging ? 1 : 0.2 },
+        { transform: `translate3d(calc(-50% + ${dx}px), calc(-50% + ${dy}px), 0)`, opacity: merging ? 0.2 : 1 },
+      ], { duration: 360, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "forwards" });
+    });
+    Promise.all(animations.map((animation) => animation.finished.catch(() => undefined))).then(() => {
+      if (!cancelled) onComplete();
+    });
+    return () => {
+      cancelled = true;
+      animations.forEach((animation) => animation.cancel());
+    };
+  }, [dots, merging, onComplete]);
+  return <div ref={layerRef} className="pointer-events-none absolute inset-0 z-30">{dots.map((dot) => <span key={dot.id} data-transition-dot className="absolute size-4 rounded-full border-2 border-background shadow-md [will-change:transform,opacity]" style={{ left: `${dot.startLeft}%`, top: `${dot.startTop}%`, backgroundColor: dot.color }} />)}</div>;
+}
+
+function LuckComparisonField({ players, teams, metric, mode, transitionTarget, selectedId, onSelect, onTransitionComplete }: { players: GameLuckSubject[]; teams: GameLuckSubject[]; metric: "dice" | "combat"; mode: "individual" | "teams"; transitionTarget: "individual" | "teams" | null; selectedId: string; onSelect: (id: string) => void; onTransitionComplete: () => void }) {
+  const layout = useMemo(() => {
+    const measured = [...players, ...teams].filter((subject) => subject.luckScore !== null);
+    const furthest = Math.max(0.5, ...measured.map((subject) => Math.abs(subject.luckScore!)));
+    const domain = Math.max(0.5, Math.ceil(furthest * 4) / 4);
+    const sampleSize = (subject: GameLuckSubject) => metric === "dice" ? subject.diceCount : subject.battles;
+    const maxSampleSize = Math.max(1, ...measured.map(sampleSize));
+    const topFor = (subject: GameLuckSubject) => 18 + (1 - sampleSize(subject) / maxSampleSize) * 58;
+    const positioned = players.filter((player) => player.luckScore !== null).map((player) => {
+      return { player, left: Math.max(8, Math.min(95, ((player.luckScore! + domain) / (domain * 2)) * 100)), top: topFor(player) };
+    });
+    const teamPositions = teams.filter((team) => team.luckScore !== null).map((team) => {
+      const teamId = fromTeamLuckSubjectId(team.id as TeamLuckSubjectId);
+      const members = positioned.filter(({ player }) => player.teamId === teamId);
+      const left = Math.max(8, Math.min(95, ((team.luckScore! + domain) / (domain * 2)) * 100));
+      const colors = members.map(({ player }) => player.color);
+      return { team, left, top: topFor(team), colors };
+    });
+    return { positioned, teamPositions, maxSampleSize };
+  }, [metric, players, teams]);
+  const transitionDots = useMemo<TransitionDot[]>(() => {
+    if (!transitionTarget) return [];
+    const teamsById = new Map(layout.teamPositions.map((position) => [fromTeamLuckSubjectId(position.team.id as TeamLuckSubjectId), position]));
+    return layout.positioned.flatMap(({ player, left, top }) => {
+      const team = player.teamId ? teamsById.get(player.teamId) : undefined;
+      if (!team) return [];
+      const merging = transitionTarget === "teams";
+      return [{ id: player.id, color: player.color, startLeft: merging ? left : team.left, startTop: merging ? top : team.top, endLeft: merging ? team.left : left, endTop: merging ? team.top : top }];
+    });
+  }, [layout, transitionTarget]);
+  const transitioning = transitionTarget !== null;
+  const destinationClass = transitioning
+    ? "animate-[luck-destination-reveal_360ms_ease-out_both] motion-reduce:animate-none"
+    : "";
+  const sampleLabel = metric === "dice" ? "Dice rolled" : "Engagements";
+  return (
+    <div className="relative h-44 overflow-hidden border border-border/60 bg-muted/20 [contain:layout_paint]">
+      <div className="absolute bottom-[18%] left-1/2 top-[12%] w-px bg-foreground/25" />
+      {[18, 47, 76].map((top) => <div key={top} className="absolute left-8 right-3 border-t border-dashed border-border/70" style={{ top: `${top}%` }} />)}
+      <span className="absolute left-1 top-[18%] -translate-y-1/2 text-[8px] tabular-nums text-muted-foreground">{layout.maxSampleSize}</span>
+      <span className="absolute bottom-[24%] left-1 text-[8px] tabular-nums text-muted-foreground">0</span>
+      <span className="absolute left-1 top-1 text-[8px] font-semibold uppercase tracking-wider text-muted-foreground">{sampleLabel}</span>
+      {mode === "individual" && layout.positioned.map(({ player, left, top }) => {
+        const sampleSize = metric === "dice" ? player.diceCount : player.battles;
+        return <button key={player.id} type="button" onClick={() => onSelect(player.id)} className={`absolute z-10 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow-md ${destinationClass} ${selectedId === player.id ? "ring-2 ring-foreground/50 ring-offset-2 ring-offset-background" : ""}`} style={{ left: `${left}%`, top: `${top}%`, backgroundColor: player.color }} aria-label={`Select ${player.name}: ${sampleSize} ${sampleLabel.toLowerCase()}`} />;
+      })}
+      {mode === "individual" && layout.positioned.map(({ player, left, top }) => {
+        return <span key={`label:${player.id}`} className={`pointer-events-none absolute z-20 max-w-28 -translate-x-1/2 -translate-y-[145%] truncate whitespace-nowrap text-[10px] font-medium ${destinationClass}`} style={{ left: `${left}%`, top: `${top}%` }} title={player.name}>{player.name}</span>;
+      })}
+      {mode === "teams" && layout.teamPositions.map(({ team, left, top, colors }) => {
+        const stops = colors.map((color, index) => `${color} ${(index / colors.length) * 100}% ${((index + 1) / colors.length) * 100}%`).join(", ");
+        const sampleSize = metric === "dice" ? team.diceCount : team.battles;
+        return <button key={team.id} type="button" onClick={() => onSelect(team.id)} className={`absolute z-20 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background shadow-md ${destinationClass} ${selectedId === team.id ? "ring-2 ring-foreground/50 ring-offset-2 ring-offset-background" : ""}`} style={{ left: `${left}%`, top: `${top}%`, background: colors.length > 1 ? `conic-gradient(${stops})` : colors[0] ?? team.color }} aria-label={`Select ${team.name}: ${sampleSize} ${sampleLabel.toLowerCase()}`} />;
+      })}
+      {mode === "teams" && layout.teamPositions.map(({ team, left, top }) => {
+        return <span key={`label:${team.id}`} className={`pointer-events-none absolute z-20 max-w-32 -translate-x-1/2 -translate-y-[140%] truncate whitespace-nowrap text-[10px] font-semibold ${destinationClass}`} style={{ left: `${left}%`, top: `${top}%` }} title={team.name}>{team.name}</span>;
+      })}
+      {transitioning && <MergeTransition dots={transitionDots} merging={transitionTarget === "teams"} onComplete={onTransitionComplete} />}
+      <span className="absolute bottom-2 left-8 text-[9px] uppercase tracking-wider text-muted-foreground">Unlucky</span><span className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[9px] font-semibold text-foreground/70">0</span><span className="absolute bottom-2 right-3 text-[9px] uppercase tracking-wider text-muted-foreground">Lucky</span>
+    </div>
+  );
+}
+
+function SubjectDetail({ subject, metric }: { subject: GameLuckSubject; metric: "dice" | "combat" }) {
+  const combined = combineDieFaceCounts(subject.counts.attack, subject.counts.defense);
+  const label = subject.luckScore === null ? null : getLuckLabel(subject.luckScore, subject.diceCount);
+  return (
+    <div className="grid">
+      <div className={`col-start-1 row-start-1 ${metric === "combat" ? "visible" : "invisible"}`} aria-hidden={metric !== "combat"}>
+        <CombatLuckDetail name={subject.name} color={subject.color} score={subject.luckScore} combat={subject.combat} />
+      </div>
+      <div className={`col-start-1 row-start-1 grid gap-4 md:grid-cols-[1fr_1.25fr] ${metric === "dice" ? "visible" : "invisible"}`} aria-hidden={metric !== "dice"}>
+        <div>
+          <div className="flex items-start justify-between"><div><div className="flex items-center gap-2 text-sm font-semibold"><span className="size-2.5 rounded-full" style={{ backgroundColor: subject.color }} />{subject.name}</div><div className={`mt-1 text-xs ${label?.tone ?? "text-muted-foreground"}`}>{label?.label ?? "No rolls"}</div></div><div className="text-right"><div className="text-2xl font-semibold tabular-nums" style={subject.luckScore === null ? undefined : luckScoreStyle(subject.luckScore)}>{subject.luckScore === null ? "—" : formatLuckScore(subject.luckScore)}</div><div className="text-[9px] uppercase tracking-wider text-muted-foreground">{subject.diceCount} dice</div></div></div>
+          <div className="mt-4 grid grid-cols-2 gap-2"><RoleStat icon={<Swords className="size-3.5" />} label="Attacking" counts={subject.counts.attack} /><RoleStat icon={<Shield className="size-3.5" />} label="Defending" counts={subject.counts.defense} /></div>
+        </div>
+        <div className="border border-border/70 bg-background/50 p-3"><div className="mb-3 text-[10px] uppercase tracking-wider text-muted-foreground">Roll distribution</div><FaceChart counts={combined} tall color={subject.color} /></div>
+      </div>
+    </div>
+  );
+}
+
+function GameLuckDialog({ open, onOpenChange, players, teamMode, teamNames }: { open: boolean; onOpenChange: (open: boolean) => void; players: GameLuckPlayer[]; teamMode: boolean; teamNames?: Record<string, string> }) {
+  const [luckMetric, setLuckMetric] = useState<"dice" | "combat">("combat");
+  const [comparisonMode, setComparisonMode] = useState<"individual" | "teams">("individual");
+  const [transitionTarget, setTransitionTarget] = useState<"individual" | "teams" | null>(null);
+  const [selectedId, setSelectedId] = useState("");
+  const playerSubjects = useMemo(() => players.filter((player) => player.counts).map((player) => toSubject(player.id, player.name, player.color, player.counts!, player.combat ?? createEmptyCombatLuckStats(), luckMetric, player.teamId)), [players, luckMetric]);
+  const teamSubjects = useMemo(() => [...new Set(players.map((player) => player.teamId).filter((id): id is string => !!id))].map((id, index) => {
+    const members = players.filter((player) => player.teamId === id);
+    return toSubject(toTeamLuckSubjectId(id), teamNames?.[id] ?? id, members[0]?.color ?? `hsl(${index * 137} 65% 55%)`, aggregateCounts(members), aggregateCombat(members), luckMetric);
+  }), [players, teamNames, luckMetric]);
+  const allSubjects = teamMode ? [...playerSubjects, ...teamSubjects] : playerSubjects;
+  const resolvedSelectedId = allSubjects.some((subject) => subject.id === selectedId) ? selectedId : playerSubjects[0]?.id ?? teamSubjects[0]?.id ?? "";
+  const presentation = resolveLuckComparisonPresentation({ comparisonMode, transitionTarget, selectedId: resolvedSelectedId, players: playerSubjects });
+  const selected = allSubjects.find((subject) => subject.id === presentation.selectedId);
+  const changeComparisonMode = (next: "individual" | "teams") => {
+    if (next === comparisonMode || transitionTarget) return;
+    setTransitionTarget(next);
+  };
+  const completeComparisonTransition = useCallback(() => {
+    if (!transitionTarget) return;
+    setSelectedId(presentation.selectedId);
+    setComparisonMode(transitionTarget);
+    setTransitionTarget(null);
+  }, [presentation.selectedId, transitionTarget]);
+  const activeMode = transitionTarget ?? comparisonMode;
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) setTransitionTarget(null);
+    onOpenChange(nextOpen);
+  };
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={handleOpenChange}><DialogPrimitive.Portal><DialogPrimitive.Overlay className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-[2px]" onClick={(event) => event.stopPropagation()} /><DialogPrimitive.Content className="fixed left-1/2 top-1/2 z-[61] max-h-[90vh] w-[min(48rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto border border-border bg-background p-5 shadow-2xl outline-none" onClick={(event) => event.stopPropagation()}>
+      <div className="flex items-center justify-between gap-4"><DialogPrimitive.Title className="text-lg font-semibold">Game luck</DialogPrimitive.Title><div className="flex items-center gap-2">{teamMode && teamSubjects.length > 0 && <div className="flex rounded-md bg-muted p-0.5 text-[10px] font-semibold"><button type="button" disabled={transitionTarget !== null} onClick={() => changeComparisonMode("individual")} className={`rounded px-2.5 py-1 transition ${activeMode === "individual" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}>Players</button><button type="button" disabled={transitionTarget !== null} onClick={() => changeComparisonMode("teams")} className={`rounded px-2.5 py-1 transition ${activeMode === "teams" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}>Teams</button></div>}<DialogPrimitive.Close className="p-1.5 text-muted-foreground hover:text-foreground" aria-label="Close"><X className="size-4" /></DialogPrimitive.Close></div></div><DialogPrimitive.Description className="sr-only">Luck across the game</DialogPrimitive.Description>
+      <div className="mt-4 flex w-fit rounded-md bg-muted p-0.5 text-[10px] font-semibold"><button type="button" onClick={() => setLuckMetric("combat")} className={`rounded px-3 py-1.5 ${luckMetric === "combat" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}>Combat luck</button><button type="button" onClick={() => setLuckMetric("dice")} className={`rounded px-3 py-1.5 ${luckMetric === "dice" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}>Dice luck</button></div>
+      {allSubjects.length === 0 ? <div className="py-16 text-center text-sm text-muted-foreground">No combat rolls yet.</div> : <><div className="mt-5"><LuckComparisonField players={playerSubjects} teams={teamSubjects} metric={luckMetric} mode={presentation.mode} transitionTarget={transitionTarget} selectedId={presentation.selectedId} onSelect={setSelectedId} onTransitionComplete={completeComparisonTransition} /></div>{selected && <div className="mt-5 border-t pt-5"><SubjectDetail key={`${selected.id}:${luckMetric}`} subject={selected} metric={luckMetric} /></div>}</>}
+    </DialogPrimitive.Content></DialogPrimitive.Portal></DialogPrimitive.Root>
+  );
+}
+
+interface GameLuckPopoverProps { combat: CombatLuckStats | null | undefined; players: GameLuckPlayer[]; teamMode: boolean; teamNames?: Record<string, string>; }
+
+export function GameLuckPopover({ combat, players, teamMode, teamNames }: GameLuckPopoverProps) {
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const battles = combat ? combat.attack.battles + combat.defense.battles : 0;
+  return <><Popover open={popoverOpen} onOpenChange={setPopoverOpen}><PopoverTrigger asChild><Button type="button" size="icon-xs" variant="ghost" aria-label="View your luck" title="Your luck" className="text-muted-foreground hover:text-foreground" onClick={(event) => event.stopPropagation()}><Dices className="size-3.5" /></Button></PopoverTrigger><PopoverContent align="start" className="w-80 p-4" onClick={(event) => event.stopPropagation()}>{!combat ? <div className="text-xs text-muted-foreground">Unavailable</div> : battles === 0 ? <div className="text-xs text-muted-foreground">No battles yet</div> : <><PersonalCombatLuck combat={combat} /><button type="button" className="mt-4 flex w-full items-center justify-center gap-2 border-t pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground transition hover:text-foreground" onClick={() => { setPopoverOpen(false); setDialogOpen(true); }}><Users className="size-3.5" />Game luck</button></>}</PopoverContent></Popover><GameLuckDialog open={dialogOpen} onOpenChange={setDialogOpen} players={players} teamMode={teamMode} teamNames={teamNames} /></>;
+}

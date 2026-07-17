@@ -52,6 +52,18 @@ _Avoid_: Request source, caller, action owner
 The in-game player identity used by the deterministic game engine after a game starts.
 _Avoid_: User, lobby player
 
+**Combat Roll**:
+One resolved attack in which attacking and defending dice are rolled and troop losses are applied.
+_Avoid_: Invasion, attack sequence, battle campaign
+
+**Dice Luck**:
+How an Engine Player's individual die-face results differ from the expected average roll, independently of opponents' rolls.
+_Avoid_: Combat outcome, battle luck
+
+**Combat Luck**:
+How an Engine Player's actual troop losses and inflicted losses differ from the expected outcome of each Combat Roll, measured relationally against the opposing Engine Player.
+_Avoid_: Dice average, strategy score
+
 **Resignation**:
 An in-game action in which an **Engine Player** leaves active play, giving up their territories and cards and potentially advancing the turn or finishing the **Game**.
 _Avoid_: Logout, leave lobby, elimination request
@@ -104,6 +116,10 @@ _Avoid_: Overlay, side panel, live mode
 - A **Game Transition** has exactly one **Game Transition Source**
 - A **Lobby Player** is mapped to exactly one **Engine Player** when the **Game** starts
 - A **Resignation** changes one living **Engine Player** to defeated
+- A **Combat Roll** has exactly one attacking **Engine Player** and one defending **Engine Player**
+- **Dice Luck** aggregates individual dice from one or more **Combat Rolls**
+- **Combat Luck** aggregates expected-versus-actual troop losses from one or more **Combat Rolls**
+- One Engine Player's **Combat Luck** for a Combat Roll is the inverse of the opposing Engine Player's Combat Luck for that roll
 - A **Resignation** causes a **Game Transition**
 - A **Game** contains exactly one **Replay Timeline**
 - A **Replay Timeline** contains one or more **History Frames**
