@@ -1848,7 +1848,6 @@ export default function GamePage() {
         }}
         cardsOpen={cardsOpen}
         myHand={effectiveHand}
-        myCardCount={myCardCount}
         selectedCardIds={selectedCardIds}
         onToggleCard={toggleCard}
         mustTradeNow={mustTradeNow}
@@ -1859,13 +1858,11 @@ export default function GamePage() {
         onCloseCards={() => setCardsOpen(false)}
         controlsDisabled={controlsDisabled}
         canTradeCards={canTradeInCurrentState}
+        cardsInteractive={isMyTurn}
         submitting={submitting}
         autoTradeCardIds={autoTradeCardIds}
         onTrade={handleTrade}
-        onAutoTrade={(cardIds) => {
-          if (!canTradeInCurrentState) return;
-          void submitAction({ type: "TradeCards", cardIds });
-        }}
+        onAutoSelect={(cardIds) => setSelectedCardIds(new Set(cardIds))}
         endgameModal={endgameModal}
         onDismissEndgame={() => {
           dismissedEndgameRef.current = true;

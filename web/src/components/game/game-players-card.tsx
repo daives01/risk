@@ -9,6 +9,7 @@ import type { HighlightFilter } from "@/lib/game/highlighting";
 import type { PlayerPanelStats } from "@/lib/game/player-stats";
 import type { HandCard, PlayerRef, PublicState } from "@/lib/game/types";
 import { GameLuckPopover, type GameLuckPlayer } from "./game-luck-popover";
+import { CompactCardFan } from "./game-card";
 
 interface PlayersCardProps {
   playerStats: PlayerPanelStats[];
@@ -324,18 +325,11 @@ export function GamePlayersCard({
                             <PopoverContent
                               side="bottom"
                               align="end"
-                              className="w-64"
+                              className="w-auto min-w-64 overflow-hidden px-4 pb-4 pt-7"
                               onClick={(event) => event.stopPropagation()}
                             >
-                              <p className="mb-2 text-xs font-semibold">{playerName}&apos;s cards ({visibleHand.length})</p>
                               {visibleHand.length > 0 ? (
-                                <div className="flex flex-wrap gap-1.5">
-                                  {visibleHand.map((card) => (
-                                    <span key={card.cardId} className="rounded border border-border bg-background px-2 py-1 text-xs font-medium">
-                                      {card.kind}
-                                    </span>
-                                  ))}
-                                </div>
+                                <CompactCardFan cards={visibleHand} />
                               ) : (
                                 <p className="text-xs text-muted-foreground">No cards</p>
                               )}

@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
 import type { ComponentProps } from "react";
-import type { CardId } from "risk-engine";
+import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { RulesetSummary } from "@/components/game/ruleset-summary";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { GameCard } from "@/components/game/game-card";
+import { resolveAutoSelectState, sortCardsByKind } from "@/components/game/game-card-utils";
 
 interface GameModalsProps {
   shortcutsOpen: boolean;
@@ -20,7 +22,6 @@ interface GameModalsProps {
   onToggleDelegation: (allow: boolean) => void;
   cardsOpen: boolean;
   myHand: Array<{ cardId: string; kind: string }> | null | undefined;
-  myCardCount: number;
   selectedCardIds: Set<string>;
   onToggleCard: (cardId: string) => void;
   mustTradeNow: boolean;
@@ -31,10 +32,11 @@ interface GameModalsProps {
   onCloseCards: () => void;
   controlsDisabled: boolean;
   canTradeCards: boolean;
+  cardsInteractive: boolean;
   submitting: boolean;
   autoTradeCardIds: string[] | null;
   onTrade: () => void;
-  onAutoTrade: (cardIds: CardId[]) => void;
+  onAutoSelect: (cardIds: string[]) => void;
   endgameModal: "won" | "lost" | null;
   onDismissEndgame: () => void;
 }
@@ -52,7 +54,6 @@ export function GameModals({
   onToggleDelegation,
   cardsOpen,
   myHand,
-  myCardCount,
   selectedCardIds,
   onToggleCard,
   mustTradeNow,
@@ -63,13 +64,15 @@ export function GameModals({
   onCloseCards,
   controlsDisabled,
   canTradeCards,
+  cardsInteractive,
   submitting,
   autoTradeCardIds,
   onTrade,
-  onAutoTrade,
+  onAutoSelect,
   endgameModal,
   onDismissEndgame,
 }: GameModalsProps) {
+  const autoSelectState = resolveAutoSelectState(selectedCardIds, autoTradeCardIds);
   const tradeIndex = tradesCompleted;
   const tradeValuesLabel =
     tradeValues.length === 0
@@ -176,69 +179,76 @@ export function GameModals({
 
       {cardsOpen && myHand && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/65 p-4 backdrop-blur-[1px]">
-          <Card className="glass-panel w-full max-w-lg border border-border/70 py-0 shadow-xl">
-            <CardContent className="space-y-4 p-5">
+          <Card className="glass-panel w-full max-w-3xl border border-border/70 py-0 shadow-xl">
+            <CardContent className="p-0">
               <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <p className="text-base font-semibold">Cards ({myCardCount})</p>
+                <div className="space-y-1 p-5">
+                  <p className="text-base font-semibold">Cards</p>
                   {mustTradeNow && (
                     <p className="text-xs uppercase tracking-wide text-destructive">
                       Trade required at {forcedTradeHandSize}+ cards
                     </p>
                   )}
                 </div>
-                <Button size="xs" variant="outline" type="button" onClick={onCloseCards}>
+                <Button className="m-5" size="xs" variant="outline" type="button" onClick={onCloseCards}>
                   Close
                 </Button>
               </div>
 
-              <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-xs">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Card increment</span>
-                  <span className="font-semibold text-foreground">Next trade: {nextTradeValue}</span>
-                </div>
-                {tradeValuesLabel && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">{tradeValuesLabel}</p>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {myHand.map((card) => {
-                  const selected = selectedCardIds.has(card.cardId);
-                  return (
-                    <button
-                      key={card.cardId}
-                      type="button"
-                      className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${selected
-                        ? "border-primary bg-primary/15 text-primary"
-                        : "border-border bg-background/80 hover:border-primary/50"
-                        }`}
-                      onClick={() => onToggleCard(card.cardId)}
-                    >
-                      {card.kind}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  size="xs"
-                  disabled={controlsDisabled || !canTradeCards || selectedCardIds.size !== 3}
-                  onClick={onTrade}
-                >
-                  Trade 3
-                </Button>
-                {autoTradeCardIds && (
+              <div className="relative overflow-x-auto border-y border-border/70 px-5 pb-7 pt-16">
+                {cardsInteractive && autoSelectState.visible && (
                   <Button
+                    className="absolute left-5 top-4 gap-1.5"
                     size="xs"
-                    variant="outline"
-                    disabled={controlsDisabled || submitting || !canTradeCards}
-                    onClick={() => onAutoTrade(autoTradeCardIds as CardId[])}
+                    variant={autoSelectState.active ? "default" : "outline"}
+                    disabled={submitting}
+                    aria-pressed={autoSelectState.active}
+                    onClick={() => onAutoSelect([...autoSelectState.nextSelection])}
                   >
-                    Auto Trade
+                    <Sparkles className="size-3" />
+                    Auto Select
                   </Button>
                 )}
+                <div className="mx-auto flex min-w-max justify-center px-10 pt-3">
+                {sortCardsByKind(myHand).map((card, index, sortedHand) => {
+                  const selected = selectedCardIds.has(card.cardId);
+                  return (
+                    <div
+                      key={card.cardId}
+                      className="-ml-16 first:ml-0"
+                      style={{ transform: `rotate(${(index - (sortedHand.length - 1) / 2) * 1.7}deg) translateY(${Math.abs(index - (sortedHand.length - 1) / 2) * 3}px)` }}
+                    >
+                      <GameCard
+                        card={card}
+                        selected={selected}
+                        disabled={!cardsInteractive}
+                        onClick={cardsInteractive ? () => onToggleCard(card.cardId) : undefined}
+                      />
+                    </div>
+                  );
+                })}
+                </div>
+              </div>
+
+              <div className="grid min-h-20 grid-cols-3 items-center bg-background/60 px-5 py-4">
+                <div>
+                  <div className="text-[9px] text-muted-foreground">Next trade</div>
+                  <div className={`text-lg font-semibold transition-colors ${canTradeCards && selectedCardIds.size === 3 ? "text-primary" : "text-muted-foreground"}`}>
+                    {nextTradeValue} troops
+                  </div>
+                  {tradeValuesLabel && <span className="sr-only">Trade schedule: {tradeValuesLabel}</span>}
+                </div>
+                {cardsInteractive ? (
+                  <Button
+                    className="justify-self-center"
+                    size="sm"
+                    disabled={controlsDisabled || !canTradeCards || selectedCardIds.size !== 3}
+                    onClick={onTrade}
+                  >
+                    Trade 3
+                  </Button>
+                ) : <div />}
+                <div />
               </div>
             </CardContent>
           </Card>
