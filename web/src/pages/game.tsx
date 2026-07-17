@@ -33,6 +33,7 @@ import { useGameActions } from "@/lib/game/use-game-actions";
 import { useGameRuntimeQueries, useGameViewQueries } from "@/lib/game/use-game-queries";
 import { useGameShortcuts } from "@/lib/game/use-game-shortcuts";
 import { ReplayControlBand } from "@/components/game/replay-control-band";
+import type { GameLuckPlayer } from "@/components/game/game-luck-popover";
 import { GameHeader } from "@/pages/game/components/GameHeader";
 import { GameMapSection } from "@/pages/game/components/GameMapSection";
 import { GameModals } from "@/pages/game/components/GameModals";
@@ -1505,6 +1506,16 @@ export default function GamePage() {
   }
 
   const resolvedDisplayState = displayState ?? state;
+  const luckPlayers: GameLuckPlayer[] = playerMap.flatMap((player) => player.enginePlayerId
+    ? [{
+        id: player.enginePlayerId,
+        name: getPlayerName(player.enginePlayerId, playerMap),
+        color: getPlayerColor(player.enginePlayerId, playerMap, resolvedDisplayState.turnOrder),
+        teamId: player.teamId,
+        counts: player.diceRollCounts,
+        combat: player.combatLuckStats,
+      }]
+    : []);
   const displayPhase = resolvedDisplayState.turn.phase;
   const phaseCopy = PHASE_COPY[displayPhase] ?? PHASE_COPY.GameOver;
   const fortifiesUsedForDisplay = resolvedDisplayState.fortifiesUsedThisTurn ?? 0;
@@ -1664,6 +1675,9 @@ export default function GamePage() {
           cardsOpenDisabled={isSpectator || historyOpen}
           myCardCount={myCardCount}
           onOpenCards={() => setCardsOpen(true)}
+          luckPlayers={luckPlayers}
+          teamModeEnabled={!!view.teamModeEnabled}
+          teamNames={teamNames}
           infoOpen={infoOverlayEnabled}
           onToggleInfo={() => {
             if (!historyOpen) {

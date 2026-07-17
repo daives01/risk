@@ -8,7 +8,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { HighlightFilter } from "@/lib/game/highlighting";
 import type { PlayerPanelStats } from "@/lib/game/player-stats";
 import type { HandCard, PlayerRef, PublicState } from "@/lib/game/types";
-import { GameLuckPopover, type GameLuckPlayer } from "./game-luck-popover";
 import { CompactCardFan } from "./game-card";
 
 interface PlayersCardProps {
@@ -62,17 +61,6 @@ export function GamePlayersCard({
 }: PlayersCardProps) {
   const [resignOpen, setResignOpen] = useState(false);
   const tableMinWidthClass = teamModeEnabled ? "min-w-[28.5rem]" : "min-w-[21.5rem]";
-  const luckPlayers: GameLuckPlayer[] = playerMap.flatMap((player) => player.enginePlayerId
-    ? [{
-        id: player.enginePlayerId,
-        name: getPlayerName(player.enginePlayerId, playerMap),
-        color: getPlayerColor(player.enginePlayerId, displayState.turnOrder),
-        teamId: player.teamId,
-        counts: player.diceRollCounts,
-        combat: player.combatLuckStats,
-      }]
-    : []);
-
   const handleRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, playerId: string) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
@@ -142,7 +130,6 @@ export function GamePlayersCard({
                   const canPlayForPlayer = delegatablePlayerId === player.playerId && !delegatedPlayerId;
                   const isDelegatedPlayer = delegatedPlayerId === player.playerId;
                   const playerName = getPlayerName(player.playerId, playerMap);
-                  const playerRef = playerMap.find((candidate) => candidate.enginePlayerId === player.playerId);
                   const visibleHand = teammateHands?.[player.playerId];
                   const rowToneClass = isPlayerHighlighted
                     ? "border-primary/70 bg-primary/10"
@@ -166,14 +153,6 @@ export function GamePlayersCard({
                             <span className={`block min-w-0 truncate font-semibold ${isDefeated ? "line-through" : ""}`}>
                               {playerName}
                             </span>
-                            {player.playerId === myPlayerId && (
-                              <GameLuckPopover
-                                combat={playerRef?.combatLuckStats}
-                                players={luckPlayers}
-                                teamMode={teamModeEnabled}
-                                teamNames={teamNames}
-                              />
-                            )}
                           </span>
                         </div>
                       </td>

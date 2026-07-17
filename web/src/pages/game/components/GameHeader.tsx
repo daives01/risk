@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { GameLuckButton, type GameLuckPlayer } from "@/components/game/game-luck-popover";
 
 interface GameHeaderProps {
   phaseTitle: string;
@@ -41,6 +42,9 @@ interface GameHeaderProps {
   cardsOpenDisabled: boolean;
   myCardCount: number;
   onOpenCards: () => void;
+  luckPlayers: GameLuckPlayer[];
+  teamModeEnabled: boolean;
+  teamNames: Record<string, string>;
   infoOpen: boolean;
   onToggleInfo: () => void;
   onToggleHistory: () => void;
@@ -82,6 +86,9 @@ export function GameHeader({
   cardsOpenDisabled,
   myCardCount,
   onOpenCards,
+  luckPlayers,
+  teamModeEnabled,
+  teamNames,
   infoOpen,
   onToggleInfo,
   onToggleHistory,
@@ -286,6 +293,7 @@ export function GameHeader({
               <TooltipContent>Open cards (C)</TooltipContent>
             </Tooltip>
           )}
+          <GameLuckButton players={luckPlayers} teamMode={teamModeEnabled} teamNames={teamNames} />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

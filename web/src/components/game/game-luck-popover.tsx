@@ -1,4 +1,4 @@
-import { Dices, Shield, Swords, Users, X } from "lucide-react";
+import { Dices, Shield, Swords, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import {
@@ -14,8 +14,7 @@ import {
 } from "risk-engine";
 import { Button } from "@/components/ui/button";
 import { MagneticPointField, type MagneticPoint } from "@/components/ui/magnetic-point-field";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CombatLuckDetail, PersonalCombatLuck } from "./combat-luck-display";
+import { CombatLuckDetail } from "./combat-luck-display";
 import { formatLuckScore, luckScoreStyle } from "./luck-score-presentation";
 import {
   fromTeamLuckSubjectId,
@@ -231,11 +230,9 @@ function GameLuckDialog({ open, onOpenChange, players, teamMode, teamNames }: { 
   );
 }
 
-interface GameLuckPopoverProps { combat: CombatLuckStats | null | undefined; players: GameLuckPlayer[]; teamMode: boolean; teamNames?: Record<string, string>; }
+interface GameLuckButtonProps { players: GameLuckPlayer[]; teamMode: boolean; teamNames?: Record<string, string>; }
 
-export function GameLuckPopover({ combat, players, teamMode, teamNames }: GameLuckPopoverProps) {
-  const [popoverOpen, setPopoverOpen] = useState(false);
+export function GameLuckButton({ players, teamMode, teamNames }: GameLuckButtonProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const battles = combat ? combat.attack.battles + combat.defense.battles : 0;
-  return <><Popover open={popoverOpen} onOpenChange={setPopoverOpen}><PopoverTrigger asChild><Button type="button" size="icon-xs" variant="ghost" aria-label="View your luck" title="Your luck" className="text-muted-foreground hover:text-foreground" onClick={(event) => event.stopPropagation()}><Dices className="size-3.5" /></Button></PopoverTrigger><PopoverContent align="start" className="w-80 p-4" onClick={(event) => event.stopPropagation()}>{!combat ? <div className="text-xs text-muted-foreground">Unavailable</div> : battles === 0 ? <div className="text-xs text-muted-foreground">No battles yet</div> : <><PersonalCombatLuck combat={combat} /><button type="button" className="mt-4 flex w-full items-center justify-center gap-2 border-t pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground transition hover:text-foreground" onClick={() => { setPopoverOpen(false); setDialogOpen(true); }}><Users className="size-3.5" />Game luck</button></>}</PopoverContent></Popover><GameLuckDialog open={dialogOpen} onOpenChange={setDialogOpen} players={players} teamMode={teamMode} teamNames={teamNames} /></>;
+  return <><Button type="button" size="icon-sm" variant="outline" aria-label="Open game luck" title="Game luck" onClick={() => setDialogOpen(true)} className="enabled:cursor-pointer"><Dices className="size-4" aria-hidden="true" /></Button><GameLuckDialog open={dialogOpen} onOpenChange={setDialogOpen} players={players} teamMode={teamMode} teamNames={teamNames} /></>;
 }
