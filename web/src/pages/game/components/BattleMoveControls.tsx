@@ -5,8 +5,8 @@ import { getReadableTextColor } from "@/lib/color-contrast";
 import { Button } from "@/components/ui/button";
 import type { AttackDiceResult } from "@/lib/game/attack-dice-result";
 
-// PROTOTYPE: One stable dice surface for choosing attack dice and reading the result.
-interface AttackDicePrototypeProps {
+// One stable dice surface for choosing attack dice and reading the result.
+interface AttackDiceControlProps {
   result: AttackDiceResult | null;
   attackDice?: number;
   maxDice?: number;
@@ -56,7 +56,7 @@ function ResultDie({
   );
 }
 
-export function AttackDicePrototype({
+export function AttackDiceControl({
   result,
   attackDice = 0,
   maxDice = 0,
@@ -66,7 +66,7 @@ export function AttackDicePrototype({
   attackerColor = result?.attackerColor ?? "#ef4444",
   defenderColor = result?.defenderColor ?? "#bae6fd",
   defenderDiceCount = result?.defendRolls.length ?? 0,
-}: AttackDicePrototypeProps) {
+}: AttackDiceControlProps) {
   const comparisonCount = result ? Math.min(result.attackRolls.length, result.defendRolls.length) : 0;
   const sliderMin = 1;
   const sliderMax = Math.max(1, maxDice);
@@ -176,7 +176,7 @@ export function AttackDicePrototype({
   );
 }
 
-interface OccupyMovePrototypeProps {
+interface OccupyMoveControlProps {
   result: AttackDiceResult;
   value: number;
   min: number;
@@ -206,7 +206,7 @@ function CompactDice({ result, className }: { result: AttackDiceResult; classNam
   );
 }
 
-function MoveSlider({ value, min, max, color, disabled, onChange, label = "Move troops" }: Pick<OccupyMovePrototypeProps, "value" | "min" | "max" | "disabled" | "onChange"> & { color: string; label?: string }) {
+function MoveSlider({ value, min, max, color, disabled, onChange, label = "Move troops" }: Pick<OccupyMoveControlProps, "value" | "min" | "max" | "disabled" | "onChange"> & { color: string; label?: string }) {
   return (
     <div>
       <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -237,7 +237,7 @@ function MoveSlider({ value, min, max, color, disabled, onChange, label = "Move 
   );
 }
 
-function MoveActions({ result, value, disabled, onMove }: OccupyMovePrototypeProps) {
+function MoveActions({ result, value, disabled, onMove }: OccupyMoveControlProps) {
   return (
     <div className="flex justify-end gap-1.5">
       <Button type="button" size="xs" onClick={onMove} disabled={disabled} style={{ backgroundColor: result.attackerColor, borderColor: result.attackerColor, color: getReadableTextColor(result.attackerColor) }}>Move {value}</Button>
@@ -245,7 +245,7 @@ function MoveActions({ result, value, disabled, onMove }: OccupyMovePrototypePro
   );
 }
 
-export function OccupyMovePrototype(props: OccupyMovePrototypeProps) {
+export function OccupyMoveControl(props: OccupyMoveControlProps) {
   const [entered, setEntered] = useState(false);
 
   useEffect(() => {
@@ -264,7 +264,7 @@ export function OccupyMovePrototype(props: OccupyMovePrototypeProps) {
   );
 }
 
-interface FortifyMovePrototypeProps {
+interface FortifyMoveControlProps {
   value: number;
   min: number;
   max: number;
@@ -274,7 +274,7 @@ interface FortifyMovePrototypeProps {
   onFortify: () => void;
 }
 
-export function FortifyMovePrototype(props: FortifyMovePrototypeProps) {
+export function FortifyMoveControl(props: FortifyMoveControlProps) {
   return (
     <div className="mt-2 border-t border-border/70 pt-3">
       <MoveSlider {...props} label="Fortify troops" />

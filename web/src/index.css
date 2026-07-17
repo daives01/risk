@@ -557,7 +557,7 @@
     color: color-mix(in oklab, var(--app-accent), var(--foreground) 20%);
   }
 }
-/* Prototype attack control: smooth player-colored range without native gray chrome. */
+/* Battle move controls: smooth player-colored range without native gray chrome. */
 .player-slider {
   appearance: none;
   background: transparent;

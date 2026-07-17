@@ -49,7 +49,7 @@ interface GameMapSectionProps {
   getPlayerLabel?: (playerId: string) => string;
   getPlayerGroupId?: (playerId: string) => string;
   battleOverlay: ComponentProps<typeof MapCanvas>["battleOverlay"];
-  attackDicePrototypeResult: AttackDiceResult | null;
+  attackDiceResult: AttackDiceResult | null;
 }
 
 export function GameMapSection({
@@ -89,7 +89,7 @@ export function GameMapSection({
   getPlayerLabel,
   getPlayerGroupId,
   battleOverlay,
-  attackDicePrototypeResult,
+  attackDiceResult,
 }: GameMapSectionProps) {
   return (
     <div
@@ -143,7 +143,7 @@ export function GameMapSection({
             getPlayerLabel={getPlayerLabel}
             getPlayerGroupId={getPlayerGroupId}
             battleOverlay={battleOverlay}
-            attackDicePrototypeResult={attackDicePrototypeResult}
+            attackDiceResult={attackDiceResult}
           />
         </div>
       </div>

@@ -7,7 +7,7 @@ import { NumberStepper } from "@/components/ui/number-stepper";
 import { TerritoryTooltip } from "@/components/game/territory-tooltip";
 import { computeBattleOverlayPlacement } from "@/lib/game/battle-overlay-placement";
 import { useMapPanZoomInteraction } from "@/lib/game/use-map-pan-zoom-interaction";
-import { AttackDicePrototype, FortifyMovePrototype, OccupyMovePrototype } from "@/pages/game/components/AttackDicePrototype";
+import { AttackDiceControl, FortifyMoveControl, OccupyMoveControl } from "@/pages/game/components/BattleMoveControls";
 import type { AttackDiceResult } from "@/lib/game/attack-dice-result";
 
 interface GraphMapLike {
@@ -109,7 +109,7 @@ interface MapCanvasProps {
     onCancelSelection: () => void;
   }
   | null;
-  attackDicePrototypeResult?: AttackDiceResult | null;
+  attackDiceResult?: AttackDiceResult | null;
 }
 
 interface FloatingTroopDelta {
@@ -153,7 +153,7 @@ export function MapCanvas({
   getPlayerLabel,
   getPlayerGroupId,
   battleOverlay,
-  attackDicePrototypeResult = null,
+  attackDiceResult = null,
 }: MapCanvasProps) {
   const [rawHoveredTerritoryId, setHoveredTerritoryId] = useState<string | null>(null);
   const hoveredTerritoryId = infoOverlayEnabled ? null : rawHoveredTerritoryId;
@@ -486,10 +486,10 @@ export function MapCanvas({
   }, [getPlayerColor, showTroopDeltas, territories, troopDeltaDurationMs, turnOrder]);
 
   const overlayIsDraggable = !fullscreen;
-  const visibleAttackDiceResult = battleOverlay && attackDicePrototypeResult &&
-    battleOverlay.fromTerritoryId === attackDicePrototypeResult.fromId &&
-    battleOverlay.toTerritoryId === attackDicePrototypeResult.toId
-      ? attackDicePrototypeResult
+  const visibleAttackDiceResult = battleOverlay && attackDiceResult &&
+    battleOverlay.fromTerritoryId === attackDiceResult.fromId &&
+    battleOverlay.toTerritoryId === attackDiceResult.toId
+      ? attackDiceResult
       : null;
   const battleAttackerColor = battleOverlay
     ? getPlayerColor(territories[battleOverlay.fromTerritoryId]?.ownerId ?? "neutral", turnOrder)
@@ -552,7 +552,7 @@ export function MapCanvas({
       </p>
       {battleOverlay.mode === "attack" ? (
         <>
-          <AttackDicePrototype
+          <AttackDiceControl
             result={visibleAttackDiceResult}
             attackDice={battleOverlay.attackDice}
             maxDice={battleOverlay.maxDice}
@@ -621,7 +621,7 @@ export function MapCanvas({
       ) : battleOverlay.mode === "occupy" ? (
         <>
           {visibleAttackDiceResult ? (
-            <OccupyMovePrototype
+            <OccupyMoveControl
               result={visibleAttackDiceResult}
               value={battleOverlay.occupyMove}
               min={battleOverlay.minMove}
@@ -656,7 +656,7 @@ export function MapCanvas({
       ) : (
         <>
         {battleAttackerColor ? (
-          <FortifyMovePrototype
+          <FortifyMoveControl
             value={battleOverlay.fortifyCount}
             min={battleOverlay.minCount}
             max={battleOverlay.maxCount}

@@ -173,7 +173,7 @@ export default function GamePage() {
   const [infoPinnedTerritoryId, setInfoPinnedTerritoryId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [attackSubmitting, setAttackSubmitting] = useState(false);
-  const [attackDicePrototypeResult, setAttackDicePrototypeResult] = useState<AttackDiceResult | null>(null);
+  const [attackDiceResult, setAttackDiceResult] = useState<AttackDiceResult | null>(null);
   const [placementSubmitting, setPlacementSubmitting] = useState(false);
   const [recentAttackEdgeIds, setRecentAttackEdgeIds] = useState<Set<string> | null>(null);
   const recentAttackEventRef = useRef<string | null>(null);
@@ -647,7 +647,7 @@ export default function GamePage() {
         if (action.type === "Attack" && graphMap) {
           const attackerOwnerId = state.territories[action.from]?.ownerId ?? "neutral";
           const defenderOwnerId = state.territories[action.to]?.ownerId ?? "neutral";
-          setAttackDicePrototypeResult(buildAttackDiceResult(
+          setAttackDiceResult(buildAttackDiceResult(
             mutationResult.events,
             graphMap.territories,
             `version-${mutationResult.newVersion}`,
@@ -1026,7 +1026,7 @@ export default function GamePage() {
       stopAutoAttack();
       return;
     }
-    setAttackDicePrototypeResult(null);
+    setAttackDiceResult(null);
     autoAttackSubmittedVersionRef.current = null;
     setAutoAttacking(true);
   }, [autoAttackSubmittedVersionRef, autoAttacking, setAutoAttacking, stopAutoAttack]);
@@ -1759,7 +1759,7 @@ export default function GamePage() {
             getPlayerLabel={resolvePlayerLabel}
             getPlayerGroupId={resolvePlayerGroupId}
             battleOverlay={battleOverlay}
-            attackDicePrototypeResult={attackDicePrototypeResult}
+            attackDiceResult={attackDiceResult}
           />
         </div>
         {!isMapFullscreen && (
