@@ -552,23 +552,18 @@ export function MapCanvas({
       </p>
       {battleOverlay.mode === "attack" ? (
         <>
-          {import.meta.env.DEV && (
-            <AttackDicePrototype
-              result={visibleAttackDiceResult}
-              attackDice={battleOverlay.attackDice}
-              maxDice={battleOverlay.maxDice}
-              defenderDiceCount={visibleAttackDiceResult?.defendRolls.length ?? battleOverlay.maxDefendDice}
-              disabled={battleOverlay.disabled || battleOverlay.resolving}
-              rolling={battleOverlay.resolving && (!battleOverlay.autoRunning || !visibleAttackDiceResult)}
-              onSetAttackDice={battleOverlay.onSetAttackDice}
-              attackerColor={visibleAttackDiceResult?.attackerColor ?? battleAttackerColor}
-              defenderColor={battleDefenderColor}
-            />
-          )}
+          <AttackDicePrototype
+            result={visibleAttackDiceResult}
+            attackDice={battleOverlay.attackDice}
+            maxDice={battleOverlay.maxDice}
+            defenderDiceCount={visibleAttackDiceResult?.defendRolls.length ?? battleOverlay.maxDefendDice}
+            disabled={battleOverlay.disabled || battleOverlay.resolving}
+            rolling={battleOverlay.resolving && (!battleOverlay.autoRunning || !visibleAttackDiceResult)}
+            onSetAttackDice={battleOverlay.onSetAttackDice}
+            attackerColor={visibleAttackDiceResult?.attackerColor ?? battleAttackerColor}
+            defenderColor={battleDefenderColor}
+          />
           <div className="mt-2 flex flex-wrap items-center justify-end gap-1.5">
-          {!import.meta.env.DEV && [1, 2, 3].map((dice) => (
-            <Button key={dice} type="button" size="xs" variant={battleOverlay.attackDice === dice ? "default" : "outline"} disabled={dice > battleOverlay.maxDice || battleOverlay.resolving} onClick={() => battleOverlay.onSetAttackDice(dice)}>{dice}</Button>
-          ))}
           {!battleOverlay.autoRunning && (
             <>
           <Button
@@ -625,7 +620,7 @@ export function MapCanvas({
         </>
       ) : battleOverlay.mode === "occupy" ? (
         <>
-          {import.meta.env.DEV && visibleAttackDiceResult ? (
+          {visibleAttackDiceResult ? (
             <OccupyMovePrototype
               result={visibleAttackDiceResult}
               value={battleOverlay.occupyMove}
@@ -643,11 +638,6 @@ export function MapCanvas({
                 size="xs"
                 onClick={battleOverlay.onSubmitOccupy}
                 disabled={battleOverlay.disabled}
-                style={visibleAttackDiceResult ? {
-                  backgroundColor: visibleAttackDiceResult.attackerColor,
-                  borderColor: visibleAttackDiceResult.attackerColor,
-                  color: getReadableTextColor(visibleAttackDiceResult.attackerColor),
-                } : undefined}
               >
                 Move {battleOverlay.occupyMove}
               </Button>
@@ -665,7 +655,7 @@ export function MapCanvas({
         </>
       ) : (
         <>
-        {import.meta.env.DEV && battleAttackerColor && (
+        {battleAttackerColor ? (
           <FortifyMovePrototype
             value={battleOverlay.fortifyCount}
             min={battleOverlay.minCount}
@@ -675,8 +665,8 @@ export function MapCanvas({
             onChange={battleOverlay.onSetFortifyCount}
             onFortify={battleOverlay.onSubmitFortify}
           />
-        )}
-        {!import.meta.env.DEV && <div className="mt-2 flex items-center gap-1.5">
+        ) : (
+          <div className="mt-2 flex items-center gap-1.5">
           <NumberStepper
             value={battleOverlay.fortifyCount}
             min={battleOverlay.minCount}
@@ -702,7 +692,8 @@ export function MapCanvas({
           >
             All
           </Button>
-        </div>}
+          </div>
+        )}
         </>
       )}
     </>
