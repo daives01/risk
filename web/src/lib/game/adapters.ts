@@ -17,6 +17,7 @@ type ViewLike = {
 type PlayerViewLike = ViewLike & {
   myEnginePlayerId?: string | null;
   myHand?: HandCard[] | null;
+  teammateHands?: Record<string, HandCard[]> | null;
   delegatableTurnHand?: HandCard[] | null;
 };
 
@@ -35,6 +36,7 @@ export function adaptView(playerView: unknown, publicView: unknown) {
     view,
     myEnginePlayerId: resolvedPlayerView?.myEnginePlayerId ?? null,
     myHand: resolvedPlayerView?.myHand ?? null,
+    teammateHands: resolvedPlayerView?.teammateHands ?? null,
     delegatableTurnHand: resolvedPlayerView?.delegatableTurnHand ?? null,
     playerMap: view?.players ?? [],
     state: (view?.state ?? null) as PublicState | null,

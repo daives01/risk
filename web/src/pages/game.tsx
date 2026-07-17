@@ -119,7 +119,7 @@ export default function GamePage() {
 
   const typedGameId = gameId as Id<"games"> | undefined;
   const { playerView, publicView } = useGameViewQueries(session, sessionPending, typedGameId);
-  const { view, myEnginePlayerId, myHand, delegatableTurnHand, playerMap, state } = adaptView(playerView, publicView);
+  const { view, myEnginePlayerId, myHand, teammateHands, delegatableTurnHand, playerMap, state } = adaptView(playerView, publicView);
   const [chatChannel, setChatChannel] = useState<ChatChannel>("all");
   const [chatRecipientEnginePlayerId, setChatRecipientEnginePlayerId] = useState<string | null>(null);
   const [chatDraft, setChatDraft] = useState("");
@@ -1779,6 +1779,7 @@ export default function GamePage() {
               getPlayerColor={resolvePlayerColor}
               getPlayerName={getPlayerName}
               myEnginePlayerId={myEnginePlayerId ?? undefined}
+              teammateHands={teammateHands}
               canResign={!isSpectator && !historyOpen}
               onResign={handleResign}
               delegatablePlayerId={!historyOpen ? delegatablePlayerId : null}

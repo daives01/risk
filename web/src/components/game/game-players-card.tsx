@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { HighlightFilter } from "@/lib/game/highlighting";
 import type { PlayerPanelStats } from "@/lib/game/player-stats";
-import type { PlayerRef, PublicState } from "@/lib/game/types";
+import type { HandCard, PlayerRef, PublicState } from "@/lib/game/types";
 import { GameLuckPopover, type GameLuckPlayer } from "./game-luck-popover";
 
 interface PlayersCardProps {
@@ -24,6 +24,7 @@ interface PlayersCardProps {
   showTurnTimer: boolean;
   turnTimerLabel?: string | null;
   myPlayerId?: string | null;
+  teammateHands?: Record<string, HandCard[]> | null;
   canResign?: boolean;
   onResign?: () => void;
   delegatablePlayerId?: string | null;
@@ -50,6 +51,7 @@ export function GamePlayersCard({
   showTurnTimer,
   turnTimerLabel,
   myPlayerId,
+  teammateHands,
   canResign = false,
   onResign,
   delegatablePlayerId,
@@ -140,6 +142,7 @@ export function GamePlayersCard({
                   const isDelegatedPlayer = delegatedPlayerId === player.playerId;
                   const playerName = getPlayerName(player.playerId, playerMap);
                   const playerRef = playerMap.find((candidate) => candidate.enginePlayerId === player.playerId);
+                  const visibleHand = teammateHands?.[player.playerId];
                   const rowToneClass = isPlayerHighlighted
                     ? "border-primary/70 bg-primary/10"
                     : "border-border/70 bg-background/80 group-hover:border-primary/50";
@@ -306,7 +309,41 @@ export function GamePlayersCard({
                         <span className="text-xs tabular-nums">{player.reserveTroops} / {player.armies}</span>
                       </td>
                       <td className={`rounded-r-lg border-y border-r px-2.5 py-1.5 text-center [@media(max-width:420px)]:px-2.5 [@media(max-width:420px)]:py-1 ${rowToneClass}`}>
-                        <span className="text-xs tabular-nums">{player.cards}</span>
+                        {visibleHand ? (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="rounded px-1 text-xs tabular-nums underline decoration-dotted underline-offset-2 hover:text-primary"
+                                aria-label={`View ${playerName}'s ${player.cards} cards`}
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                {player.cards}
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              side="bottom"
+                              align="end"
+                              className="w-64"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <p className="mb-2 text-xs font-semibold">{playerName}&apos;s cards ({visibleHand.length})</p>
+                              {visibleHand.length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {visibleHand.map((card) => (
+                                    <span key={card.cardId} className="rounded border border-border bg-background px-2 py-1 text-xs font-medium">
+                                      {card.kind}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-muted-foreground">No cards</p>
+                              )}
+                            </PopoverContent>
+                          </Popover>
+                        ) : (
+                          <span className="text-xs tabular-nums">{player.cards}</span>
+                        )}
                       </td>
                     </tr>
                   );

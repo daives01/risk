@@ -8,6 +8,23 @@ import { resolvePlayerColors } from "./playerColors";
 import { readGameStateNullable } from "./typeAdapters";
 import { getGameStateDoc, publicGameStateProjection } from "./gameState";
 
+type VisibleHandCard = {
+  cardId: string;
+  kind: string;
+  territoryId?: string;
+};
+
+function projectHand(state: NonNullable<ReturnType<typeof readGameStateNullable>>, playerId: PlayerId): VisibleHandCard[] {
+  return (state.hands[playerId] ?? []).map((cardId) => {
+    const card = state.cardsById[cardId];
+    return {
+      cardId: cardId as string,
+      kind: card?.kind ?? "W",
+      territoryId: card?.territoryId as string | undefined,
+    };
+  });
+}
+
 export const engineVersion = query({
   handler: async () => {
     return ENGINE_VERSION;
@@ -168,6 +185,8 @@ export const getGameViewAsPlayer = query({
         players: playerMap,
         state: null,
         myHand: null,
+        teammateHands: null,
+        delegatableTurnHand: null,
         myEnginePlayerId: callerPlayer?.enginePlayerId ?? null,
       };
     }
@@ -179,27 +198,27 @@ export const getGameViewAsPlayer = query({
       | undefined;
 
     // Extract this player's hand (card IDs + card details)
-    let myHand: Array<{
-      cardId: string;
-      kind: string;
-      territoryId?: string;
-    }> | null = null;
+    let myHand: VisibleHandCard[] | null = null;
     if (state && enginePlayerId && state.hands[enginePlayerId]) {
-      myHand = state.hands[enginePlayerId]!.map((cardId) => {
-        const card = state.cardsById[cardId];
-        return {
-          cardId: cardId as string,
-          kind: card?.kind ?? "W",
-          territoryId: card?.territoryId as string | undefined,
-        };
-      });
+      myHand = projectHand(state, enginePlayerId);
     }
 
-    let delegatableTurnHand: Array<{
-      cardId: string;
-      kind: string;
-      territoryId?: string;
-    }> | null = null;
+    const teammateHands: Record<string, VisibleHandCard[]> = {};
+    if (state && game.teamModeEnabled && enginePlayerId && callerPlayer?.teamId) {
+      for (const player of players) {
+        const teammateId = player.enginePlayerId as PlayerId | undefined;
+        if (
+          teammateId &&
+          teammateId !== enginePlayerId &&
+          player.teamId === callerPlayer.teamId &&
+          state.hands[teammateId]
+        ) {
+          teammateHands[teammateId] = projectHand(state, teammateId);
+        }
+      }
+    }
+
+    let delegatableTurnHand: VisibleHandCard[] | null = null;
     const currentTurnPlayerId = state?.turn.currentPlayerId;
     const currentTurnPlayer = currentTurnPlayerId
       ? players.find((p) => p.enginePlayerId === currentTurnPlayerId)
@@ -218,14 +237,7 @@ export const getGameViewAsPlayer = query({
       callerPlayer?.teamId === currentTurnPlayer.teamId &&
       state.hands[currentTurnPlayerId as PlayerId]
     ) {
-      delegatableTurnHand = state.hands[currentTurnPlayerId as PlayerId]!.map((cardId) => {
-        const card = state.cardsById[cardId];
-        return {
-          cardId: cardId as string,
-          kind: card?.kind ?? "W",
-          territoryId: card?.territoryId as string | undefined,
-        };
-      });
+      delegatableTurnHand = projectHand(state, currentTurnPlayerId as PlayerId);
     }
 
     return {
@@ -253,6 +265,7 @@ export const getGameViewAsPlayer = query({
       players: playerMap,
       state: gameState?.publicState ?? (state ? publicGameStateProjection(state) : null),
       myHand,
+      teammateHands,
       delegatableTurnHand,
       myEnginePlayerId: enginePlayerId ?? null,
     };

@@ -2,7 +2,7 @@ import { GameChatCard, GamePlayersCard } from "@/components/game/game-panels";
 import type { ChatMentionMap } from "@/lib/game/chat-mentions";
 import type { ChatHoverTag, HighlightFilter } from "@/lib/game/highlighting";
 import type { PlayerPanelStats } from "@/lib/game/player-stats";
-import type { ChatChannel, ChatMessage, PlayerRef, PublicState } from "@/lib/game/types";
+import type { ChatChannel, ChatMessage, HandCard, PlayerRef, PublicState } from "@/lib/game/types";
 
 interface GameSidePanelsProps {
   playerStats: PlayerPanelStats[];
@@ -19,6 +19,7 @@ interface GameSidePanelsProps {
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
   getPlayerName: (enginePlayerId: string, players: PlayerRef[]) => string;
   myEnginePlayerId: string | undefined;
+  teammateHands: Record<string, HandCard[]> | null;
   canResign: boolean;
   onResign: () => void;
   delegatablePlayerId: string | null;
@@ -60,6 +61,7 @@ export function GameSidePanels({
   getPlayerColor,
   getPlayerName,
   myEnginePlayerId,
+  teammateHands,
   canResign,
   onResign,
   delegatablePlayerId,
@@ -102,6 +104,7 @@ export function GameSidePanels({
           getPlayerColor={getPlayerColor}
           getPlayerName={getPlayerName}
           myPlayerId={myEnginePlayerId}
+          teammateHands={teammateHands}
           canResign={canResign}
           onResign={onResign}
           delegatablePlayerId={delegatablePlayerId}
