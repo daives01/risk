@@ -1793,6 +1793,7 @@ export default function GamePage() {
               getPlayerColor={resolvePlayerColor}
               getPlayerName={getPlayerName}
               myEnginePlayerId={myEnginePlayerId ?? undefined}
+              myHand={myHand}
               teammateHands={teammateHands}
               canResign={!isSpectator && !historyOpen}
               onResign={handleResign}

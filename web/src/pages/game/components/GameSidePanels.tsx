@@ -19,6 +19,7 @@ interface GameSidePanelsProps {
   getPlayerColor: (playerId: string, turnOrder: string[]) => string;
   getPlayerName: (enginePlayerId: string, players: PlayerRef[]) => string;
   myEnginePlayerId: string | undefined;
+  myHand: HandCard[] | null;
   teammateHands: Record<string, HandCard[]> | null;
   canResign: boolean;
   onResign: () => void;
@@ -61,6 +62,7 @@ export function GameSidePanels({
   getPlayerColor,
   getPlayerName,
   myEnginePlayerId,
+  myHand,
   teammateHands,
   canResign,
   onResign,
@@ -104,6 +106,7 @@ export function GameSidePanels({
           getPlayerColor={getPlayerColor}
           getPlayerName={getPlayerName}
           myPlayerId={myEnginePlayerId}
+          myHand={myHand}
           teammateHands={teammateHands}
           canResign={canResign}
           onResign={onResign}

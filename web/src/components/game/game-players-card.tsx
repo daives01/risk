@@ -24,6 +24,7 @@ interface PlayersCardProps {
   showTurnTimer: boolean;
   turnTimerLabel?: string | null;
   myPlayerId?: string | null;
+  myHand?: HandCard[] | null;
   teammateHands?: Record<string, HandCard[]> | null;
   canResign?: boolean;
   onResign?: () => void;
@@ -51,6 +52,7 @@ export function GamePlayersCard({
   showTurnTimer,
   turnTimerLabel,
   myPlayerId,
+  myHand,
   teammateHands,
   canResign = false,
   onResign,
@@ -130,7 +132,9 @@ export function GamePlayersCard({
                   const canPlayForPlayer = delegatablePlayerId === player.playerId && !delegatedPlayerId;
                   const isDelegatedPlayer = delegatedPlayerId === player.playerId;
                   const playerName = getPlayerName(player.playerId, playerMap);
-                  const visibleHand = teammateHands?.[player.playerId];
+                  const visibleHand = player.playerId === myPlayerId
+                    ? (myHand ?? undefined)
+                    : teammateHands?.[player.playerId];
                   const rowToneClass = isPlayerHighlighted
                     ? "border-primary/70 bg-primary/10"
                     : "border-border/70 bg-background/80 group-hover:border-primary/50";
