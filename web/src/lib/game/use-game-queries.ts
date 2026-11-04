@@ -4,17 +4,17 @@ import type { Id } from "@backend/_generated/dataModel";
 import type { ChatMessage } from "@/lib/game/types";
 
 export function useGameViewQueries(
-  session: unknown,
+  hasSession: boolean,
   sessionPending: boolean,
   typedGameId: Id<"games"> | undefined,
 ) {
   const playerView = useQuery(
     api.games.getGameViewAsPlayer,
-    session && typedGameId ? { gameId: typedGameId } : "skip",
+    hasSession && typedGameId ? { gameId: typedGameId } : "skip",
   );
   const publicView = useQuery(
     api.games.getGameView,
-    !sessionPending && !session && typedGameId ? { gameId: typedGameId } : "skip",
+    !sessionPending && !hasSession && typedGameId ? { gameId: typedGameId } : "skip",
   );
 
   return {
