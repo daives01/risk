@@ -13,6 +13,7 @@
   "rules": {
     "anti-slop/no-array-filter-map": "error",
     "anti-slop/no-reduce-accumulator-copy": "error",
-    "oxc/no-accumulating-spread": "error"
+    "oxc/no-accumulating-spread": "error",
+    "anti-slop/no-chained-type-assertions": "error"
   }
 }

@@ -1,5 +1,5 @@
 import type { Id } from "@backend/_generated/dataModel";
-import type { GraphMap, MapVisual } from "risk-engine";
+import type { GraphMap, MapVisual, TerritoryId } from "risk-engine";
 import { validateMap, validateVisual } from "risk-engine";
 
 export type TerritoryInfo = { name?: string; tags?: string[] };
@@ -11,11 +11,19 @@ export type EditorGraphMap = {
   continents?: Record<string, EditorContinent>;
 };
 
+function toTerritoryId(value: string): TerritoryId {
+  // SAFETY: Editor IDs are strings; this adds only the nominal category. validateMap checks membership below.
+  return value as TerritoryId;
+}
+
 function toGraphMapInput(graph: EditorGraphMap): GraphMap {
   return {
     territories: graph.territories,
-    adjacency: graph.adjacency as unknown as GraphMap["adjacency"],
-    continents: graph.continents as GraphMap["continents"],
+    adjacency: Object.fromEntries(Object.entries(graph.adjacency).map(([id, neighbors]) => [id, neighbors.map(toTerritoryId)])),
+    continents: graph.continents && Object.fromEntries(Object.entries(graph.continents).map(([id, continent]) => [id, {
+      ...continent,
+      territoryIds: continent.territoryIds.map(toTerritoryId),
+    }])),
   };
 }
 
