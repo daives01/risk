@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
-import type { FunctionReturnType } from "convex/server";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { ArrowLeft, Map } from "lucide-react";
 import { api } from "@backend/_generated/api";
 import { authClient } from "@/lib/auth-client";
@@ -168,11 +168,10 @@ export default function CreateGamePage() {
     setError(null);
     setLoading(true);
     try {
+      const fortify: RulesetOverridesInput["fortify"] = { fortifyMode };
+      if (maxFortifiesPerTurn !== "unlimited") fortify.maxFortifiesPerTurn = maxFortifiesPerTurn;
       const rulesetOverrides: RulesetOverridesInput = {
-        fortify: {
-          fortifyMode,
-          ...(maxFortifiesPerTurn === "unlimited" ? {} : { maxFortifiesPerTurn }),
-        },
+        fortify,
         cards: {
           forcedTradeHandSize,
           tradeValues: [...CARD_INCREMENT_PRESETS[cardIncrementPreset].tradeValues],
@@ -185,7 +184,7 @@ export default function CreateGamePage() {
           continentBonusRecipient,
         },
       };
-      const { gameId } = await createGame({
+      const createGameArgs: FunctionArgs<typeof api.lobby.createGame> = {
         name: trimmedName,
         mapId: selectedMapId,
         visibility,
@@ -195,9 +194,10 @@ export default function CreateGamePage() {
         timingMode,
         excludeWeekends,
         slackNotificationsEnabled,
-        ...(slackNotificationsEnabled && slackTeamId ? { slackTeamId } : {}),
         rulesetOverrides,
-      });
+      };
+      if (slackNotificationsEnabled && slackTeamId) createGameArgs.slackTeamId = slackTeamId;
+      const { gameId } = await createGame(createGameArgs);
       navigate(`/g/${gameId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create game");
