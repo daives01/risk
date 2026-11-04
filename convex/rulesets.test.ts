@@ -1,115 +1,130 @@
-import { describe, expect, test } from "bun:test";
-import { defaultRuleset } from "risk-engine";
+import { describe, expect, test } from 'bun:test'
+import { defaultRuleset } from 'risk-engine'
 import {
   resolveEffectiveRuleset,
   resolveRulesetFromOverrides,
   sanitizeRulesetOverrides,
   validateRulesetOverrides,
-} from "./rulesets";
+} from './rulesets'
 
-describe("rulesets", () => {
-  test("sanitization omits empty/deprecated groups and undefined fields while retaining false and zero", () => {
-    expect(sanitizeRulesetOverrides(undefined)).toBeUndefined();
-    expect(sanitizeRulesetOverrides({ cards: {}, teams: {}, fortify: {} })).toBeUndefined();
-    expect(sanitizeRulesetOverrides({
-      combat: { allowAttackerDiceChoice: false },
-      cards: { awardCardOnCapture: false, forcedTradeHandSize: undefined },
-      teams: { preventAttackingTeammates: false, allowPlaceOnTeammate: undefined },
-      fortify: { fortifyMode: undefined },
-    })).toBeUndefined();
+describe('rulesets', () => {
+  test('sanitization omits empty/deprecated groups and undefined fields while retaining false and zero', () => {
+    expect(sanitizeRulesetOverrides(undefined)).toBeUndefined()
+    expect(sanitizeRulesetOverrides({ cards: {}, teams: {}, fortify: {} })).toBeUndefined()
+    expect(
+      sanitizeRulesetOverrides({
+        combat: { allowAttackerDiceChoice: false },
+        cards: { awardCardOnCapture: false, forcedTradeHandSize: undefined },
+        teams: { preventAttackingTeammates: false, allowPlaceOnTeammate: undefined },
+        fortify: { fortifyMode: undefined },
+      }),
+    ).toBeUndefined()
+
     const input = {
       cards: { forcedTradeHandSize: 0, tradeValues: [], awardCardOnCapture: false },
-      teams: { allowPlaceOnTeammate: false, allowFortifyWithTeammate: false, allowFortifyThroughTeammates: false },
+      teams: {
+        allowPlaceOnTeammate: false,
+        allowFortifyWithTeammate: false,
+        allowFortifyThroughTeammates: false,
+      },
       fortify: { maxFortifiesPerTurn: 0 },
-    };
-    const before = structuredClone(input);
-    const sanitized = sanitizeRulesetOverrides(input);
+    }
+
+    const before = structuredClone(input)
+    const sanitized = sanitizeRulesetOverrides(input)
     expect(sanitized).toEqual({
       cards: { forcedTradeHandSize: 0, tradeValues: [] },
-      teams: { allowPlaceOnTeammate: false, allowFortifyWithTeammate: false, allowFortifyThroughTeammates: false },
+      teams: {
+        allowPlaceOnTeammate: false,
+        allowFortifyWithTeammate: false,
+        allowFortifyThroughTeammates: false,
+      },
       fortify: { maxFortifiesPerTurn: 0 },
-    });
-    expect(Object.prototype.hasOwnProperty.call(sanitized?.cards ?? {}, "awardCardOnCapture")).toBe(false);
-    expect(Object.prototype.hasOwnProperty.call(sanitized ?? {}, "combat")).toBe(false);
-    expect(input).toEqual(before);
-  });
+    })
+    expect(Object.prototype.hasOwnProperty.call(sanitized?.cards ?? {}, 'awardCardOnCapture')).toBe(
+      false,
+    )
+    expect(Object.prototype.hasOwnProperty.call(sanitized ?? {}, 'combat')).toBe(false)
+    expect(input).toEqual(before)
+  })
 
-  test("resolves selected override fields on top of defaults", () => {
+  test('resolves selected override fields on top of defaults', () => {
     const ruleset = resolveRulesetFromOverrides(false, {
       combat: { allowAttackerDiceChoice: false },
       cards: { forcedTradeHandSize: 6, awardCardOnCapture: false, tradeValues: [4, 7, 10] },
-      fortify: { fortifyMode: "adjacent", maxFortifiesPerTurn: 2 },
-    });
+      fortify: { fortifyMode: 'adjacent', maxFortifiesPerTurn: 2 },
+    })
 
-    expect(ruleset.combat.allowAttackerDiceChoice).toBe(true);
-    expect(ruleset.cards.forcedTradeHandSize).toBe(6);
-    expect(ruleset.cards.tradeValues).toEqual([4, 7, 10]);
-    expect(ruleset.cards.awardCardOnCapture).toBe(true);
-    expect(ruleset.fortify.fortifyMode).toBe("adjacent");
-    expect(ruleset.fortify.maxFortifiesPerTurn).toBe(2);
-    expect(ruleset.setup).toEqual(defaultRuleset.setup);
-  });
+    expect(ruleset.combat.allowAttackerDiceChoice).toBe(true)
+    expect(ruleset.cards.forcedTradeHandSize).toBe(6)
+    expect(ruleset.cards.tradeValues).toEqual([4, 7, 10])
+    expect(ruleset.cards.awardCardOnCapture).toBe(true)
+    expect(ruleset.fortify.fortifyMode).toBe('adjacent')
+    expect(ruleset.fortify.maxFortifiesPerTurn).toBe(2)
+    expect(ruleset.setup).toEqual(defaultRuleset.setup)
+  })
 
-  test("team mode on defaults to cooperative team permissions", () => {
-    const ruleset = resolveRulesetFromOverrides(true, undefined);
-    expect(ruleset.teams.teamsEnabled).toBe(true);
-    expect(ruleset.teams.preventAttackingTeammates).toBe(false);
-    expect(ruleset.teams.allowPlaceOnTeammate).toBe(true);
-    expect(ruleset.teams.allowFortifyWithTeammate).toBe(true);
-    expect(ruleset.teams.allowFortifyThroughTeammates).toBe(true);
-    expect(ruleset.teams.continentBonusRecipient).toBe("majorityHolderOnTeam");
-  });
+  test('team mode on defaults to cooperative team permissions', () => {
+    const ruleset = resolveRulesetFromOverrides(true, undefined)
+    expect(ruleset.teams.teamsEnabled).toBe(true)
+    expect(ruleset.teams.preventAttackingTeammates).toBe(false)
+    expect(ruleset.teams.allowPlaceOnTeammate).toBe(true)
+    expect(ruleset.teams.allowFortifyWithTeammate).toBe(true)
+    expect(ruleset.teams.allowFortifyThroughTeammates).toBe(true)
+    expect(ruleset.teams.continentBonusRecipient).toBe('majorityHolderOnTeam')
+  })
 
-  test("allows individual continent bonus recipient override in team mode", () => {
+  test('allows individual continent bonus recipient override in team mode', () => {
     const ruleset = resolveRulesetFromOverrides(true, {
-      teams: { continentBonusRecipient: "individual" },
-    });
-    expect(ruleset.teams.continentBonusRecipient).toBe("individual");
-  });
+      teams: { continentBonusRecipient: 'individual' },
+    })
 
-  test("throws for invalid override bounds", () => {
-    expect(() =>
-      validateRulesetOverrides({ cards: { forcedTradeHandSize: 2 } }),
-    ).toThrow(/forcedTradeHandSize/);
-    expect(() =>
-      validateRulesetOverrides({ fortify: { maxFortifiesPerTurn: 11 } }),
-    ).toThrow(/maxFortifiesPerTurn/);
-    expect(() =>
-      validateRulesetOverrides({ cards: { tradeValues: [] } }),
-    ).toThrow(/tradeValues/);
-    expect(() =>
-      validateRulesetOverrides({ cards: { tradeValues: [4, -1] } }),
-    ).toThrow(/tradeValues/);
-    expect(() =>
-      validateRulesetOverrides({ cards: { tradeValueOverflow: "bad" as "repeatLast" } }),
-    ).toThrow(/tradeValueOverflow/);
-  });
+    expect(ruleset.teams.continentBonusRecipient).toBe('individual')
+  })
 
-  test("uses persisted effective ruleset snapshot when present", () => {
+  test('throws for invalid override bounds', () => {
+    expect(() => validateRulesetOverrides({ cards: { forcedTradeHandSize: 2 } })).toThrow(
+      /forcedTradeHandSize/,
+    )
+    expect(() => validateRulesetOverrides({ fortify: { maxFortifiesPerTurn: 11 } })).toThrow(
+      /maxFortifiesPerTurn/,
+    )
+    expect(() => validateRulesetOverrides({ cards: { tradeValues: [] } })).toThrow(/tradeValues/)
+    expect(() => validateRulesetOverrides({ cards: { tradeValues: [4, -1] } })).toThrow(
+      /tradeValues/,
+    )
+    expect(() =>
+      validateRulesetOverrides({ cards: { tradeValueOverflow: 'bad' as 'repeatLast' } }),
+    ).toThrow(/tradeValueOverflow/)
+  })
+
+  test('uses persisted effective ruleset snapshot when present', () => {
     const snapshot = resolveRulesetFromOverrides(true, {
       fortify: { maxFortifiesPerTurn: 1 },
-    });
+    })
+
     const resolved = resolveEffectiveRuleset({
       teamModeEnabled: false,
       rulesetOverrides: { combat: { allowAttackerDiceChoice: false } },
       effectiveRuleset: snapshot,
-    });
+    })
 
-    expect(resolved.combat.allowAttackerDiceChoice).toBe(true);
-    expect(resolved.fortify.maxFortifiesPerTurn).toBe(1);
-    expect(resolved.teams.teamsEnabled).toBe(true);
-  });
+    expect(resolved.combat.allowAttackerDiceChoice).toBe(true)
+    expect(resolved.fortify.maxFortifiesPerTurn).toBe(1)
+    expect(resolved.teams.teamsEnabled).toBe(true)
+  })
 
-  test("sanitizes deprecated host toggles", () => {
+  test('sanitizes deprecated host toggles', () => {
     const sanitized = sanitizeRulesetOverrides({
       combat: { allowAttackerDiceChoice: false },
       cards: { awardCardOnCapture: false, forcedTradeHandSize: 6 },
       teams: { preventAttackingTeammates: true, allowPlaceOnTeammate: true },
-    });
-    expect(sanitized?.combat?.allowAttackerDiceChoice).toBeUndefined();
-    expect(sanitized?.cards?.awardCardOnCapture).toBeUndefined();
-    expect(sanitized?.teams?.preventAttackingTeammates).toBeUndefined();
-    expect(sanitized?.cards?.forcedTradeHandSize).toBe(6);
-    expect(sanitized?.teams?.allowPlaceOnTeammate).toBe(true);
-  });
-});
+    })
+
+    expect(sanitized?.combat?.allowAttackerDiceChoice).toBeUndefined()
+    expect(sanitized?.cards?.awardCardOnCapture).toBeUndefined()
+    expect(sanitized?.teams?.preventAttackingTeammates).toBeUndefined()
+    expect(sanitized?.cards?.forcedTradeHandSize).toBe(6)
+    expect(sanitized?.teams?.allowPlaceOnTeammate).toBe(true)
+  })
+})

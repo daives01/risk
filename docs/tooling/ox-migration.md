@@ -7,10 +7,13 @@ coverage has been compared rule by rule. Oxlint warnings are initially advisory;
 errors fail the check. This expands coverage without suppressing existing findings.
 
 `bun run format` writes formatting; `bun run format:check` reports drift.
-Formatting is intentionally not yet part of `check`: the default-config dry run
-reported 175 files needing changes. The configuration keeps the existing common
-single-quote/no-semicolon style. Land a dedicated formatting baseline before
-making formatting a required gate. Generated Convex code and agent assets are excluded.
+A dedicated formatting baseline now applies Oxfmt 0.76.0 and the pinned
+anti-slop readable-spacing autofix to authored files. Both formatter drift and
+spacing diagnostics are zero after that baseline. The configuration keeps the
+single-quote/no-semicolon style. Formatting and readable-spacing enforcement
+are still deliberately outside the normal `check` gate pending a separate
+policy PR. Generated Convex code, vendor sources, lockfiles, and agent assets
+remain excluded. See [the baseline verification and update sequence](anti-slop-policy.md#formatting-baseline).
 
 ## Anti-slop assessment
 
@@ -25,7 +28,8 @@ narrowing, unknown parameters, conditional empty-object spreads, and symbols
 containing “shape”. Boundary parsing and existing test fixtures need review
 before enabling those policies. Do not enable the full preset just to adopt Oxlint.
 
-Recommended follow-up: vendor a reviewed upstream commit with its MIT license
-and provenance, select rules explicitly, measure diagnostics, and fix violations
-before making those rules errors. Keep upstream source out of formatting to
-make future updates reviewable. This PR does not vendor or enable anti-slop.
+The reviewed generic plugin is now vendored with its MIT license and provenance.
+The iterative adoption records selected enforcement and explicit deferrals in
+[the policy decisions](anti-slop-policy.md); the opt-in audit still reports every
+generic rule. Vendor sources stay out of formatting so future updates remain
+reviewable. New upstream revisions and rules require a fresh review.

@@ -10,43 +10,45 @@
  * done in the admin editor at /admin/maps.
  */
 
-import { classicMap } from "risk-maps";
-import { validateMap } from "risk-engine";
-import type { GraphMap } from "risk-engine";
+import { classicMap } from 'risk-maps'
+import { validateMap } from 'risk-engine'
+import type { GraphMap } from 'risk-engine'
 
 interface MapDef {
-  id: string;
-  name: string;
-  graphMap: GraphMap;
+  id: string
+  name: string
+  graphMap: GraphMap
 }
 
-const maps: MapDef[] = [
-  { id: "classic", name: "Classic Global Domination", graphMap: classicMap },
-];
+const maps: MapDef[] = [{ id: 'classic', name: 'Classic Global Domination', graphMap: classicMap }]
 
-console.log("Validating maps...\n");
+console.log('Validating maps...\n')
 
-let allValid = true;
+let allValid = true
+
 for (const { id, name, graphMap } of maps) {
-  const result = validateMap(graphMap);
-  const territories = Object.keys(graphMap.territories).length;
-  const continents = graphMap.continents ? Object.keys(graphMap.continents).length : 0;
+  const result = validateMap(graphMap)
+  const territories = Object.keys(graphMap.territories).length
+  const continents = graphMap.continents ? Object.keys(graphMap.continents).length : 0
 
   if (result.valid) {
-    console.log(`  ✓ ${name} (${id}): ${territories} territories, ${continents} continents`);
+    console.log(`  ✓ ${name} (${id}): ${territories} territories, ${continents} continents`)
   } else {
-    console.error(`  ✗ ${name} (${id}): FAILED`);
+    console.error(`  ✗ ${name} (${id}): FAILED`)
+
     for (const err of result.errors) {
-      console.error(`    - ${err}`);
+      console.error(`    - ${err}`)
     }
-    allValid = false;
+
+    allValid = false
   }
 }
 
 if (!allValid) {
-  console.error("\nValidation failed. Fix errors before seeding.");
-  process.exit(1);
+  console.error('\nValidation failed. Fix errors before seeding.')
+  process.exit(1)
 }
 
-console.log("\nAll maps valid.");
-console.log("Publish maps via the admin editor (/admin/maps).");
+console.log('\nAll maps valid.')
+
+console.log('Publish maps via the admin editor (/admin/maps).')

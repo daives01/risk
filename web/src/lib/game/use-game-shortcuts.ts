@@ -1,47 +1,47 @@
-import { useEffect } from "react";
-import type { Phase } from "risk-engine";
-import { hasCommandModifier, isTypingTarget } from "@/lib/keyboard-shortcuts";
+import { useEffect } from 'react'
+import type { Phase } from 'risk-engine'
+import { hasCommandModifier, isTypingTarget } from '@/lib/keyboard-shortcuts'
 
 interface UseGameShortcutsOptions {
-  historyOpen: boolean;
-  historyAtEnd: boolean;
-  isMyTurn: boolean;
-  phase: Phase;
-  cardsOpen: boolean;
-  settingsOpen: boolean;
-  placeCount: number;
-  attackDice: number;
-  occupyMove: number;
-  fortifyCount: number;
-  maxPlaceCount: number;
-  maxAttackDice: number;
-  reinforcementDraftCount: number;
-  controlsDisabled: boolean;
-  hasPendingOccupy: boolean;
-  canSetOccupy: boolean;
-  occupyMinMove: number;
-  occupyMaxMove: number;
-  canSetFortify: boolean;
-  maxFortifyCount: number;
-  onToggleHistory: () => void;
-  onToggleShortcutCheatSheet: () => void;
-  onJumpSinceLastTurn: () => void;
-  onMoveHistoryPreviousFrame: () => void;
-  onMoveHistoryNextFrame: () => void;
-  onResetHistoryToLatest: () => void;
-  onToggleHistoryPlayback: () => void;
-  onSetPlaceCount: (count: number) => void;
-  onSetAttackDice: (dice: number) => void;
-  onSetOccupyMove: (count: number) => void;
-  onSetFortifyCount: (count: number) => void;
-  onToggleInfoOverlay: () => void;
-  onToggleFullscreen: () => void;
-  onToggleCards: () => void;
-  onCloseCards: () => void;
-  onToggleSettings: () => void;
-  onCloseSettings: () => void;
-  onClearSelection: () => void;
-  onUndoPlacement: () => void;
+  historyOpen: boolean
+  historyAtEnd: boolean
+  isMyTurn: boolean
+  phase: Phase
+  cardsOpen: boolean
+  settingsOpen: boolean
+  placeCount: number
+  attackDice: number
+  occupyMove: number
+  fortifyCount: number
+  maxPlaceCount: number
+  maxAttackDice: number
+  reinforcementDraftCount: number
+  controlsDisabled: boolean
+  hasPendingOccupy: boolean
+  canSetOccupy: boolean
+  occupyMinMove: number
+  occupyMaxMove: number
+  canSetFortify: boolean
+  maxFortifyCount: number
+  onToggleHistory: () => void
+  onToggleShortcutCheatSheet: () => void
+  onJumpSinceLastTurn: () => void
+  onMoveHistoryPreviousFrame: () => void
+  onMoveHistoryNextFrame: () => void
+  onResetHistoryToLatest: () => void
+  onToggleHistoryPlayback: () => void
+  onSetPlaceCount: (count: number) => void
+  onSetAttackDice: (dice: number) => void
+  onSetOccupyMove: (count: number) => void
+  onSetFortifyCount: (count: number) => void
+  onToggleInfoOverlay: () => void
+  onToggleFullscreen: () => void
+  onToggleCards: () => void
+  onCloseCards: () => void
+  onToggleSettings: () => void
+  onCloseSettings: () => void
+  onClearSelection: () => void
+  onUndoPlacement: () => void
 }
 
 export function useGameShortcuts({
@@ -87,158 +87,226 @@ export function useGameShortcuts({
 }: UseGameShortcutsOptions) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (isTypingTarget(event.target)) return;
+      if (isTypingTarget(event.target)) return
 
-      const key = event.key.toLowerCase();
-      const withCommand = hasCommandModifier(event);
+      const key = event.key.toLowerCase()
+      const withCommand = hasCommandModifier(event)
 
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         if (settingsOpen) {
-          event.preventDefault();
-          onCloseSettings();
-          return;
+          event.preventDefault()
+          onCloseSettings()
+
+          return
         }
+
         if (cardsOpen) {
-          event.preventDefault();
-          onCloseCards();
-          return;
+          event.preventDefault()
+          onCloseCards()
+
+          return
         }
-        onClearSelection();
-        return;
+
+        onClearSelection()
+
+        return
       }
 
-      if (withCommand) return;
+      if (withCommand) return
 
-      if (key === "?") {
-        event.preventDefault();
-        onToggleShortcutCheatSheet();
-        return;
+      if (key === '?') {
+        event.preventDefault()
+        onToggleShortcutCheatSheet()
+
+        return
       }
 
-      if (key === "h") {
-        event.preventDefault();
-        onToggleHistory();
-        return;
+      if (key === 'h') {
+        event.preventDefault()
+        onToggleHistory()
+
+        return
       }
 
       if (historyOpen) {
-        if (key === ",") {
-          event.preventDefault();
-          onJumpSinceLastTurn();
-          return;
+        if (key === ',') {
+          event.preventDefault()
+          onJumpSinceLastTurn()
+
+          return
         }
-        if (key === ".") {
-          event.preventDefault();
-          onResetHistoryToLatest();
-          return;
+
+        if (key === '.') {
+          event.preventDefault()
+          onResetHistoryToLatest()
+
+          return
         }
-        if (key === "j") {
-          event.preventDefault();
-          onMoveHistoryPreviousFrame();
-          return;
+
+        if (key === 'j') {
+          event.preventDefault()
+          onMoveHistoryPreviousFrame()
+
+          return
         }
-        if (key === "l") {
-          event.preventDefault();
-          onMoveHistoryNextFrame();
-          return;
+
+        if (key === 'l') {
+          event.preventDefault()
+          onMoveHistoryNextFrame()
+
+          return
         }
-        if (key === "k" && !historyAtEnd) {
-          event.preventDefault();
-          onToggleHistoryPlayback();
-          return;
+
+        if (key === 'k' && !historyAtEnd) {
+          event.preventDefault()
+          onToggleHistoryPlayback()
+
+          return
         }
       }
 
-      if (!historyOpen && key === "c") {
-        event.preventDefault();
+      if (!historyOpen && key === 'c') {
+        event.preventDefault()
+
         if (cardsOpen) {
-          onCloseCards();
-          return;
+          onCloseCards()
+
+          return
         }
-        onToggleCards();
-        return;
+
+        onToggleCards()
+
+        return
       }
 
-      if (!historyOpen && key === "i") {
-        event.preventDefault();
-        onToggleInfoOverlay();
-        return;
+      if (!historyOpen && key === 'i') {
+        event.preventDefault()
+        onToggleInfoOverlay()
+
+        return
       }
 
-      if (key === "g") {
-        event.preventDefault();
-        onToggleSettings();
-        return;
+      if (key === 'g') {
+        event.preventDefault()
+        onToggleSettings()
+
+        return
       }
 
-      if (key === "f") {
-        event.preventDefault();
-        onToggleFullscreen();
-        return;
+      if (key === 'f') {
+        event.preventDefault()
+        onToggleFullscreen()
+
+        return
       }
 
-      if (!historyOpen && isMyTurn && !controlsDisabled && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
-        const delta = event.key === "ArrowRight" ? 1 : -1;
+      if (
+        !historyOpen &&
+        isMyTurn &&
+        !controlsDisabled &&
+        (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+      ) {
+        const delta = event.key === 'ArrowRight' ? 1 : -1
+
         if (canSetOccupy) {
-          event.preventDefault();
-          const next = occupyMove + delta;
-          const clamped = Math.min(Math.max(next, occupyMinMove), Math.max(occupyMinMove, occupyMaxMove));
-          onSetOccupyMove(clamped);
-          return;
+          event.preventDefault()
+          const next = occupyMove + delta
+
+          const clamped = Math.min(
+            Math.max(next, occupyMinMove),
+            Math.max(occupyMinMove, occupyMaxMove),
+          )
+
+          onSetOccupyMove(clamped)
+
+          return
         }
+
         if (canSetFortify && maxFortifyCount > 0) {
-          event.preventDefault();
-          const next = fortifyCount + delta;
-          onSetFortifyCount(Math.min(Math.max(1, next), maxFortifyCount));
-          return;
+          event.preventDefault()
+          const next = fortifyCount + delta
+          onSetFortifyCount(Math.min(Math.max(1, next), maxFortifyCount))
+
+          return
         }
       }
 
-      if (!historyOpen && isMyTurn && !controlsDisabled && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
-        const delta = event.key === "ArrowUp" ? 1 : -1;
+      if (
+        !historyOpen &&
+        isMyTurn &&
+        !controlsDisabled &&
+        (event.key === 'ArrowUp' || event.key === 'ArrowDown')
+      ) {
+        const delta = event.key === 'ArrowUp' ? 1 : -1
+
         const isPlacementMode =
-          phase === "Reinforcement" ||
-          (phase === "Attack" && (maxPlaceCount > 0 || reinforcementDraftCount > 0));
+          phase === 'Reinforcement' ||
+          (phase === 'Attack' && (maxPlaceCount > 0 || reinforcementDraftCount > 0))
+
         if (isPlacementMode && maxPlaceCount > 0) {
-          event.preventDefault();
-          const next = placeCount + delta;
-          onSetPlaceCount(Math.min(Math.max(1, next), maxPlaceCount));
-          return;
+          event.preventDefault()
+          const next = placeCount + delta
+          onSetPlaceCount(Math.min(Math.max(1, next), maxPlaceCount))
+
+          return
         }
-        if (phase === "Attack" && maxPlaceCount <= 0 && !hasPendingOccupy && maxAttackDice > 0) {
-          event.preventDefault();
-          const next = attackDice + delta;
-          onSetAttackDice(Math.min(Math.max(1, next), maxAttackDice));
-          return;
+
+        if (phase === 'Attack' && maxPlaceCount <= 0 && !hasPendingOccupy && maxAttackDice > 0) {
+          event.preventDefault()
+          const next = attackDice + delta
+          onSetAttackDice(Math.min(Math.max(1, next), maxAttackDice))
+
+          return
         }
       }
 
-      const numericKey = Number.parseInt(event.key, 10);
+      const numericKey = Number.parseInt(event.key, 10)
+
       if (!Number.isNaN(numericKey) && numericKey >= 1) {
         const isPlacementMode =
-          phase === "Reinforcement" ||
-          (phase === "Attack" && (maxPlaceCount > 0 || reinforcementDraftCount > 0));
+          phase === 'Reinforcement' ||
+          (phase === 'Attack' && (maxPlaceCount > 0 || reinforcementDraftCount > 0))
+
         if (!historyOpen && isMyTurn && canSetOccupy && !controlsDisabled) {
-          event.preventDefault();
-          const clamped = Math.min(Math.max(numericKey, occupyMinMove), Math.max(occupyMinMove, occupyMaxMove));
-          onSetOccupyMove(clamped);
-          return;
+          event.preventDefault()
+
+          const clamped = Math.min(
+            Math.max(numericKey, occupyMinMove),
+            Math.max(occupyMinMove, occupyMaxMove),
+          )
+
+          onSetOccupyMove(clamped)
+
+          return
         }
+
         if (!historyOpen && isMyTurn && canSetFortify && !controlsDisabled && maxFortifyCount > 0) {
-          event.preventDefault();
-          onSetFortifyCount(Math.min(Math.max(1, maxFortifyCount), numericKey));
-          return;
+          event.preventDefault()
+          onSetFortifyCount(Math.min(Math.max(1, maxFortifyCount), numericKey))
+
+          return
         }
+
         if (!historyOpen && isMyTurn && isPlacementMode && !controlsDisabled && maxPlaceCount > 0) {
-          event.preventDefault();
-          onSetPlaceCount(Math.min(numericKey, Math.max(1, maxPlaceCount)));
-          return;
+          event.preventDefault()
+          onSetPlaceCount(Math.min(numericKey, Math.max(1, maxPlaceCount)))
+
+          return
         }
-        if (!historyOpen && isMyTurn && phase === "Attack" && maxPlaceCount <= 0 && !hasPendingOccupy && maxAttackDice > 0) {
+
+        if (
+          !historyOpen &&
+          isMyTurn &&
+          phase === 'Attack' &&
+          maxPlaceCount <= 0 &&
+          !hasPendingOccupy &&
+          maxAttackDice > 0
+        ) {
           if (numericKey <= 3 && numericKey <= maxAttackDice) {
-            event.preventDefault();
-            onSetAttackDice(numericKey);
-            return;
+            event.preventDefault()
+            onSetAttackDice(numericKey)
+
+            return
           }
         }
       }
@@ -246,18 +314,21 @@ export function useGameShortcuts({
       if (
         !historyOpen &&
         isMyTurn &&
-        (phase === "Reinforcement" || (phase === "Attack" && (maxPlaceCount > 0 || reinforcementDraftCount > 0)))
+        (phase === 'Reinforcement' ||
+          (phase === 'Attack' && (maxPlaceCount > 0 || reinforcementDraftCount > 0)))
       ) {
-        if (key === "u" && reinforcementDraftCount > 0) {
-          event.preventDefault();
-          onUndoPlacement();
-          return;
+        if (key === 'u' && reinforcementDraftCount > 0) {
+          event.preventDefault()
+          onUndoPlacement()
+
+          return
         }
       }
-    };
+    }
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [
     attackDice,
     canSetFortify,
@@ -298,5 +369,5 @@ export function useGameShortcuts({
     placeCount,
     reinforcementDraftCount,
     settingsOpen,
-  ]);
+  ])
 }

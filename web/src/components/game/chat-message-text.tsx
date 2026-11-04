@@ -1,16 +1,16 @@
-import type { ChatHoverTag } from "@/lib/game/highlighting";
+import type { ChatHoverTag } from '@/lib/game/highlighting'
 import {
   getMentionDisplayLabel,
   tokenizeChatText,
   type ChatMentionResolver,
-} from "@/lib/game/chat-mentions";
+} from '@/lib/game/chat-mentions'
 
 interface ChatMessageTextProps {
-  text: string;
-  resolver: ChatMentionResolver;
-  onHoverTag: (tag: ChatHoverTag) => void;
-  onLeaveTag: () => void;
-  onClickTag: (tag: Exclude<ChatHoverTag, null>) => void;
+  text: string
+  resolver: ChatMentionResolver
+  onHoverTag: (tag: ChatHoverTag) => void
+  onLeaveTag: () => void
+  onClickTag: (tag: Exclude<ChatHoverTag, null>) => void
 }
 
 export function ChatMessageText({
@@ -20,13 +20,15 @@ export function ChatMessageText({
   onLeaveTag,
   onClickTag,
 }: ChatMessageTextProps) {
-  const parts = tokenizeChatText(text, resolver);
-  if (parts.length === 1 && typeof parts[0] === "string") return <>{text}</>;
+  const parts = tokenizeChatText(text, resolver)
+
+  if (parts.length === 1 && typeof parts[0] === 'string') return <>{text}</>
 
   return (
     <>
       {parts.map((part, index) => {
-        if (typeof part === "string") return <span key={index}>{part}</span>;
+        if (typeof part === 'string') return <span key={index}>{part}</span>
+
         return (
           <button
             key={`${part.token}-${index}`}
@@ -42,8 +44,8 @@ export function ChatMessageText({
           >
             {getMentionDisplayLabel(part.token)}
           </button>
-        );
+        )
       })}
     </>
-  );
+  )
 }

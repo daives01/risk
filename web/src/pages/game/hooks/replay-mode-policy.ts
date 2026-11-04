@@ -1,24 +1,26 @@
-export type ReplayFrameCommand = "previous-frame" | "next-frame" | "reset-to-latest";
+export type ReplayFrameCommand = 'previous-frame' | 'next-frame' | 'reset-to-latest'
 
 export interface ReplayFrameCommandState {
-  frameIndex: number;
-  historyMaxIndex: number;
+  frameIndex: number
+  historyMaxIndex: number
 }
 
 export function resolveReplayFrameCommand(
   command: ReplayFrameCommand,
   { frameIndex, historyMaxIndex }: ReplayFrameCommandState,
 ) {
-  if (command === "previous-frame") return Math.max(0, frameIndex - 1);
-  if (command === "next-frame") return Math.min(historyMaxIndex, frameIndex + 1);
-  return historyMaxIndex;
+  if (command === 'previous-frame') return Math.max(0, frameIndex - 1)
+
+  if (command === 'next-frame') return Math.min(historyMaxIndex, frameIndex + 1)
+
+  return historyMaxIndex
 }
 
 export interface SinceLastTurnStepOptions {
-  canLoadOlderHistory: boolean;
-  historyLoadingOlder: boolean;
-  lastTurnEndIndex: number;
-  lastTurnEndLoaded: boolean;
+  canLoadOlderHistory: boolean
+  historyLoadingOlder: boolean
+  lastTurnEndIndex: number
+  lastTurnEndLoaded: boolean
 }
 
 export function resolveSinceLastTurnStep({
@@ -32,32 +34,32 @@ export function resolveSinceLastTurnStep({
       frameIndex: lastTurnEndIndex,
       pending: false,
       shouldLoadOlderHistory: false,
-    };
+    }
   }
 
   return {
     frameIndex: null,
     pending: true,
     shouldLoadOlderHistory: !historyLoadingOlder,
-  };
+  }
 }
 
 export function shouldRequestMissingHistoryFrame({
   historyOpen,
   activeHistoryFrameLoaded,
 }: {
-  historyOpen: boolean;
-  activeHistoryFrameLoaded: boolean;
+  historyOpen: boolean
+  activeHistoryFrameLoaded: boolean
 }) {
-  return historyOpen && !activeHistoryFrameLoaded;
+  return historyOpen && !activeHistoryFrameLoaded
 }
 
 export function shouldRequestMissingReplayFrame({
   requestedFrameIndex,
   loadedFramePositions,
 }: {
-  requestedFrameIndex: number;
-  loadedFramePositions: readonly number[];
+  requestedFrameIndex: number
+  loadedFramePositions: readonly number[]
 }) {
-  return !loadedFramePositions.includes(requestedFrameIndex);
+  return !loadedFramePositions.includes(requestedFrameIndex)
 }

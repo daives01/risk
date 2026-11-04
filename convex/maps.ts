@@ -1,10 +1,10 @@
-import { query, internalMutation } from "./_generated/server";
-import { v } from "convex/values";
+import { query, internalMutation } from './_generated/server'
+import { v } from 'convex/values'
 import {
   defaultMapPlayerLimits,
   resolveMapPlayerLimits,
   validateMapPlayerLimits,
-} from "./mapPlayerLimits";
+} from './mapPlayerLimits'
 
 const graphMapValidator = v.object({
   territories: v.record(
@@ -25,10 +25,10 @@ const graphMapValidator = v.object({
       }),
     ),
   ),
-});
+})
 
 const visualValidator = v.object({
-  imageStorageId: v.id("_storage"),
+  imageStorageId: v.id('_storage'),
   imageWidth: v.number(),
   imageHeight: v.number(),
   nodeScale: v.optional(v.union(v.number(), v.null())),
@@ -39,32 +39,34 @@ const visualValidator = v.object({
       y: v.number(),
     }),
   ),
-});
+})
 
 function normalizeNodeScale(nodeScale: number | null | undefined): number {
-  return typeof nodeScale === "number" && Number.isFinite(nodeScale) && nodeScale > 0
+  return typeof nodeScale === 'number' && Number.isFinite(nodeScale) && nodeScale > 0
     ? nodeScale
-    : 1;
+    : 1
 }
 
-function normalizeVisual<T extends { nodeScale?: number | null }>(visual: T): T & { nodeScale: number } {
+function normalizeVisual<T extends { nodeScale?: number | null }>(
+  visual: T,
+): T & { nodeScale: number } {
   return {
     ...visual,
     nodeScale: normalizeNodeScale(visual.nodeScale),
-  };
+  }
 }
 
 const mapPlayerLimitsValidator = v.object({
   minPlayers: v.number(),
   maxPlayers: v.number(),
-});
+})
 
 export const list = query({
   handler: async (ctx) => {
     const docs = await ctx.db
-      .query("maps")
-      .withIndex("by_authoringStatus", (q) => q.eq("authoring.status", "published"))
-      .collect();
+      .query('maps')
+      .withIndex('by_authoringStatus', (q) => q.eq('authoring.status', 'published'))
+      .collect()
 
     return Promise.all(
       docs.map(async (doc) => ({
@@ -76,18 +78,20 @@ export const list = query({
         ),
         imageUrl: await ctx.storage.getUrl(doc.visual.imageStorageId),
       })),
-    );
+    )
   },
-});
+})
 
 export const getByMapId = query({
   args: { mapId: v.string() },
   handler: async (ctx, { mapId }) => {
     const doc = await ctx.db
-      .query("maps")
-      .withIndex("by_mapId", (q) => q.eq("mapId", mapId))
-      .unique();
-    if (!doc || doc.authoring.status !== "published") return null;
+      .query('maps')
+      .withIndex('by_mapId', (q) => q.eq('mapId', mapId))
+      .unique()
+
+    if (!doc || doc.authoring.status !== 'published') return null
+
     return {
       ...doc,
       visual: normalizeVisual(doc.visual),
@@ -96,9 +100,9 @@ export const getByMapId = query({
         Object.keys(doc.graphMap.territories).length,
       ),
       imageUrl: await ctx.storage.getUrl(doc.visual.imageStorageId),
-    };
+    }
   },
-});
+})
 
 export const upsert = internalMutation({
   args: {
@@ -107,29 +111,34 @@ export const upsert = internalMutation({
     graphMap: graphMapValidator,
     visual: visualValidator,
     playerLimits: v.optional(mapPlayerLimitsValidator),
-    authoringStatus: v.optional(v.union(v.literal("draft"), v.literal("published"))),
+    authoringStatus: v.optional(v.union(v.literal('draft'), v.literal('published'))),
   },
   handler: async (ctx, { mapId, name, graphMap, visual, playerLimits, authoringStatus }) => {
-    const now = Date.now();
-    const normalizedVisual = normalizeVisual(visual);
+    const now = Date.now()
+    const normalizedVisual = normalizeVisual(visual)
+
     const resolvedPlayerLimits =
-      playerLimits ?? defaultMapPlayerLimits(Object.keys(graphMap.territories).length);
+      playerLimits ?? defaultMapPlayerLimits(Object.keys(graphMap.territories).length)
+
     const playerLimitErrors = validateMapPlayerLimits(
       resolvedPlayerLimits,
       Object.keys(graphMap.territories).length,
-    );
+    )
+
     if (playerLimitErrors.length > 0) {
-      throw new Error(playerLimitErrors.join(", "));
+      throw new Error(playerLimitErrors.join(', '))
     }
+
     const authoring = {
-      status: authoringStatus ?? "published",
+      status: authoringStatus ?? 'published',
       updatedAt: now,
-      publishedAt: (authoringStatus ?? "published") === "published" ? now : undefined,
-    } as const;
+      publishedAt: (authoringStatus ?? 'published') === 'published' ? now : undefined,
+    } as const
+
     const existing = await ctx.db
-      .query("maps")
-      .withIndex("by_mapId", (q) => q.eq("mapId", mapId))
-      .unique();
+      .query('maps')
+      .withIndex('by_mapId', (q) => q.eq('mapId', mapId))
+      .unique()
 
     if (existing) {
       await ctx.db.patch(existing._id, {
@@ -139,10 +148,12 @@ export const upsert = internalMutation({
         playerLimits: resolvedPlayerLimits,
         authoring,
         createdAt: now,
-      });
-      return existing._id;
+      })
+
+      return existing._id
     }
-    return await ctx.db.insert("maps", {
+
+    return await ctx.db.insert('maps', {
       mapId,
       name,
       graphMap,
@@ -150,6 +161,6 @@ export const upsert = internalMutation({
       playerLimits: resolvedPlayerLimits,
       authoring,
       createdAt: now,
-    });
+    })
   },
-});
+})

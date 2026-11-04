@@ -1,19 +1,19 @@
 type AppEmailArgs = {
-  title: string;
-  intro: string;
-  ctaLabel: string;
-  ctaUrl: string;
-  footer: string;
-  detailRows?: Array<{ label: string; value: string }>;
-};
+  title: string
+  intro: string
+  ctaLabel: string
+  ctaUrl: string
+  footer: string
+  detailRows?: Array<{ label: string; value: string }>
+}
 
 function escapeHtml(value: string): string {
   return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
 }
 
 function appEmailHtml(args: AppEmailArgs): string {
@@ -26,7 +26,7 @@ function appEmailHtml(args: AppEmailArgs): string {
         </tr>
       `,
     )
-    .join("");
+    .join('')
 
   return `
     <div style="background: #0b0d10; padding: 24px 12px; color: #e4e8ee;">
@@ -38,10 +38,11 @@ function appEmailHtml(args: AppEmailArgs): string {
         <div style="padding: 20px 16px 16px;">
           <h2 style="margin: 0 0 12px; color: #e4e8ee; font-size: 22px; line-height: 1.25;">${escapeHtml(args.title)}</h2>
           <p style="margin: 0 0 14px; color: #e4e8ee; font-size: 14px; line-height: 1.6;">${escapeHtml(args.intro)}</p>
-          ${detailRowsHtml
-      ? `<table role="presentation" cellspacing="0" cellpadding="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px;">${detailRowsHtml}</table>`
-      : ""
-    }
+          ${
+            detailRowsHtml
+              ? `<table role="presentation" cellspacing="0" cellpadding="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px;">${detailRowsHtml}</table>`
+              : ''
+          }
           <a href="${escapeHtml(args.ctaUrl)}" style="display: inline-block; padding: 10px 16px; border: 1px solid #f2bf62; color: #f2bf62; text-decoration: none; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase;">
             ${escapeHtml(args.ctaLabel)}
           </a>
@@ -49,59 +50,59 @@ function appEmailHtml(args: AppEmailArgs): string {
         </div>
       </div>
     </div>
-  `;
+  `
 }
 
 export function verificationEmailHtml(url: string): string {
   return appEmailHtml({
-    title: "Verify your email",
-    intro: "Click the button below to verify your email address.",
-    ctaLabel: "Verify Email",
+    title: 'Verify your email',
+    intro: 'Click the button below to verify your email address.',
+    ctaLabel: 'Verify Email',
     ctaUrl: url,
-    footer: "If you did not create an account, you can ignore this email.",
-  });
+    footer: 'If you did not create an account, you can ignore this email.',
+  })
 }
 
 export function resetPasswordEmailHtml(url: string): string {
   return appEmailHtml({
-    title: "Reset your password",
-    intro: "Click the button below to reset your password. This link expires in 1 hour.",
-    ctaLabel: "Reset Password",
+    title: 'Reset your password',
+    intro: 'Click the button below to reset your password. This link expires in 1 hour.',
+    ctaLabel: 'Reset Password',
     ctaUrl: url,
-    footer: "If you did not request this reset, you can ignore this email.",
-  });
+    footer: 'If you did not request this reset, you can ignore this email.',
+  })
 }
 
 export function yourTurnEmailHtml(args: {
-  gameName: string;
-  gameUrl: string;
-  turnDeadlineLabel: string | null;
+  gameName: string
+  gameUrl: string
+  turnDeadlineLabel: string | null
 }): string {
   return appEmailHtml({
     title: `Your turn in ${args.gameName}`,
-    intro: "It is your turn to play.",
-    ctaLabel: "Open Game",
+    intro: 'It is your turn to play.',
+    ctaLabel: 'Open Game',
     ctaUrl: args.gameUrl,
     detailRows: args.turnDeadlineLabel
-      ? [{ label: "Turn Deadline", value: args.turnDeadlineLabel }]
+      ? [{ label: 'Turn Deadline', value: args.turnDeadlineLabel }]
       : undefined,
-    footer: "You can disable turn emails from your account settings.",
-  });
+    footer: 'You can disable turn emails from your account settings.',
+  })
 }
 
 export function eliminationEmailHtml(args: {
-  gameName: string;
-  gameUrl: string;
-  eliminatedByName: string | null;
+  gameName: string
+  gameUrl: string
+  eliminatedByName: string | null
 }): string {
   return appEmailHtml({
     title: `Eliminated from ${args.gameName}`,
     intro: args.eliminatedByName
       ? `${args.eliminatedByName} eliminated you from the game.`
-      : "You have been eliminated from the game.",
-    ctaLabel: "View Game",
+      : 'You have been eliminated from the game.',
+    ctaLabel: 'View Game',
     ctaUrl: args.gameUrl,
-    detailRows: [{ label: "Status", value: "Eliminated" }],
-    footer: "You can disable elimination emails from your account settings.",
-  });
+    detailRows: [{ label: 'Status', value: 'Eliminated' }],
+    footer: 'You can disable elimination emails from your account settings.',
+  })
 }

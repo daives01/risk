@@ -1,18 +1,18 @@
-import { Button } from "@/components/ui/button";
-import type { MyGame } from "../types";
-import { isMyTurn } from "../types";
+import { Button } from '@/components/ui/button'
+import type { MyGame } from '../types'
+import { isMyTurn } from '../types'
 
 type ContinueGameProps = {
-  continueGame: MyGame | null;
-  isGamesLoading: boolean;
-  openMyGame: (game: MyGame) => void;
-};
+  continueGame: MyGame | null
+  isGamesLoading: boolean
+  openMyGame: (game: MyGame) => void
+}
 
 export function ContinueGame({ continueGame, isGamesLoading, openMyGame }: ContinueGameProps) {
   return (
     <section
       className={`space-y-3 rounded-lg border p-4 ${
-        continueGame ? "border-primary/55 bg-primary/10" : "bg-background/75"
+        continueGame ? 'border-primary/55 bg-primary/10' : 'bg-background/75'
       }`}
     >
       <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Continue</p>
@@ -41,5 +41,5 @@ export function ContinueGame({ continueGame, isGamesLoading, openMyGame }: Conti
         <p className="text-sm text-muted-foreground">Nothing in progress</p>
       )}
     </section>
-  );
+  )
 }

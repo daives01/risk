@@ -1,29 +1,29 @@
-import { type RefObject } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { ShortcutHint } from "@/components/ui/shortcut-hint";
-import { PAGE_SIZE, gameStatusLabel } from "../types";
-import type { GamesFilter, FilteredGame } from "../types";
+import { type RefObject } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
+import { ShortcutHint } from '@/components/ui/shortcut-hint'
+import { PAGE_SIZE, gameStatusLabel } from '../types'
+import type { GamesFilter, FilteredGame } from '../types'
 
 type GamesListProps = {
-  isGamesLoading: boolean;
-  sortedCount: number;
-  filteredHomeGames: FilteredGame[];
-  pagedHomeGames: FilteredGame[];
-  gamesFilter: GamesFilter;
-  setGamesFilterAndResetPage: (filter: GamesFilter) => void;
-  gamesPage: number;
-  setGamesPage: (page: number | ((prev: number) => number)) => void;
-  homePageCount: number;
-  gamesListSectionRef: RefObject<HTMLElement | null>;
-  currentGameButtonRefs: React.MutableRefObject<Array<HTMLButtonElement | null>>;
-};
+  isGamesLoading: boolean
+  sortedCount: number
+  filteredHomeGames: FilteredGame[]
+  pagedHomeGames: FilteredGame[]
+  gamesFilter: GamesFilter
+  setGamesFilterAndResetPage: (filter: GamesFilter) => void
+  gamesPage: number
+  setGamesPage: (page: number | ((prev: number) => number)) => void
+  homePageCount: number
+  gamesListSectionRef: RefObject<HTMLElement | null>
+  currentGameButtonRefs: React.MutableRefObject<Array<HTMLButtonElement | null>>
+}
 
 const FILTERS: { key: GamesFilter; shortcut: string }[] = [
-  { key: "active", shortcut: "a" },
-  { key: "lobby", shortcut: "l" },
-  { key: "public", shortcut: "p" },
-];
+  { key: 'active', shortcut: 'a' },
+  { key: 'lobby', shortcut: 'l' },
+  { key: 'public', shortcut: 'p' },
+]
 
 export function GamesList({
   isGamesLoading,
@@ -38,7 +38,7 @@ export function GamesList({
   gamesListSectionRef,
   currentGameButtonRefs,
 }: GamesListProps) {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
 
   return (
     <section
@@ -58,8 +58,8 @@ export function GamesList({
             onClick={() => setGamesFilterAndResetPage(key)}
             className={`flex items-center justify-between rounded-md border px-2 py-1 text-xs uppercase tracking-[0.08em] transition ${
               gamesFilter === key
-                ? "border-primary bg-primary/12 text-primary"
-                : "border-border/70 bg-background/60 text-muted-foreground hover:border-primary/45"
+                ? 'border-primary bg-primary/12 text-primary'
+                : 'border-border/70 bg-background/60 text-muted-foreground hover:border-primary/45'
             }`}
           >
             <span>{gameStatusLabel(key)}</span>
@@ -85,18 +85,20 @@ export function GamesList({
 
         {!isGamesLoading && sortedCount === 0 && (
           <div className="px-3 py-3">
-            <p className="text-sm text-muted-foreground">No games yet. Use Create game above to start one.</p>
+            <p className="text-sm text-muted-foreground">
+              No games yet. Use Create game above to start one.
+            </p>
           </div>
         )}
 
         {!isGamesLoading && sortedCount > 0 && filteredHomeGames.length === 0 && (
           <div className="px-3 py-3">
             <p className="text-sm text-muted-foreground">
-              {gamesFilter === "active"
-                ? "Nothing in progress. Create a game to get one going."
-                : gamesFilter === "lobby"
-                  ? "No lobby games to rejoin yet."
-                  : "No public lobbies available right now."}
+              {gamesFilter === 'active'
+                ? 'Nothing in progress. Create a game to get one going.'
+                : gamesFilter === 'lobby'
+                  ? 'No lobby games to rejoin yet.'
+                  : 'No public lobbies available right now.'}
             </p>
           </div>
         )}
@@ -106,22 +108,22 @@ export function GamesList({
             <button
               key={game._id}
               ref={(element) => {
-                currentGameButtonRefs.current[idx] = element;
+                currentGameButtonRefs.current[idx] = element
               }}
               type="button"
               onClick={() => {
-                if (game.status === "public") {
-                  navigate(`/g/${game._id}`);
-                  return;
+                if (game.status === 'public') {
+                  navigate(`/g/${game._id}`)
+
+                  return
                 }
-                navigate(
-                  game.status === "lobby" ? `/g/${game._id}` : `/play/${game._id}`,
-                );
+
+                navigate(game.status === 'lobby' ? `/g/${game._id}` : `/play/${game._id}`)
               }}
               className="grid w-full grid-cols-[1fr_auto_auto_auto] items-center gap-2 border-b border-border/60 px-3 py-2 text-left text-sm transition last:border-b-0 hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10 focus-visible:text-primary focus-visible:outline-none"
             >
               <span className="truncate">{game.name}</span>
-              {game.status !== "public" && game.isMyTurn ? (
+              {game.status !== 'public' && game.isMyTurn ? (
                 <span className="inline-flex min-w-20 items-center justify-center rounded-md border border-primary/50 bg-primary/15 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-primary">
                   Your turn
                 </span>
@@ -130,11 +132,11 @@ export function GamesList({
               )}
               <span
                 className={`inline-flex min-w-16 items-center justify-center rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] ${
-                  game.status === "active"
-                    ? "border-emerald-400/45 bg-emerald-500/10 text-emerald-300"
-                    : game.status === "lobby"
-                      ? "border-blue-400/45 bg-blue-500/10 text-blue-300"
-                      : "border-amber-400/45 bg-amber-500/10 text-amber-300"
+                  game.status === 'active'
+                    ? 'border-emerald-400/45 bg-emerald-500/10 text-emerald-300'
+                    : game.status === 'lobby'
+                      ? 'border-blue-400/45 bg-blue-500/10 text-blue-300'
+                      : 'border-amber-400/45 bg-amber-500/10 text-amber-300'
                 }`}
               >
                 {gameStatusLabel(game.status)}
@@ -172,5 +174,5 @@ export function GamesList({
         </div>
       )}
     </section>
-  );
+  )
 }

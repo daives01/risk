@@ -1,24 +1,24 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Id } from "@backend/_generated/dataModel";
-import { useReplayWindows } from "@/lib/game/use-replay-windows";
-import { useGameHistory } from "@/pages/game/hooks/use-game-history";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Id } from '@backend/_generated/dataModel'
+import { useReplayWindows } from '@/lib/game/use-replay-windows'
+import { useGameHistory } from '@/pages/game/hooks/use-game-history'
 import {
   resolveReplayFrameCommand,
   resolveSinceLastTurnStep,
   shouldRequestMissingReplayFrame,
   shouldRequestMissingHistoryFrame,
-} from "@/pages/game/hooks/replay-mode-policy";
+} from '@/pages/game/hooks/replay-mode-policy'
 
-const MISSING_HISTORY_FRAME_LOAD_DELAY_MS = 140;
+const MISSING_HISTORY_FRAME_LOAD_DELAY_MS = 140
 
 interface UseReplayModeOptions {
-  typedGameId: Id<"games"> | undefined;
-  isMapFullscreen: boolean;
-  graphMap: Parameters<typeof useGameHistory>[0]["graphMap"];
-  playerMap: Parameters<typeof useGameHistory>[0]["playerMap"];
-  myEnginePlayerId: string | undefined;
-  playbackIntervalMs: number;
+  typedGameId: Id<'games'> | undefined
+  isMapFullscreen: boolean
+  graphMap: Parameters<typeof useGameHistory>[0]['graphMap']
+  playerMap: Parameters<typeof useGameHistory>[0]['playerMap']
+  myEnginePlayerId: string | undefined
+  playbackIntervalMs: number
 }
 
 export function useReplayMode({
@@ -29,14 +29,17 @@ export function useReplayMode({
   myEnginePlayerId,
   playbackIntervalMs,
 }: UseReplayModeOptions) {
-  const [replayTimelineEnabled, setReplayTimelineEnabled] = useState(false);
-  const [jumpSinceLastTurnPending, setJumpSinceLastTurnPending] = useState(false);
-  const [pendingPreviousFrameIndex, setPendingPreviousFrameIndex] = useState<number | null>(null);
+  const [replayTimelineEnabled, setReplayTimelineEnabled] = useState(false)
+  const [jumpSinceLastTurnPending, setJumpSinceLastTurnPending] = useState(false)
+  const [pendingPreviousFrameIndex, setPendingPreviousFrameIndex] = useState<number | null>(null)
+
   const [pendingScrubFrame, setPendingScrubFrame] = useState<{
-    frameIndex: number;
-    direction: "previous" | "next" | "nearest";
-  } | null>(null);
-  const missingHistoryFrameLoadTimeoutRef = useRef<number | null>(null);
+    frameIndex: number
+    direction: 'previous' | 'next' | 'nearest'
+  } | null>(null)
+
+  const missingHistoryFrameLoadTimeoutRef = useRef<number | null>(null)
+
   const {
     historySummary,
     historyTimeline,
@@ -47,7 +50,7 @@ export function useReplayMode({
     historyLoadingTarget,
     loadOlderHistory,
     loadHistoryAroundIndex,
-  } = useReplayWindows(typedGameId, replayTimelineEnabled);
+  } = useReplayWindows(typedGameId, replayTimelineEnabled)
 
   const history = useGameHistory({
     historyTimeline,
@@ -57,7 +60,7 @@ export function useReplayMode({
     playerMap,
     myEnginePlayerId,
     playbackIntervalMs,
-  });
+  })
 
   const {
     historyOpen,
@@ -69,136 +72,157 @@ export function useReplayMode({
     activeHistoryFrameLoaded,
     lastTurnEndIndex,
     lastTurnEndLoaded,
-  } = history;
+  } = history
 
   const visibleFramePositions = useMemo(
     () => history.historyFrames.map((frame) => frame.index + 1),
     [history.historyFrames],
-  );
-  const resolvePreviousVisibleFramePosition = useCallback((frameIndex: number) => {
-    return [...visibleFramePositions].reverse().find((position) => position < frameIndex) ?? null;
-  }, [visibleFramePositions]);
-  const resolveVisibleFramePosition = useCallback((
-    frameIndex: number,
-    direction: "previous" | "next" | "nearest" = "nearest",
-  ) => {
-    if (visibleFramePositions.length === 0) return frameIndex;
-    if (visibleFramePositions.includes(frameIndex)) return frameIndex;
-    const previous = resolvePreviousVisibleFramePosition(frameIndex) ?? undefined;
-    const next = visibleFramePositions.find((position) => position > frameIndex);
-    if (direction === "previous") return previous ?? next ?? frameIndex;
-    if (direction === "next") return next ?? previous ?? frameIndex;
-    if (previous === undefined) return next ?? frameIndex;
-    if (next === undefined) return previous;
-    return frameIndex - previous <= next - frameIndex ? previous : next;
-  }, [resolvePreviousVisibleFramePosition, visibleFramePositions]);
-  const resolveVisibleFramePositionInsideLoadedRange = useCallback((
-    frameIndex: number,
-    direction: "previous" | "next" | "nearest" = "nearest",
-  ) => {
-    if (visibleFramePositions.includes(frameIndex)) return frameIndex;
-    const loadedPositionSet = new Set(loadedFramePositions);
-    const canReachWithoutGap = (from: number, to: number) => {
-      const start = Math.min(from, to);
-      const end = Math.max(from, to);
-      for (let position = start; position <= end; position += 1) {
-        if (!loadedPositionSet.has(position)) return false;
+  )
+
+  const resolvePreviousVisibleFramePosition = useCallback(
+    (frameIndex: number) => {
+      return [...visibleFramePositions].reverse().find((position) => position < frameIndex) ?? null
+    },
+    [visibleFramePositions],
+  )
+
+  const resolveVisibleFramePosition = useCallback(
+    (frameIndex: number, direction: 'previous' | 'next' | 'nearest' = 'nearest') => {
+      if (visibleFramePositions.length === 0) return frameIndex
+
+      if (visibleFramePositions.includes(frameIndex)) return frameIndex
+      const previous = resolvePreviousVisibleFramePosition(frameIndex) ?? undefined
+      const next = visibleFramePositions.find((position) => position > frameIndex)
+
+      if (direction === 'previous') return previous ?? next ?? frameIndex
+
+      if (direction === 'next') return next ?? previous ?? frameIndex
+
+      if (previous === undefined) return next ?? frameIndex
+
+      if (next === undefined) return previous
+
+      return frameIndex - previous <= next - frameIndex ? previous : next
+    },
+    [resolvePreviousVisibleFramePosition, visibleFramePositions],
+  )
+
+  const resolveVisibleFramePositionInsideLoadedRange = useCallback(
+    (frameIndex: number, direction: 'previous' | 'next' | 'nearest' = 'nearest') => {
+      if (visibleFramePositions.includes(frameIndex)) return frameIndex
+      const loadedPositionSet = new Set(loadedFramePositions)
+
+      const canReachWithoutGap = (from: number, to: number) => {
+        const start = Math.min(from, to)
+        const end = Math.max(from, to)
+
+        for (let position = start; position <= end; position += 1) {
+          if (!loadedPositionSet.has(position)) return false
+        }
+
+        return true
       }
-      return true;
-    };
-    const previous = [...visibleFramePositions]
-      .reverse()
-      .find((position) => position < frameIndex && canReachWithoutGap(position, frameIndex));
-    const next = visibleFramePositions
-      .find((position) => position > frameIndex && canReachWithoutGap(position, frameIndex));
-    if (direction === "previous") return previous ?? next ?? frameIndex;
-    if (direction === "next") return next ?? previous ?? frameIndex;
-    if (previous === undefined) return next ?? frameIndex;
-    if (next === undefined) return previous;
-    return frameIndex - previous <= next - frameIndex ? previous : next;
-  }, [loadedFramePositions, visibleFramePositions]);
+
+      const previous = [...visibleFramePositions]
+        .reverse()
+        .find((position) => position < frameIndex && canReachWithoutGap(position, frameIndex))
+
+      const next = visibleFramePositions.find(
+        (position) => position > frameIndex && canReachWithoutGap(position, frameIndex),
+      )
+
+      if (direction === 'previous') return previous ?? next ?? frameIndex
+
+      if (direction === 'next') return next ?? previous ?? frameIndex
+
+      if (previous === undefined) return next ?? frameIndex
+
+      if (next === undefined) return previous
+
+      return frameIndex - previous <= next - frameIndex ? previous : next
+    },
+    [loadedFramePositions, visibleFramePositions],
+  )
 
   const closeReplayMode = useCallback(() => {
-    setHistoryOpen(false);
-    setReplayTimelineEnabled(false);
-    setHistoryPlaying(false);
-    setJumpSinceLastTurnPending(false);
-    setPendingPreviousFrameIndex(null);
-    setPendingScrubFrame(null);
-  }, [setHistoryOpen, setHistoryPlaying]);
+    setHistoryOpen(false)
+    setReplayTimelineEnabled(false)
+    setHistoryPlaying(false)
+    setJumpSinceLastTurnPending(false)
+    setPendingPreviousFrameIndex(null)
+    setPendingScrubFrame(null)
+  }, [setHistoryOpen, setHistoryPlaying])
 
   const toggleReplayMode = useCallback(() => {
-    if (isMapFullscreen) return;
+    if (isMapFullscreen) return
     setHistoryOpen((prev) => {
-      const next = !prev;
-      setReplayTimelineEnabled(next);
-      if (!next) {
-        setJumpSinceLastTurnPending(false);
-        setPendingPreviousFrameIndex(null);
-        setPendingScrubFrame(null);
-      }
-      return next;
-    });
-    setHistoryPlaying(false);
-  }, [isMapFullscreen, setHistoryOpen, setHistoryPlaying]);
+      const next = !prev
+      setReplayTimelineEnabled(next)
 
-  const scrubToFrame = useCallback((frameIndex: number) => {
-    const targetFrameIndex = Math.max(0, Math.min(historyMaxIndex, Math.floor(frameIndex)));
-    const direction = targetFrameIndex < historyFrameIndex
-      ? "previous"
-      : targetFrameIndex > historyFrameIndex
-        ? "next"
-        : "nearest";
-    if (!visibleFramePositions.includes(targetFrameIndex)) {
-      setPendingScrubFrame({ frameIndex: targetFrameIndex, direction });
-      loadHistoryAroundIndex(targetFrameIndex);
-    } else {
-      setPendingScrubFrame(null);
-    }
-    setHistoryFrameIndex(targetFrameIndex);
-    setHistoryPlaying(false);
-  }, [
-    historyFrameIndex,
-    historyMaxIndex,
-    loadHistoryAroundIndex,
-    setHistoryFrameIndex,
-    setHistoryPlaying,
-    visibleFramePositions,
-  ]);
+      if (!next) {
+        setJumpSinceLastTurnPending(false)
+        setPendingPreviousFrameIndex(null)
+        setPendingScrubFrame(null)
+      }
+
+      return next
+    })
+    setHistoryPlaying(false)
+  }, [isMapFullscreen, setHistoryOpen, setHistoryPlaying])
+
+  const scrubToFrame = useCallback(
+    (frameIndex: number) => {
+      const targetFrameIndex = Math.max(0, Math.min(historyMaxIndex, Math.floor(frameIndex)))
+
+      const direction =
+        targetFrameIndex < historyFrameIndex
+          ? 'previous'
+          : targetFrameIndex > historyFrameIndex
+            ? 'next'
+            : 'nearest'
+
+      if (!visibleFramePositions.includes(targetFrameIndex)) {
+        setPendingScrubFrame({ frameIndex: targetFrameIndex, direction })
+        loadHistoryAroundIndex(targetFrameIndex)
+      } else {
+        setPendingScrubFrame(null)
+      }
+
+      setHistoryFrameIndex(targetFrameIndex)
+      setHistoryPlaying(false)
+    },
+    [
+      historyFrameIndex,
+      historyMaxIndex,
+      loadHistoryAroundIndex,
+      setHistoryFrameIndex,
+      setHistoryPlaying,
+      visibleFramePositions,
+    ],
+  )
 
   const moveToPreviousFrame = useCallback(() => {
-    const previousFrameIndex = resolveReplayFrameCommand("previous-frame", { frameIndex: historyFrameIndex, historyMaxIndex });
-    if (shouldRequestMissingReplayFrame({ requestedFrameIndex: previousFrameIndex, loadedFramePositions })) {
-      setPendingScrubFrame({ frameIndex: previousFrameIndex, direction: "previous" });
-      loadHistoryAroundIndex(previousFrameIndex);
-      setHistoryFrameIndex(previousFrameIndex);
-    } else {
-      setHistoryFrameIndex(resolveVisibleFramePositionInsideLoadedRange(previousFrameIndex, "previous"));
-    }
-    setHistoryPlaying(false);
-  }, [
-    historyFrameIndex,
-    historyMaxIndex,
-    loadedFramePositions,
-    loadHistoryAroundIndex,
-    resolveVisibleFramePositionInsideLoadedRange,
-    setHistoryFrameIndex,
-    setHistoryPlaying,
-  ]);
-
-  const moveToNextFrame = useCallback(() => {
-    const nextFrameIndex = resolveReplayFrameCommand("next-frame", {
+    const previousFrameIndex = resolveReplayFrameCommand('previous-frame', {
       frameIndex: historyFrameIndex,
       historyMaxIndex,
-    });
-    if (shouldRequestMissingReplayFrame({ requestedFrameIndex: nextFrameIndex, loadedFramePositions })) {
-      setPendingScrubFrame({ frameIndex: nextFrameIndex, direction: "next" });
-      loadHistoryAroundIndex(nextFrameIndex);
-      setHistoryFrameIndex(nextFrameIndex);
+    })
+
+    if (
+      shouldRequestMissingReplayFrame({
+        requestedFrameIndex: previousFrameIndex,
+        loadedFramePositions,
+      })
+    ) {
+      setPendingScrubFrame({ frameIndex: previousFrameIndex, direction: 'previous' })
+      loadHistoryAroundIndex(previousFrameIndex)
+      setHistoryFrameIndex(previousFrameIndex)
     } else {
-      setHistoryFrameIndex(resolveVisibleFramePositionInsideLoadedRange(nextFrameIndex, "next"));
+      setHistoryFrameIndex(
+        resolveVisibleFramePositionInsideLoadedRange(previousFrameIndex, 'previous'),
+      )
     }
-    setHistoryPlaying(false);
+
+    setHistoryPlaying(false)
   }, [
     historyFrameIndex,
     historyMaxIndex,
@@ -207,36 +231,67 @@ export function useReplayMode({
     resolveVisibleFramePositionInsideLoadedRange,
     setHistoryFrameIndex,
     setHistoryPlaying,
-  ]);
+  ])
+
+  const moveToNextFrame = useCallback(() => {
+    const nextFrameIndex = resolveReplayFrameCommand('next-frame', {
+      frameIndex: historyFrameIndex,
+      historyMaxIndex,
+    })
+
+    if (
+      shouldRequestMissingReplayFrame({ requestedFrameIndex: nextFrameIndex, loadedFramePositions })
+    ) {
+      setPendingScrubFrame({ frameIndex: nextFrameIndex, direction: 'next' })
+      loadHistoryAroundIndex(nextFrameIndex)
+      setHistoryFrameIndex(nextFrameIndex)
+    } else {
+      setHistoryFrameIndex(resolveVisibleFramePositionInsideLoadedRange(nextFrameIndex, 'next'))
+    }
+
+    setHistoryPlaying(false)
+  }, [
+    historyFrameIndex,
+    historyMaxIndex,
+    loadedFramePositions,
+    loadHistoryAroundIndex,
+    resolveVisibleFramePositionInsideLoadedRange,
+    setHistoryFrameIndex,
+    setHistoryPlaying,
+  ])
 
   const resetToLatestFrame = useCallback(() => {
     setHistoryFrameIndex((frameIndex) =>
       resolveVisibleFramePosition(
-        resolveReplayFrameCommand("reset-to-latest", { frameIndex, historyMaxIndex }),
-        "previous",
-      )
-    );
-    setHistoryPlaying(false);
-  }, [historyMaxIndex, resolveVisibleFramePosition, setHistoryFrameIndex, setHistoryPlaying]);
+        resolveReplayFrameCommand('reset-to-latest', { frameIndex, historyMaxIndex }),
+        'previous',
+      ),
+    )
+    setHistoryPlaying(false)
+  }, [historyMaxIndex, resolveVisibleFramePosition, setHistoryFrameIndex, setHistoryPlaying])
 
   const togglePlayback = useCallback(() => {
-    setHistoryPlaying((playing) => !playing);
-  }, [setHistoryPlaying]);
+    setHistoryPlaying((playing) => !playing)
+  }, [setHistoryPlaying])
 
   const jumpSinceLastTurn = useCallback(() => {
-    setHistoryPlaying(false);
+    setHistoryPlaying(false)
+
     const next = resolveSinceLastTurnStep({
       canLoadOlderHistory,
       historyLoadingOlder,
       lastTurnEndIndex,
       lastTurnEndLoaded,
-    });
-    setJumpSinceLastTurnPending(next.pending);
+    })
+
+    setJumpSinceLastTurnPending(next.pending)
+
     if (next.frameIndex !== null) {
-      setHistoryFrameIndex(next.frameIndex);
+      setHistoryFrameIndex(next.frameIndex)
     }
+
     if (next.shouldLoadOlderHistory) {
-      loadOlderHistory();
+      loadOlderHistory()
     }
   }, [
     canLoadOlderHistory,
@@ -246,22 +301,26 @@ export function useReplayMode({
     loadOlderHistory,
     setHistoryFrameIndex,
     setHistoryPlaying,
-  ]);
+  ])
 
   useEffect(() => {
-    if (!jumpSinceLastTurnPending) return;
+    if (!jumpSinceLastTurnPending) return
+
     const next = resolveSinceLastTurnStep({
       canLoadOlderHistory,
       historyLoadingOlder,
       lastTurnEndIndex,
       lastTurnEndLoaded,
-    });
-    setJumpSinceLastTurnPending(next.pending);
+    })
+
+    setJumpSinceLastTurnPending(next.pending)
+
     if (next.frameIndex !== null) {
-      setHistoryFrameIndex(next.frameIndex);
+      setHistoryFrameIndex(next.frameIndex)
     }
+
     if (next.shouldLoadOlderHistory) {
-      loadOlderHistory();
+      loadOlderHistory()
     }
   }, [
     canLoadOlderHistory,
@@ -271,18 +330,21 @@ export function useReplayMode({
     lastTurnEndLoaded,
     loadOlderHistory,
     setHistoryFrameIndex,
-  ]);
+  ])
 
   useEffect(() => {
-    if (pendingPreviousFrameIndex === null) return;
-    const previousVisibleFrameIndex = resolvePreviousVisibleFramePosition(pendingPreviousFrameIndex);
+    if (pendingPreviousFrameIndex === null) return
+    const previousVisibleFrameIndex = resolvePreviousVisibleFramePosition(pendingPreviousFrameIndex)
+
     if (previousVisibleFrameIndex !== null) {
-      setPendingPreviousFrameIndex(null);
-      setHistoryFrameIndex(previousVisibleFrameIndex);
-      return;
+      setPendingPreviousFrameIndex(null)
+      setHistoryFrameIndex(previousVisibleFrameIndex)
+
+      return
     }
+
     if (!canLoadOlderHistory && !historyLoadingOlder) {
-      setPendingPreviousFrameIndex(null);
+      setPendingPreviousFrameIndex(null)
     }
   }, [
     canLoadOlderHistory,
@@ -290,20 +352,22 @@ export function useReplayMode({
     pendingPreviousFrameIndex,
     resolvePreviousVisibleFramePosition,
     setHistoryFrameIndex,
-  ]);
+  ])
 
   useEffect(() => {
-    if (!pendingScrubFrame) return;
-    if (!activeHistoryFrameLoaded && (historyLoadingOlder || historyLoadingTarget)) return;
+    if (!pendingScrubFrame) return
+
+    if (!activeHistoryFrameLoaded && (historyLoadingOlder || historyLoadingTarget)) return
 
     const resolvedFrameIndex = resolveVisibleFramePositionInsideLoadedRange(
       pendingScrubFrame.frameIndex,
       pendingScrubFrame.direction,
-    );
-    if (resolvedFrameIndex === pendingScrubFrame.frameIndex && !activeHistoryFrameLoaded) return;
+    )
 
-    setPendingScrubFrame(null);
-    setHistoryFrameIndex(resolvedFrameIndex);
+    if (resolvedFrameIndex === pendingScrubFrame.frameIndex && !activeHistoryFrameLoaded) return
+
+    setPendingScrubFrame(null)
+    setHistoryFrameIndex(resolvedFrameIndex)
   }, [
     activeHistoryFrameLoaded,
     historyLoadingOlder,
@@ -311,32 +375,33 @@ export function useReplayMode({
     pendingScrubFrame,
     resolveVisibleFramePositionInsideLoadedRange,
     setHistoryFrameIndex,
-  ]);
+  ])
 
   useEffect(() => {
-    if (!isMapFullscreen || !historyOpen) return;
-    closeReplayMode();
-  }, [closeReplayMode, historyOpen, isMapFullscreen]);
+    if (!isMapFullscreen || !historyOpen) return
+    closeReplayMode()
+  }, [closeReplayMode, historyOpen, isMapFullscreen])
 
   useEffect(() => {
     if (missingHistoryFrameLoadTimeoutRef.current !== null) {
-      window.clearTimeout(missingHistoryFrameLoadTimeoutRef.current);
-      missingHistoryFrameLoadTimeoutRef.current = null;
+      window.clearTimeout(missingHistoryFrameLoadTimeoutRef.current)
+      missingHistoryFrameLoadTimeoutRef.current = null
     }
-    if (!shouldRequestMissingHistoryFrame({ historyOpen, activeHistoryFrameLoaded })) return;
+
+    if (!shouldRequestMissingHistoryFrame({ historyOpen, activeHistoryFrameLoaded })) return
     missingHistoryFrameLoadTimeoutRef.current = window.setTimeout(() => {
-      loadHistoryAroundIndex(historyFrameIndex);
-      missingHistoryFrameLoadTimeoutRef.current = null;
-    }, MISSING_HISTORY_FRAME_LOAD_DELAY_MS);
-  }, [activeHistoryFrameLoaded, historyFrameIndex, historyOpen, loadHistoryAroundIndex]);
+      loadHistoryAroundIndex(historyFrameIndex)
+      missingHistoryFrameLoadTimeoutRef.current = null
+    }, MISSING_HISTORY_FRAME_LOAD_DELAY_MS)
+  }, [activeHistoryFrameLoaded, historyFrameIndex, historyOpen, loadHistoryAroundIndex])
 
   useEffect(() => {
     return () => {
       if (missingHistoryFrameLoadTimeoutRef.current !== null) {
-        window.clearTimeout(missingHistoryFrameLoadTimeoutRef.current);
+        window.clearTimeout(missingHistoryFrameLoadTimeoutRef.current)
       }
-    };
-  }, []);
+    }
+  }, [])
 
   return {
     activeHistoryFrame: history.activeHistoryFrame,
@@ -361,5 +426,5 @@ export function useReplayMode({
       togglePlayback,
       toggleReplayMode,
     },
-  };
+  }
 }

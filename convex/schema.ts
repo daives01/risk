@@ -1,26 +1,26 @@
-import { defineSchema, defineTable } from "convex/server";
-import { v } from "convex/values";
-import { effectiveRulesetValidator, rulesetOverridesValidator } from "./rulesets";
+import { defineSchema, defineTable } from 'convex/server'
+import { v } from 'convex/values'
+import { effectiveRulesetValidator, rulesetOverridesValidator } from './rulesets'
 
 const territoryInfo = v.object({
   name: v.optional(v.string()),
   continentId: v.optional(v.string()),
   tags: v.optional(v.array(v.string())),
-});
+})
 
 const continentInfo = v.object({
   territoryIds: v.array(v.string()),
   bonus: v.number(),
-});
+})
 
 const graphMap = v.object({
   territories: v.record(v.string(), territoryInfo),
   adjacency: v.record(v.string(), v.array(v.string())),
   continents: v.optional(v.record(v.string(), continentInfo)),
-});
+})
 
 const mapVisual = v.object({
-  imageStorageId: v.id("_storage"),
+  imageStorageId: v.id('_storage'),
   imageWidth: v.number(),
   imageHeight: v.number(),
   nodeScale: v.optional(v.union(v.number(), v.null())),
@@ -31,18 +31,18 @@ const mapVisual = v.object({
       y: v.number(),
     }),
   ),
-});
+})
 
 const mapAuthoring = v.object({
-  status: v.union(v.literal("draft"), v.literal("published")),
+  status: v.union(v.literal('draft'), v.literal('published')),
   updatedAt: v.number(),
   publishedAt: v.optional(v.number()),
-});
+})
 
 const mapPlayerLimits = v.object({
   minPlayers: v.number(),
   maxPlayers: v.number(),
-});
+})
 
 const dieFaceCounts = v.object({
   ones: v.number(),
@@ -51,12 +51,12 @@ const dieFaceCounts = v.object({
   fours: v.number(),
   fives: v.number(),
   sixes: v.number(),
-});
+})
 
 const diceRollCounts = v.object({
   attack: dieFaceCounts,
   defense: dieFaceCounts,
-});
+})
 
 const combatLuckRoleStats = v.object({
   battles: v.number(),
@@ -64,36 +64,26 @@ const combatLuckRoleStats = v.object({
   actualOwnLosses: v.number(),
   expectedEnemyLosses: v.number(),
   actualEnemyLosses: v.number(),
-});
+})
 
 const combatLuckStats = v.object({
   attack: combatLuckRoleStats,
   defense: combatLuckRoleStats,
-});
+})
 
 export default defineSchema({
   games: defineTable({
     name: v.string(),
     mapId: v.string(),
-    status: v.union(
-      v.literal("lobby"),
-      v.literal("active"),
-      v.literal("finished"),
-    ),
-    visibility: v.union(v.literal("public"), v.literal("unlisted")),
-    timingMode: v.union(
-      v.literal("realtime"),
-      v.literal("async_1d"),
-      v.literal("async_3d"),
-    ),
+    status: v.union(v.literal('lobby'), v.literal('active'), v.literal('finished')),
+    visibility: v.union(v.literal('public'), v.literal('unlisted')),
+    timingMode: v.union(v.literal('realtime'), v.literal('async_1d'), v.literal('async_3d')),
     excludeWeekends: v.optional(v.boolean()),
     maxPlayers: v.number(),
     teamModeEnabled: v.optional(v.boolean()),
     teamCount: v.optional(v.number()),
     teamNames: v.optional(v.record(v.string(), v.string())),
-    teamAssignmentStrategy: v.optional(
-      v.union(v.literal("manual"), v.literal("balancedRandom")),
-    ),
+    teamAssignmentStrategy: v.optional(v.union(v.literal('manual'), v.literal('balancedRandom'))),
     rulesetOverrides: v.optional(rulesetOverridesValidator),
     effectiveRuleset: v.optional(effectiveRulesetValidator),
     createdBy: v.string(),
@@ -104,27 +94,19 @@ export default defineSchema({
     winningTeamId: v.optional(v.string()),
     turnStartedAt: v.optional(v.number()),
     turnDeadlineAt: v.optional(v.number()),
-    turnTimeoutJobId: v.optional(v.id("_scheduled_functions")),
+    turnTimeoutJobId: v.optional(v.id('_scheduled_functions')),
     slackTeamId: v.optional(v.string()),
     slackNotificationsEnabled: v.optional(v.boolean()),
   })
-    .index("by_visibility_status_createdAt", [
-      "visibility",
-      "status",
-      "createdAt",
-    ])
-    .index("by_status_timingMode_turnDeadlineAt", [
-      "status",
-      "timingMode",
-      "turnDeadlineAt",
-    ])
-    .index("by_slackTeamId", ["slackTeamId"]),
+    .index('by_visibility_status_createdAt', ['visibility', 'status', 'createdAt'])
+    .index('by_status_timingMode_turnDeadlineAt', ['status', 'timingMode', 'turnDeadlineAt'])
+    .index('by_slackTeamId', ['slackTeamId']),
   gamePlayers: defineTable({
-    gameId: v.id("games"),
+    gameId: v.id('games'),
     userId: v.string(),
     displayName: v.string(),
     color: v.optional(v.string()),
-    role: v.union(v.literal("host"), v.literal("player")),
+    role: v.union(v.literal('host'), v.literal('player')),
     joinedAt: v.number(),
     enginePlayerId: v.optional(v.string()),
     teamId: v.optional(v.string()),
@@ -132,19 +114,19 @@ export default defineSchema({
     diceRollCounts: v.optional(diceRollCounts),
     combatLuckStats: v.optional(combatLuckStats),
   })
-    .index("by_gameId", ["gameId"])
-    .index("by_userId", ["userId"])
-    .index("by_gameId_userId", ["gameId", "userId"]),
+    .index('by_gameId', ['gameId'])
+    .index('by_userId', ['userId'])
+    .index('by_gameId_userId', ['gameId', 'userId']),
   gameInvites: defineTable({
-    gameId: v.id("games"),
+    gameId: v.id('games'),
     code: v.string(),
     createdAt: v.number(),
     expiresAt: v.optional(v.number()),
   })
-    .index("by_gameId", ["gameId"])
-    .index("by_code", ["code"]),
+    .index('by_gameId', ['gameId'])
+    .index('by_code', ['code']),
   gameActions: defineTable({
-    gameId: v.id("games"),
+    gameId: v.id('games'),
     index: v.number(),
     playerId: v.string(),
     action: v.any(),
@@ -156,25 +138,25 @@ export default defineSchema({
     stateVersionAfter: v.optional(v.number()),
     createdAt: v.number(),
   })
-    .index("by_gameId", ["gameId"])
-    .index("by_gameId_index", ["gameId", "index"])
-    .index("by_gameId_playerId", ["gameId", "playerId"]),
+    .index('by_gameId', ['gameId'])
+    .index('by_gameId_index', ['gameId', 'index'])
+    .index('by_gameId_playerId', ['gameId', 'playerId']),
   gameStates: defineTable({
-    gameId: v.id("games"),
+    gameId: v.id('games'),
     version: v.number(),
     privateState: v.any(),
     publicState: v.any(),
     updatedAt: v.number(),
-  }).index("by_gameId", ["gameId"]),
+  }).index('by_gameId', ['gameId']),
   gameStateSnapshots: defineTable({
-    gameId: v.id("games"),
+    gameId: v.id('games'),
     index: v.number(),
     publicState: v.any(),
     createdAt: v.number(),
-  }).index("by_gameId_index", ["gameId", "index"]),
+  }).index('by_gameId_index', ['gameId', 'index']),
   gameChatMessages: defineTable({
-    gameId: v.id("games"),
-    channel: v.union(v.literal("all"), v.literal("global"), v.literal("team"), v.literal("dm")),
+    gameId: v.id('games'),
+    channel: v.union(v.literal('all'), v.literal('global'), v.literal('team'), v.literal('dm')),
     teamId: v.optional(v.string()),
     recipientUserId: v.optional(v.string()),
     recipientDisplayName: v.optional(v.string()),
@@ -186,11 +168,21 @@ export default defineSchema({
     createdAt: v.number(),
     editedAt: v.optional(v.number()),
   })
-    .index("by_gameId_createdAt", ["gameId", "createdAt"])
-    .index("by_gameId_channel_createdAt", ["gameId", "channel", "createdAt"])
-    .index("by_gameId_channel_teamId_createdAt", ["gameId", "channel", "teamId", "createdAt"])
-    .index("by_gameId_channel_senderUserId_createdAt", ["gameId", "channel", "senderUserId", "createdAt"])
-    .index("by_gameId_channel_recipientUserId_createdAt", ["gameId", "channel", "recipientUserId", "createdAt"]),
+    .index('by_gameId_createdAt', ['gameId', 'createdAt'])
+    .index('by_gameId_channel_createdAt', ['gameId', 'channel', 'createdAt'])
+    .index('by_gameId_channel_teamId_createdAt', ['gameId', 'channel', 'teamId', 'createdAt'])
+    .index('by_gameId_channel_senderUserId_createdAt', [
+      'gameId',
+      'channel',
+      'senderUserId',
+      'createdAt',
+    ])
+    .index('by_gameId_channel_recipientUserId_createdAt', [
+      'gameId',
+      'channel',
+      'recipientUserId',
+      'createdAt',
+    ]),
   maps: defineTable({
     mapId: v.string(),
     name: v.string(),
@@ -200,23 +192,23 @@ export default defineSchema({
     authoring: mapAuthoring,
     createdAt: v.number(),
   })
-    .index("by_mapId", ["mapId"])
-    .index("by_authoringStatus", ["authoring.status"]),
+    .index('by_mapId', ['mapId'])
+    .index('by_authoringStatus', ['authoring.status']),
   admins: defineTable({
     userId: v.string(),
     createdAt: v.number(),
-  }).index("by_userId", ["userId"]),
+  }).index('by_userId', ['userId']),
   userSettings: defineTable({
     userId: v.string(),
     emailTurnNotificationsEnabled: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_userId", ["userId"]),
+  }).index('by_userId', ['userId']),
   slackWorkspaces: defineTable({
     teamId: v.string(),
     teamName: v.string(),
     defaultChannelId: v.string(),
-    status: v.union(v.literal("active"), v.literal("disabled")),
+    status: v.union(v.literal('active'), v.literal('disabled')),
     botTokenCiphertext: v.string(),
     botTokenIv: v.string(),
     botTokenTag: v.string(),
@@ -225,16 +217,16 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_teamId", ["teamId"])
-    .index("by_status", ["status"]),
+    .index('by_teamId', ['teamId'])
+    .index('by_status', ['status']),
   userSlackIdentities: defineTable({
     userId: v.string(),
     teamId: v.string(),
     slackUserId: v.string(),
-    status: v.union(v.literal("active"), v.literal("unlinked")),
+    status: v.union(v.literal('active'), v.literal('unlinked')),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_userId_teamId", ["userId", "teamId"])
-    .index("by_teamId_slackUserId", ["teamId", "slackUserId"]),
-});
+    .index('by_userId_teamId', ['userId', 'teamId'])
+    .index('by_teamId_slackUserId', ['teamId', 'slackUserId']),
+})

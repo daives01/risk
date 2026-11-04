@@ -1,44 +1,44 @@
-import { Link } from "react-router-dom";
-import type { ComponentProps } from "react";
-import { Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { RulesetSummary } from "@/components/game/ruleset-summary";
-import { Switch } from "@/components/ui/switch";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { GameCard } from "@/components/game/game-card";
-import { resolveAutoSelectState, sortCardsByKind } from "@/components/game/game-card-utils";
+import { Link } from 'react-router-dom'
+import type { ComponentProps } from 'react'
+import { Sparkles } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { RulesetSummary } from '@/components/game/ruleset-summary'
+import { Switch } from '@/components/ui/switch'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { GameCard } from '@/components/game/game-card'
+import { resolveAutoSelectState, sortCardsByKind } from '@/components/game/game-card-utils'
 
 interface GameModalsProps {
-  shortcutsOpen: boolean;
-  onToggleShortcuts: () => void;
-  onCloseShortcuts: () => void;
-  settingsOpen: boolean;
-  onCloseSettings: () => void;
-  rulesetSummary: ComponentProps<typeof RulesetSummary>;
-  showDelegationToggle: boolean;
-  allowTeammatesToAct: boolean;
-  delegationError: string | null;
-  onToggleDelegation: (allow: boolean) => void;
-  cardsOpen: boolean;
-  myHand: Array<{ cardId: string; kind: string }> | null | undefined;
-  selectedCardIds: Set<string>;
-  onToggleCard: (cardId: string) => void;
-  mustTradeNow: boolean;
-  forcedTradeHandSize: number;
-  tradeValues: number[];
-  tradeValueOverflow: "repeatLast" | "continueByFive";
-  tradesCompleted: number;
-  onCloseCards: () => void;
-  controlsDisabled: boolean;
-  canTradeCards: boolean;
-  cardsInteractive: boolean;
-  submitting: boolean;
-  autoTradeCardIds: string[] | null;
-  onTrade: () => void;
-  onAutoSelect: (cardIds: string[]) => void;
-  endgameModal: "won" | "lost" | null;
-  onDismissEndgame: () => void;
+  shortcutsOpen: boolean
+  onToggleShortcuts: () => void
+  onCloseShortcuts: () => void
+  settingsOpen: boolean
+  onCloseSettings: () => void
+  rulesetSummary: ComponentProps<typeof RulesetSummary>
+  showDelegationToggle: boolean
+  allowTeammatesToAct: boolean
+  delegationError: string | null
+  onToggleDelegation: (allow: boolean) => void
+  cardsOpen: boolean
+  myHand: Array<{ cardId: string; kind: string }> | null | undefined
+  selectedCardIds: Set<string>
+  onToggleCard: (cardId: string) => void
+  mustTradeNow: boolean
+  forcedTradeHandSize: number
+  tradeValues: number[]
+  tradeValueOverflow: 'repeatLast' | 'continueByFive'
+  tradesCompleted: number
+  onCloseCards: () => void
+  controlsDisabled: boolean
+  canTradeCards: boolean
+  cardsInteractive: boolean
+  submitting: boolean
+  autoTradeCardIds: string[] | null
+  onTrade: () => void
+  onAutoSelect: (cardIds: string[]) => void
+  endgameModal: 'won' | 'lost' | null
+  onDismissEndgame: () => void
 }
 
 export function GameModals({
@@ -72,22 +72,24 @@ export function GameModals({
   endgameModal,
   onDismissEndgame,
 }: GameModalsProps) {
-  const autoSelectState = resolveAutoSelectState(selectedCardIds, autoTradeCardIds);
-  const tradeIndex = tradesCompleted;
+  const autoSelectState = resolveAutoSelectState(selectedCardIds, autoTradeCardIds)
+  const tradeIndex = tradesCompleted
+
   const tradeValuesLabel =
     tradeValues.length === 0
-      ? ""
-      : tradeValueOverflow === "continueByFive"
-        ? `${tradeValues.join(", ")}, +5`
-        : `${tradeValues.join(", ")}, repeat`;
+      ? ''
+      : tradeValueOverflow === 'continueByFive'
+        ? `${tradeValues.join(', ')}, +5`
+        : `${tradeValues.join(', ')}, repeat`
+
   const nextTradeValue =
     tradeValues.length === 0
       ? 0
       : tradeIndex < tradeValues.length
         ? tradeValues[tradeIndex]!
-        : tradeValueOverflow === "continueByFive"
+        : tradeValueOverflow === 'continueByFive'
           ? tradeValues[tradeValues.length - 1]! + (tradeIndex - tradeValues.length + 1) * 5
-          : tradeValues[tradeValues.length - 1]!;
+          : tradeValues[tradeValues.length - 1]!
 
   return (
     <>
@@ -96,7 +98,7 @@ export function GameModals({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant={shortcutsOpen ? "default" : "outline"}
+                variant={shortcutsOpen ? 'default' : 'outline'}
                 size="icon-sm"
                 type="button"
                 aria-label="Toggle keyboard shortcuts"
@@ -123,17 +125,38 @@ export function GameModals({
                 </Button>
               </div>
               <div className="space-y-1.5 text-sm">
-                <p><span className="font-semibold">1-9</span>: Set active troop/dice count</p>
-                <p><span className="font-semibold">↑/↓</span>: Increase or decrease troop/dice counts</p>
-                <p><span className="font-semibold">U</span>: Undo last placement</p>
-                <p><span className="font-semibold">C</span>: Open cards</p>
-                <p><span className="font-semibold">I</span>: Toggle map info</p>
-                <p><span className="font-semibold">G</span>: Open game rules</p>
-                <p><span className="font-semibold">F</span>: Toggle fullscreen map</p>
-                <p><span className="font-semibold">?</span>: Toggle this help</p>
-                <p><span className="font-semibold">H</span>: Toggle history</p>
+                <p>
+                  <span className="font-semibold">1-9</span>: Set active troop/dice count
+                </p>
+                <p>
+                  <span className="font-semibold">↑/↓</span>: Increase or decrease troop/dice counts
+                </p>
+                <p>
+                  <span className="font-semibold">U</span>: Undo last placement
+                </p>
+                <p>
+                  <span className="font-semibold">C</span>: Open cards
+                </p>
+                <p>
+                  <span className="font-semibold">I</span>: Toggle map info
+                </p>
+                <p>
+                  <span className="font-semibold">G</span>: Open game rules
+                </p>
+                <p>
+                  <span className="font-semibold">F</span>: Toggle fullscreen map
+                </p>
+                <p>
+                  <span className="font-semibold">?</span>: Toggle this help
+                </p>
+                <p>
+                  <span className="font-semibold">H</span>: Toggle history
+                </p>
               </div>
-              <Link to="/faq" className="inline-block text-xs text-muted-foreground transition hover:text-primary">
+              <Link
+                to="/faq"
+                className="inline-block text-xs text-muted-foreground transition hover:text-primary"
+              >
                 FAQ &amp; How to Play →
               </Link>
             </CardContent>
@@ -159,7 +182,9 @@ export function GameModals({
               {showDelegationToggle && (
                 <div className="space-y-2 rounded-lg border bg-background/75 p-3">
                   <label className="flex items-center justify-between gap-3">
-                    <span className="text-sm text-muted-foreground">Allow teammates to play my turns</span>
+                    <span className="text-sm text-muted-foreground">
+                      Allow teammates to play my turns
+                    </span>
                     <Switch
                       aria-label="Allow teammates to play my turns"
                       checked={allowTeammatesToAct}
@@ -169,7 +194,10 @@ export function GameModals({
                   {delegationError && <p className="text-sm text-red-400">{delegationError}</p>}
                 </div>
               )}
-              <Link to="/faq" className="inline-block text-xs text-muted-foreground transition hover:text-primary">
+              <Link
+                to="/faq"
+                className="inline-block text-xs text-muted-foreground transition hover:text-primary"
+              >
                 FAQ &amp; How to Play →
               </Link>
             </CardContent>
@@ -190,7 +218,13 @@ export function GameModals({
                     </p>
                   )}
                 </div>
-                <Button className="m-5" size="xs" variant="outline" type="button" onClick={onCloseCards}>
+                <Button
+                  className="m-5"
+                  size="xs"
+                  variant="outline"
+                  type="button"
+                  onClick={onCloseCards}
+                >
                   Close
                 </Button>
               </div>
@@ -200,7 +234,7 @@ export function GameModals({
                   <Button
                     className="absolute left-5 top-4 gap-1.5"
                     size="xs"
-                    variant={autoSelectState.active ? "default" : "outline"}
+                    variant={autoSelectState.active ? 'default' : 'outline'}
                     disabled={submitting}
                     aria-pressed={autoSelectState.active}
                     onClick={() => onAutoSelect([...autoSelectState.nextSelection])}
@@ -210,33 +244,40 @@ export function GameModals({
                   </Button>
                 )}
                 <div className="mx-auto flex min-w-max justify-center px-10 pt-3">
-                {sortCardsByKind(myHand).map((card, index, sortedHand) => {
-                  const selected = selectedCardIds.has(card.cardId);
-                  return (
-                    <div
-                      key={card.cardId}
-                      className="-ml-16 first:ml-0"
-                      style={{ transform: `rotate(${(index - (sortedHand.length - 1) / 2) * 1.7}deg) translateY(${Math.abs(index - (sortedHand.length - 1) / 2) * 3}px)` }}
-                    >
-                      <GameCard
-                        card={card}
-                        selected={selected}
-                        disabled={!cardsInteractive}
-                        onClick={cardsInteractive ? () => onToggleCard(card.cardId) : undefined}
-                      />
-                    </div>
-                  );
-                })}
+                  {sortCardsByKind(myHand).map((card, index, sortedHand) => {
+                    const selected = selectedCardIds.has(card.cardId)
+
+                    return (
+                      <div
+                        key={card.cardId}
+                        className="-ml-16 first:ml-0"
+                        style={{
+                          transform: `rotate(${(index - (sortedHand.length - 1) / 2) * 1.7}deg) translateY(${Math.abs(index - (sortedHand.length - 1) / 2) * 3}px)`,
+                        }}
+                      >
+                        <GameCard
+                          card={card}
+                          selected={selected}
+                          disabled={!cardsInteractive}
+                          onClick={cardsInteractive ? () => onToggleCard(card.cardId) : undefined}
+                        />
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
               <div className="grid min-h-20 grid-cols-3 items-center bg-background/60 px-5 py-4">
                 <div>
                   <div className="text-[9px] text-muted-foreground">Next trade</div>
-                  <div className={`text-lg font-semibold transition-colors ${canTradeCards && selectedCardIds.size === 3 ? "text-primary" : "text-muted-foreground"}`}>
+                  <div
+                    className={`text-lg font-semibold transition-colors ${canTradeCards && selectedCardIds.size === 3 ? 'text-primary' : 'text-muted-foreground'}`}
+                  >
                     {nextTradeValue} troops
                   </div>
-                  {tradeValuesLabel && <span className="sr-only">Trade schedule: {tradeValuesLabel}</span>}
+                  {tradeValuesLabel && (
+                    <span className="sr-only">Trade schedule: {tradeValuesLabel}</span>
+                  )}
                 </div>
                 {cardsInteractive ? (
                   <Button
@@ -247,7 +288,9 @@ export function GameModals({
                   >
                     Trade 3
                   </Button>
-                ) : <div />}
+                ) : (
+                  <div />
+                )}
                 <div />
               </div>
             </CardContent>
@@ -261,14 +304,14 @@ export function GameModals({
             <CardContent className="space-y-4 p-5">
               <div className="space-y-1">
                 <p className="text-base font-semibold">
-                  {endgameModal === "won" ? "You won!" : "You have been eliminated"}
+                  {endgameModal === 'won' ? 'You won!' : 'You have been eliminated'}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {endgameModal === "won" ? "Victory is yours." : "You are out of the match."}
+                  {endgameModal === 'won' ? 'Victory is yours.' : 'You are out of the match.'}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                {endgameModal === "won" ? (
+                {endgameModal === 'won' ? (
                   <Button asChild size="sm">
                     <Link to="/">Go Home</Link>
                   </Button>
@@ -282,5 +325,5 @@ export function GameModals({
         </div>
       )}
     </>
-  );
+  )
 }

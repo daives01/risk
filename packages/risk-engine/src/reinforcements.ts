@@ -1,11 +1,11 @@
-import type { PlayerId, TerritoryId, TeamId } from "./types.js";
-import type { GraphMap } from "./map.js";
-import type { GameState } from "./types.js";
-import type { TeamsConfig } from "./config.js";
+import type { PlayerId, TerritoryId, TeamId } from './types.js'
+import type { GraphMap } from './map.js'
+import type { GameState } from './types.js'
+import type { TeamsConfig } from './config.js'
 
 export interface ReinforcementResult {
-  readonly total: number;
-  readonly sources: Record<string, number>;
+  readonly total: number
+  readonly sources: Record<string, number>
 }
 
 /**
@@ -22,51 +22,54 @@ export function calculateReinforcements(
   turnOrder?: readonly PlayerId[],
 ): ReinforcementResult {
   // Count territories owned by this player
-  const ownedTerritories: TerritoryId[] = [];
+  const ownedTerritories: TerritoryId[] = []
+
   for (const [tid, ts] of Object.entries(state.territories)) {
     if (ts.ownerId === playerId) {
-      ownedTerritories.push(tid as TerritoryId);
+      ownedTerritories.push(tid as TerritoryId)
     }
   }
 
-  const territoryCount = ownedTerritories.length;
-  const base = Math.max(3, Math.floor(territoryCount / 3));
+  const territoryCount = ownedTerritories.length
+  const base = Math.max(3, Math.floor(territoryCount / 3))
 
-  const sources: Record<string, number> = { territory: base };
-  let total = base;
+  const sources: Record<string, number> = { territory: base }
+  let total = base
 
   // Continent bonuses
   if (map.continents) {
-    const ownedSet = new Set<string>(ownedTerritories);
-    const playerTeamId = state.players[playerId]?.teamId;
+    const ownedSet = new Set<string>(ownedTerritories)
+    const playerTeamId = state.players[playerId]?.teamId
+
     const teamBonusMode =
-      teamsConfig?.teamsEnabled &&
-      teamsConfig.continentBonusRecipient === "majorityHolderOnTeam";
+      teamsConfig?.teamsEnabled && teamsConfig.continentBonusRecipient === 'majorityHolderOnTeam'
 
     for (const [cid, continent] of Object.entries(map.continents)) {
-      if (continent.territoryIds.length === 0) continue;
+      if (continent.territoryIds.length === 0) continue
 
       if (!teamBonusMode || !playerTeamId) {
         if (continent.territoryIds.every((tid) => ownedSet.has(tid))) {
-          sources[cid] = continent.bonus;
-          total += continent.bonus;
+          sources[cid] = continent.bonus
+          total += continent.bonus
         }
-        continue;
+
+        continue
       }
 
       const majorityHolder = findTeamContinentBonusRecipient(
         state,
         continent.territoryIds,
         turnOrder ?? state.turnOrder,
-      );
+      )
+
       if (majorityHolder.teamId === playerTeamId && majorityHolder.playerId === playerId) {
-        sources[cid] = continent.bonus;
-        total += continent.bonus;
+        sources[cid] = continent.bonus
+        total += continent.bonus
       }
     }
   }
 
-  return { total, sources };
+  return { total, sources }
 }
 
 function findTeamContinentBonusRecipient(
@@ -74,56 +77,64 @@ function findTeamContinentBonusRecipient(
   territoryIds: readonly TerritoryId[],
   turnOrder: readonly PlayerId[],
 ): { teamId?: TeamId; playerId?: PlayerId } {
-  let owningTeamId: TeamId | undefined;
-  const playerCounts = new Map<PlayerId, number>();
+  let owningTeamId: TeamId | undefined
+  const playerCounts = new Map<PlayerId, number>()
 
   for (const territoryId of territoryIds) {
-    const territory = state.territories[territoryId];
-    if (!territory || territory.ownerId === "neutral") {
-      return {};
+    const territory = state.territories[territoryId]
+
+    if (!territory || territory.ownerId === 'neutral') {
+      return {}
     }
 
-    const ownerId = territory.ownerId;
-    const teamId = state.players[ownerId]?.teamId;
-    if (!teamId) return {};
+    const ownerId = territory.ownerId
+    const teamId = state.players[ownerId]?.teamId
+
+    if (!teamId) return {}
 
     if (!owningTeamId) {
-      owningTeamId = teamId;
+      owningTeamId = teamId
     } else if (owningTeamId !== teamId) {
-      return {};
+      return {}
     }
 
-    playerCounts.set(ownerId, (playerCounts.get(ownerId) ?? 0) + 1);
+    playerCounts.set(ownerId, (playerCounts.get(ownerId) ?? 0) + 1)
   }
 
-  if (!owningTeamId || playerCounts.size === 0) return {};
+  if (!owningTeamId || playerCounts.size === 0) return {}
 
-  let winnerPlayerId: PlayerId | undefined;
-  let winnerCount = -1;
-  const turnOrderIndex = new Map<PlayerId, number>(
-    turnOrder.map((pid, index) => [pid, index]),
-  );
+  let winnerPlayerId: PlayerId | undefined
+  let winnerCount = -1
+  const turnOrderIndex = new Map<PlayerId, number>(turnOrder.map((pid, index) => [pid, index]))
+
   const sortedPlayers = [...playerCounts.keys()].sort((a, b) => {
-    const aIndex = turnOrderIndex.get(a);
-    const bIndex = turnOrderIndex.get(b);
+    const aIndex = turnOrderIndex.get(a)
+    const bIndex = turnOrderIndex.get(b)
+
     if (aIndex !== undefined && bIndex !== undefined) {
-      if (aIndex !== bIndex) return aIndex - bIndex;
-      return a.localeCompare(b);
+      if (aIndex !== bIndex) return aIndex - bIndex
+
+      return a.localeCompare(b)
     }
-    if (aIndex !== undefined) return -1;
-    if (bIndex !== undefined) return 1;
-    return a.localeCompare(b);
-  });
+
+    if (aIndex !== undefined) return -1
+
+    if (bIndex !== undefined) return 1
+
+    return a.localeCompare(b)
+  })
+
   for (const playerId of sortedPlayers) {
-    const count = playerCounts.get(playerId) ?? 0;
+    const count = playerCounts.get(playerId) ?? 0
+
     if (count > winnerCount) {
-      winnerPlayerId = playerId;
-      winnerCount = count;
+      winnerPlayerId = playerId
+      winnerCount = count
     }
   }
 
   return {
     teamId: owningTeamId,
     playerId: winnerPlayerId,
-  };
+  }
 }

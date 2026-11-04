@@ -1,4 +1,5 @@
-import { cronJobs } from "convex/server";
-const crons = cronJobs();
+import { cronJobs } from 'convex/server'
 
-export default crons;
+const crons = cronJobs()
+
+export default crons

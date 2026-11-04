@@ -1,11 +1,11 @@
-import { Link, Navigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TabNav } from "@/pages/home/components/TabNav";
-import { ArchivePanel } from "@/pages/home/components/ArchivePanel";
-import { AccountPanel } from "@/pages/home/components/AccountPanel";
-import { HomeTabPanel } from "@/pages/home/components/HomeTabPanel";
-import { BottomLinks } from "@/pages/home/components/BottomLinks";
-import { useHomePageState } from "@/pages/home/useHomePageState";
+import { Link, Navigate } from 'react-router-dom'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { TabNav } from '@/pages/home/components/TabNav'
+import { ArchivePanel } from '@/pages/home/components/ArchivePanel'
+import { AccountPanel } from '@/pages/home/components/AccountPanel'
+import { HomeTabPanel } from '@/pages/home/components/HomeTabPanel'
+import { BottomLinks } from '@/pages/home/components/BottomLinks'
+import { useHomePageState } from '@/pages/home/useHomePageState'
 
 export default function HomePage() {
   const {
@@ -39,15 +39,16 @@ export default function HomePage() {
     setGamesFilterAndResetPage,
     setArchiveFilterAndResetPage,
     browsePublicLobbies,
-  } = useHomePageState();
+  } = useHomePageState()
 
   if (isPending || (session && isConvexAuthLoading)) {
-    return <div className="page-shell flex items-center justify-center">Loading...</div>;
+    return <div className="page-shell flex items-center justify-center">Loading...</div>
   }
 
   if (!session) {
-    const redirectPath = `${location.pathname}${location.search}${location.hash}`;
-    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />;
+    const redirectPath = `${location.pathname}${location.search}${location.hash}`
+
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />
   }
 
   return (
@@ -66,7 +67,7 @@ export default function HomePage() {
           </CardHeader>
 
           <CardContent className="space-y-4 pb-6">
-            {tab === "home" && (
+            {tab === 'home' && (
               <HomeTabPanel
                 isGamesLoading={isGamesLoading}
                 sortedCount={sortedGames.length}
@@ -86,7 +87,7 @@ export default function HomePage() {
               />
             )}
 
-            {tab === "archive" && (
+            {tab === 'archive' && (
               <ArchivePanel
                 archiveFilter={archiveFilter}
                 setArchiveFilterAndResetPage={setArchiveFilterAndResetPage}
@@ -99,13 +100,11 @@ export default function HomePage() {
               />
             )}
 
-            {tab === "account" && (
-              <AccountPanel session={session} isAdmin={isAdmin} />
-            )}
+            {tab === 'account' && <AccountPanel session={session} isAdmin={isAdmin} />}
           </CardContent>
         </Card>
       </div>
       <BottomLinks />
     </div>
-  );
+  )
 }

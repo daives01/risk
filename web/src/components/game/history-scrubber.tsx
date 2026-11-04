@@ -1,19 +1,20 @@
-import type { SyntheticEvent } from "react";
+import type { SyntheticEvent } from 'react'
 
 interface HistoryScrubberProps {
-  min: number;
-  max: number;
-  value: number;
-  onChange: (value: number) => void;
+  min: number
+  max: number
+  value: number
+  onChange: (value: number) => void
 }
 
 export function HistoryScrubber({ min, max, value, onChange }: HistoryScrubberProps) {
-  const range = Math.max(1, max - min);
-  const clamped = Math.max(min, Math.min(max, value));
-  const progress = ((clamped - min) / range) * 100;
+  const range = Math.max(1, max - min)
+  const clamped = Math.max(min, Math.min(max, value))
+  const progress = ((clamped - min) / range) * 100
+
   const handleInputEnd = (event: SyntheticEvent<HTMLInputElement>) => {
-    event.currentTarget.blur();
-  };
+    event.currentTarget.blur()
+  }
 
   return (
     <label className="flex min-w-[180px] items-center gap-2 text-xs text-muted-foreground">
@@ -46,5 +47,5 @@ export function HistoryScrubber({ min, max, value, onChange }: HistoryScrubberPr
         />
       </div>
     </label>
-  );
+  )
 }

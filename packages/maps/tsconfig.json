@@ -15,7 +15,5 @@
   },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"],
-  "references": [
-    { "path": "../risk-engine" }
-  ]
+  "references": [{ "path": "../risk-engine" }]
 }

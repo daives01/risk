@@ -1,30 +1,30 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { TerritoryId } from "risk-engine";
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { TerritoryId } from 'risk-engine'
 
 interface TerritoryState {
-  armies: number;
+  armies: number
 }
 
 interface StateLike {
-  stateVersion: number;
-  pending?: unknown;
-  territories: Record<string, TerritoryState>;
+  stateVersion: number
+  pending?: unknown
+  territories: Record<string, TerritoryState>
 }
 
 interface UseGameAutoAttackOptions {
-  state: StateLike | null | undefined;
-  isMyTurn: boolean;
-  historyOpen: boolean;
-  phase: string;
-  selectedFrom: string | null;
-  selectedTo: string | null;
-  submitting: boolean;
-  validToIds: Set<string>;
+  state: StateLike | null | undefined
+  isMyTurn: boolean
+  historyOpen: boolean
+  phase: string
+  selectedFrom: string | null
+  selectedTo: string | null
+  submitting: boolean
+  validToIds: Set<string>
   submitAction: (
-    action: { type: "Attack"; from: TerritoryId; to: TerritoryId; attackerDice: number },
+    action: { type: 'Attack'; from: TerritoryId; to: TerritoryId; attackerDice: number },
     options?: { preserveSelection?: boolean; preserveAttackDice?: boolean },
-  ) => Promise<void> | void;
+  ) => Promise<void> | void
 }
 
 export function useGameAutoAttack({
@@ -38,60 +38,72 @@ export function useGameAutoAttack({
   validToIds,
   submitAction,
 }: UseGameAutoAttackOptions) {
-  const [autoAttacking, setAutoAttacking] = useState(false);
-  const autoAttackSubmittedVersionRef = useRef<number | null>(null);
-  const nextAutoAttackTimeoutRef = useRef<number | null>(null);
+  const [autoAttacking, setAutoAttacking] = useState(false)
+  const autoAttackSubmittedVersionRef = useRef<number | null>(null)
+  const nextAutoAttackTimeoutRef = useRef<number | null>(null)
 
   const stopAutoAttack = useCallback(() => {
     if (nextAutoAttackTimeoutRef.current !== null) {
-      window.clearTimeout(nextAutoAttackTimeoutRef.current);
-      nextAutoAttackTimeoutRef.current = null;
+      window.clearTimeout(nextAutoAttackTimeoutRef.current)
+      nextAutoAttackTimeoutRef.current = null
     }
-    autoAttackSubmittedVersionRef.current = null;
-    setAutoAttacking(false);
-  }, []);
+
+    autoAttackSubmittedVersionRef.current = null
+    setAutoAttacking(false)
+  }, [])
 
   useEffect(() => {
-    if (!autoAttacking) return;
-    if (!state || !isMyTurn || historyOpen || phase !== "Attack" || state.pending) {
-      stopAutoAttack();
-      return;
+    if (!autoAttacking) return
+
+    if (!state || !isMyTurn || historyOpen || phase !== 'Attack' || state.pending) {
+      stopAutoAttack()
+
+      return
     }
-    if (!selectedFrom || !selectedTo || submitting) return;
-    const fromArmies = state.territories[selectedFrom]?.armies ?? 0;
+
+    if (!selectedFrom || !selectedTo || submitting) return
+    const fromArmies = state.territories[selectedFrom]?.armies ?? 0
+
     if (fromArmies < 4) {
-      stopAutoAttack();
-      return;
+      stopAutoAttack()
+
+      return
     }
+
     if (!validToIds.has(selectedTo)) {
-      stopAutoAttack();
-      return;
+      stopAutoAttack()
+
+      return
     }
-    if (autoAttackSubmittedVersionRef.current === state.stateVersion) return;
-    const hasPreviousAutoResult = autoAttackSubmittedVersionRef.current !== null;
+
+    if (autoAttackSubmittedVersionRef.current === state.stateVersion) return
+    const hasPreviousAutoResult = autoAttackSubmittedVersionRef.current !== null
+
     const submitNextAttack = () => {
-      nextAutoAttackTimeoutRef.current = null;
-      autoAttackSubmittedVersionRef.current = state.stateVersion;
+      nextAutoAttackTimeoutRef.current = null
+      autoAttackSubmittedVersionRef.current = state.stateVersion
       void submitAction(
         {
-          type: "Attack",
+          type: 'Attack',
           from: selectedFrom as TerritoryId,
           to: selectedTo as TerritoryId,
           attackerDice: 3,
         },
         { preserveSelection: true, preserveAttackDice: true },
-      );
-    };
+      )
+    }
+
     if (hasPreviousAutoResult) {
-      nextAutoAttackTimeoutRef.current = window.setTimeout(submitNextAttack, 500);
+      nextAutoAttackTimeoutRef.current = window.setTimeout(submitNextAttack, 500)
+
       return () => {
         if (nextAutoAttackTimeoutRef.current !== null) {
-          window.clearTimeout(nextAutoAttackTimeoutRef.current);
-          nextAutoAttackTimeoutRef.current = null;
+          window.clearTimeout(nextAutoAttackTimeoutRef.current)
+          nextAutoAttackTimeoutRef.current = null
         }
-      };
+      }
     } else {
-      submitNextAttack();
+      submitNextAttack()
     }
   }, [
     autoAttacking,
@@ -105,18 +117,21 @@ export function useGameAutoAttack({
     submitAction,
     submitting,
     validToIds,
-  ]);
+  ])
 
-  useEffect(() => () => {
-    if (nextAutoAttackTimeoutRef.current !== null) {
-      window.clearTimeout(nextAutoAttackTimeoutRef.current);
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      if (nextAutoAttackTimeoutRef.current !== null) {
+        window.clearTimeout(nextAutoAttackTimeoutRef.current)
+      }
+    },
+    [],
+  )
 
   return {
     autoAttacking,
     setAutoAttacking,
     stopAutoAttack,
     autoAttackSubmittedVersionRef,
-  };
+  }
 }
