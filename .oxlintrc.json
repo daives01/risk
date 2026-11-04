@@ -21,7 +21,8 @@
     "anti-slop/no-conditional-empty-object-spread": "error",
     "anti-slop/no-object-parameters": "error",
     "anti-slop/no-unknown-returns": "error",
-    "anti-slop/no-unknown-type-aliases": "error"
+    "anti-slop/no-unknown-type-aliases": "error",
+    "anti-slop/no-module-mocking": "error"
   },
   "overrides": [
     {
