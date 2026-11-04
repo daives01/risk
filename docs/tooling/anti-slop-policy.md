@@ -105,3 +105,12 @@ those runtime checks and their rejected-input behavior. Typed query adapters and
 external response parsing remain bounded assertion-cleanup work. Broader adoption
 requires a rule policy that supports actual parser/error inputs; moving a parser's
 unknown parameter into a cosmetic wrapper is not an acceptable substitute.
+
+## Unknown return contracts
+
+`no-unknown-returns` is enforced workspace-wide at a zero baseline. The pinned
+rule checks explicit unknown return annotations, including local aliases/unions
+and Promise/PromiseLike wrappers; it does not prove that inferred returns or
+`any` are parsed. Unknown parser inputs remain permitted under the input decision
+above. Functions should expose their checked output contract, without changing
+unknown inputs into trusted values simply to satisfy lint.
