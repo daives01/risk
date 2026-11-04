@@ -1,4 +1,10 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "ignorePatterns": ["**/dist/**", "convex/_generated/**", ".agents/**", ".codex/**"]
+  "ignorePatterns": [
+    "**/dist/**",
+    "convex/_generated/**",
+    ".agents/**",
+    ".codex/**",
+    "vendor/**"
+  ]
 }

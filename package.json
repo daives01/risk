@@ -19,7 +19,8 @@
     "check": "bun run typecheck && bun run lint && bun run test && bun run build",
     "lint:ox": "oxlint .",
     "format": "oxfmt --write",
-    "format:check": "oxfmt --check"
+    "format:check": "oxfmt --check",
+    "audit:anti-slop": "oxlint -c .oxlintrc.audit.json --format json ."
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.13.0",
@@ -36,7 +37,8 @@
     "convex-test": "^0.0.67",
     "typescript": "~6.0.0",
     "oxfmt": "0.76.0",
-    "oxlint": "1.91.0"
+    "oxlint": "1.91.0",
+    "@oxlint/plugins": "1.91.0"
   },
   "overrides": {
     "@babel/core": "^7.29.13",
