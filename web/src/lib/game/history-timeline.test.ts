@@ -1,7 +1,7 @@
 /// <reference types="bun" />
 import { describe, expect, test } from "bun:test";
-import { mergeHistoryWindowActions, reconstructHistoryWindows } from "./history-timeline";
-import type { PublicState } from "./types";
+import { applyTimelineStatePatch, mergeHistoryWindowActions, reconstructHistoryWindows } from "./history-timeline";
+import type { PublicState, TimelineStatePatch } from "./types";
 
 const checkpoint: PublicState = {
   players: {
@@ -24,6 +24,56 @@ const checkpoint: PublicState = {
   handSizes: { p1: 3, p2: 4 },
   stateVersion: 7,
 };
+
+describe("replay patch omission semantics", () => {
+  test("applies false, zero and empty collections without mutating prior state or patch", () => {
+    const previous = { ...checkpoint, capturedThisTurn: true };
+    const before = structuredClone(previous);
+    const patch: TimelineStatePatch = {
+      players: {}, turnOrder: [], turn: { currentPlayerId: "p2", phase: "Fortify", round: 0 },
+      capturedThisTurn: false, tradesCompleted: 0, deckCount: 0, discardCount: 0,
+      handSizes: {}, stateVersion: 0, territories: { alaska: { armies: 0 } }, fortifiesUsedThisTurn: 0,
+    };
+    const patchBefore = structuredClone(patch);
+    const next = applyTimelineStatePatch(previous, patch);
+    expect(next).toMatchObject({
+      players: {}, turnOrder: [], turn: { currentPlayerId: "p2", phase: "Fortify", round: 0 },
+      capturedThisTurn: false, tradesCompleted: 0, deckCount: 0, discardCount: 0,
+      handSizes: {}, stateVersion: 0, fortifiesUsedThisTurn: 0,
+    });
+    expect(next.territories.alaska).toEqual({ ownerId: "p1", armies: 0 });
+    expect(next.pending).toBe(previous.pending);
+    expect(next.reinforcements).toBe(previous.reinforcements);
+    expect(previous).toEqual(before);
+    expect(patch).toEqual(patchBefore);
+  });
+
+  test("keeps omitted fields, deletes null fields and retains own undefined optionals", () => {
+    const omitted = applyTimelineStatePatch(checkpoint, {});
+    expect(omitted.pending).toBe(checkpoint.pending);
+    expect(omitted.reinforcements).toBe(checkpoint.reinforcements);
+    expect(omitted.fortifiesUsedThisTurn).toBe(1);
+    const removed = applyTimelineStatePatch(checkpoint, {
+      pending: null, reinforcements: null, fortifiesUsedThisTurn: null,
+    });
+    expect(Object.hasOwn(removed, "pending")).toBe(false);
+    expect(Object.hasOwn(removed, "reinforcements")).toBe(false);
+    expect(Object.hasOwn(removed, "fortifiesUsedThisTurn")).toBe(false);
+    const explicit = applyTimelineStatePatch(checkpoint, {
+      pending: undefined, reinforcements: undefined, fortifiesUsedThisTurn: undefined,
+    });
+    expect(Object.hasOwn(explicit, "pending")).toBe(true);
+    expect(Object.hasOwn(explicit, "reinforcements")).toBe(true);
+    expect(Object.hasOwn(explicit, "fortifiesUsedThisTurn")).toBe(true);
+    expect(explicit.pending).toBeUndefined();
+    expect(explicit.reinforcements).toBeUndefined();
+    expect(explicit.fortifiesUsedThisTurn).toBeUndefined();
+    const unchanged = applyTimelineStatePatch(removed, {});
+    expect(Object.hasOwn(unchanged, "pending")).toBe(false);
+    expect(Object.hasOwn(unchanged, "reinforcements")).toBe(false);
+    expect(Object.hasOwn(unchanged, "fortifiesUsedThisTurn")).toBe(false);
+  });
+});
 
 describe("history timeline reconstruction", () => {
   test("combines cached history windows in frame order", () => {

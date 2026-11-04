@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildMapImportPrompt, parseMapImportJson } from "./map-import";
+import { buildMapExportJson, buildMapImportPrompt, parseMapImportJson } from "./map-import";
 
 describe("parseMapImportJson", () => {
   test("parses a valid payload", () => {
@@ -116,5 +116,39 @@ describe("buildMapImportPrompt", () => {
     expect(prompt).toContain("adjacency must be symmetric");
     expect(prompt).toContain("Every territory must be assigned to at least one continent");
     expect(prompt).toContain("Example JSON");
+  });
+});
+
+describe("buildMapExportJson", () => {
+  test("preserves deterministic territory field order, zero anchors and independent tag copies", () => {
+    const tags = ["coast", "port"];
+    const input = {
+      graphMap: {
+        territories: { beta: { name: "", tags: [] }, alpha: { name: "Alpha", tags } },
+        adjacency: { beta: ["alpha"], alpha: ["beta"] },
+      },
+      anchors: { alpha: { x: 0, y: 0 } },
+      playerLimits: { minPlayers: 2, maxPlayers: 4 },
+    };
+    const before = structuredClone(input);
+    const result = buildMapExportJson(input);
+    expect(JSON.stringify(result.territories)).toBe(
+      '[{"id":"alpha","name":"Alpha","tags":["coast","port"],"x":0,"y":0},{"id":"beta"}]',
+    );
+    expect(Object.hasOwn(result.territories[1]!, "name")).toBe(false);
+    expect(Object.hasOwn(result.territories[1]!, "tags")).toBe(false);
+    expect(Object.hasOwn(result.territories[1]!, "x")).toBe(false);
+    expect(Object.hasOwn(result.territories[1]!, "y")).toBe(false);
+    expect(result.territories[0]!.tags).not.toBe(tags);
+    result.territories[0]!.tags!.push("export-only");
+    expect(input).toEqual(before);
+  });
+
+  test("retains truthy names verbatim and omits optional properties when absent", () => {
+    const result = buildMapExportJson({
+      graphMap: { territories: { a: { name: "   " }, b: {} }, adjacency: {} },
+      anchors: {}, playerLimits: { minPlayers: 2, maxPlayers: 2 },
+    });
+    expect(result.territories).toEqual([{ id: "a", name: "   " }, { id: "b" }]);
   });
 });

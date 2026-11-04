@@ -41,12 +41,14 @@ export function buildMapExportJson(args: {
   const territories = territoryIds.map((territoryId) => {
     const info = args.graphMap.territories[territoryId] ?? {};
     const anchor = args.anchors[territoryId];
-    return {
-      id: territoryId,
-      ...(info.name ? { name: info.name } : {}),
-      ...(Array.isArray(info.tags) && info.tags.length > 0 ? { tags: [...info.tags] } : {}),
-      ...(anchor ? { x: anchor.x, y: anchor.y } : {}),
-    };
+    const territory: MapImportJson["territories"][number] = { id: territoryId };
+    if (info.name) territory.name = info.name;
+    if (Array.isArray(info.tags) && info.tags.length > 0) territory.tags = [...info.tags];
+    if (anchor) {
+      territory.x = anchor.x;
+      territory.y = anchor.y;
+    }
+    return territory;
   });
 
   const adjacency = Object.fromEntries(

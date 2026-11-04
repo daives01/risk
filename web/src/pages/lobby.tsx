@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import type { OptimisticLocalStore } from "convex/browser";
-import type { FunctionReturnType } from "convex/server";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { ArrowLeft, Copy, Play, Shuffle, Trash2, UserRoundPlus, X } from "lucide-react";
 import { PLAYER_COLOR_NAME_BY_HEX } from "risk-engine";
 import { api } from "@backend/_generated/api";
@@ -492,11 +492,10 @@ export default function LobbyPage() {
     setError(null);
     setSavingRules(true);
     try {
+      const fortify: RulesetOverridesInput["fortify"] = { fortifyMode };
+      if (maxFortifiesPerTurn !== "unlimited") fortify.maxFortifiesPerTurn = maxFortifiesPerTurn;
       const rulesetOverrides: RulesetOverridesInput = {
-        fortify: {
-          fortifyMode,
-          ...(maxFortifiesPerTurn === "unlimited" ? {} : { maxFortifiesPerTurn }),
-        },
+        fortify,
         cards: {
           forcedTradeHandSize,
           tradeValues: [...CARD_INCREMENT_PRESETS[cardIncrementPreset].tradeValues],
@@ -514,11 +513,12 @@ export default function LobbyPage() {
         timingMode: timingModeDraft,
         excludeWeekends: excludeWeekendsDraft,
       });
-      await setSlackNotifications({
+      const slackArgs: FunctionArgs<typeof api.lobby.setSlackNotifications> = {
         gameId: gameId as Id<"games">,
         enabled: slackNotificationsEnabledDraft,
-        ...(slackNotificationsEnabledDraft && slackTeamIdDraft ? { slackTeamId: slackTeamIdDraft } : {}),
-      });
+      };
+      if (slackNotificationsEnabledDraft && slackTeamIdDraft) slackArgs.slackTeamId = slackTeamIdDraft;
+      await setSlackNotifications(slackArgs);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save rules");
     } finally {

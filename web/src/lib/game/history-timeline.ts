@@ -23,19 +23,16 @@ export function applyTimelineStatePatch(previous: PublicState, patch: TimelineSt
     };
   }
 
-  const next: PublicState = {
-    ...previous,
-    ...(patch.players ? { players: patch.players } : {}),
-    ...(patch.turnOrder ? { turnOrder: patch.turnOrder } : {}),
-    territories,
-    ...(patch.turn ? { turn: patch.turn } : {}),
-    ...(patch.capturedThisTurn !== undefined ? { capturedThisTurn: patch.capturedThisTurn } : {}),
-    ...(patch.tradesCompleted !== undefined ? { tradesCompleted: patch.tradesCompleted } : {}),
-    ...(patch.deckCount !== undefined ? { deckCount: patch.deckCount } : {}),
-    ...(patch.discardCount !== undefined ? { discardCount: patch.discardCount } : {}),
-    ...(patch.handSizes ? { handSizes: patch.handSizes } : {}),
-    ...(patch.stateVersion !== undefined ? { stateVersion: patch.stateVersion } : {}),
-  };
+  const next: PublicState = { ...previous, territories };
+  if (patch.players) next.players = patch.players;
+  if (patch.turnOrder) next.turnOrder = patch.turnOrder;
+  if (patch.turn) next.turn = patch.turn;
+  if (patch.capturedThisTurn !== undefined) next.capturedThisTurn = patch.capturedThisTurn;
+  if (patch.tradesCompleted !== undefined) next.tradesCompleted = patch.tradesCompleted;
+  if (patch.deckCount !== undefined) next.deckCount = patch.deckCount;
+  if (patch.discardCount !== undefined) next.discardCount = patch.discardCount;
+  if (patch.handSizes) next.handSizes = patch.handSizes;
+  if (patch.stateVersion !== undefined) next.stateVersion = patch.stateVersion;
 
   if ("pending" in patch) {
     if (patch.pending === null) delete next.pending;

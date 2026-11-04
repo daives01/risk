@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { useLocation, useParams } from "react-router-dom";
 import { useMutation } from "convex/react";
 import type { OptimisticLocalStore } from "convex/browser";
+import type { FunctionArgs } from "convex/server";
 import type { Id } from "@backend/_generated/dataModel";
 import { api } from "@backend/_generated/api";
 import { defaultRuleset } from "risk-engine";
@@ -1073,14 +1074,15 @@ export default function GamePage() {
           text,
         });
       } else {
-        await sendGameChatMessageMutation({
+        const messageArgs: FunctionArgs<typeof api.gameChat.sendMessage> = {
           gameId: typedGameId,
           channel: chatChannel,
-          ...(chatChannel === "dm" && chatRecipientEnginePlayerId
-            ? { recipientEnginePlayerId: chatRecipientEnginePlayerId }
-            : {}),
           text,
-        });
+        };
+        if (chatChannel === "dm" && chatRecipientEnginePlayerId) {
+          messageArgs.recipientEnginePlayerId = chatRecipientEnginePlayerId;
+        }
+        await sendGameChatMessageMutation(messageArgs);
       }
       if (isEditing) {
         setChatDraft("");
