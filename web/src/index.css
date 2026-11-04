@@ -1,14 +1,23 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@import 'tailwindcss';
+@import 'tw-animate-css';
 
 @keyframes luck-destination-reveal {
-  0%, 55% { opacity: 0; }
-  100% { opacity: 1; }
+  0%,
+  55% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 @keyframes combat-outcome-dot-travel {
-  from { left: var(--combat-expected-left); }
-  to { left: var(--combat-actual-left); }
+  from {
+    left: var(--combat-expected-left);
+  }
+  to {
+    left: var(--combat-actual-left);
+  }
 }
 
 @custom-variant dark (&:is(.dark *));
@@ -78,13 +87,13 @@
   }
 
   /* Use app-provided +/- controls, not browser-native number steppers. */
-  input[type="number"] {
+  input[type='number'] {
     -moz-appearance: textfield;
     appearance: textfield;
   }
 
-  input[type="number"]::-webkit-inner-spin-button,
-  input[type="number"]::-webkit-outer-spin-button {
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
     -webkit-appearance: none;
     margin: 0;
   }
@@ -96,7 +105,7 @@
   }
 
   body {
-    font-family: "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
     @apply bg-background text-foreground antialiased;
   }
 }
@@ -191,7 +200,10 @@
     padding: 0.5rem 0.75rem;
     font-size: 0.875rem;
     letter-spacing: 0.04em;
-    transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+    transition:
+      border-color 120ms ease,
+      color 120ms ease,
+      background 120ms ease;
   }
 
   .app-menu-item:hover {
@@ -241,7 +253,10 @@
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid color-mix(in oklab, var(--app-border), black 35%);
     font-size: 0.875rem;
-    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+    transition:
+      background 120ms ease,
+      color 120ms ease,
+      border-color 120ms ease;
   }
 
   .app-list-row:last-child {
@@ -358,8 +373,17 @@
   }
 
   .soft-grid {
-    background-image: linear-gradient(to right, color-mix(in oklab, var(--app-border), transparent 70%) 1px, transparent 1px),
-      linear-gradient(to bottom, color-mix(in oklab, var(--app-border), transparent 70%) 1px, transparent 1px);
+    background-image:
+      linear-gradient(
+        to right,
+        color-mix(in oklab, var(--app-border), transparent 70%) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        to bottom,
+        color-mix(in oklab, var(--app-border), transparent 70%) 1px,
+        transparent 1px
+      );
     background-size: 28px 28px;
   }
 
@@ -452,7 +476,6 @@
   .app-stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
 }
 
 @media (min-width: 1024px) {

@@ -17,15 +17,15 @@ exempt record predicates or representations of data awaiting validation. An
 unknown dictionary at a parser boundary must not become a trusted domain object
 without runtime checks. No disables or equivalent aliases hide those findings.
 
-| Remaining scope | Findings | Assessment |
-| --- | ---: | --- |
-| `convex/typeAdapters.ts`, `web/src/lib/map-import.ts` record guards | 2 | Legitimate `Record<string, unknown>` while checking untrusted data. Backend readers now validate every nested engine member; map imports validate fields before construction. Keep these inputs unknown. |
-| `convex/historyTimeline.ts` action parameters | 2 | Historical action objects are inspected defensively. A current engine `Action` excludes redacted/legacy representations. A shared public action schema must precede narrowing. |
-| `convex/gameplay.ts` RawEvent, redaction input/output, stored action cast | 4 | Persisted history and public redaction are a separate boundary. Do not assert current private engine event types onto public/redacted history. The broad stored action cast deserves a schema-backed replacement, not an annotation rename. |
-| `web/src/lib/game/types.ts` action/frame events | 2 | Public replay events include redacted and historical payloads. A shared public event schema is needed before replacing the open representation. |
-| `web/src/lib/game/history-timeline.ts` visibility input | 1 | Only the event discriminator is consumed; additional historical fields remain unknown. |
-| `web/src/lib/game/attack-dice-result.ts` inspected candidate | 1 | Validates the discriminator, strings and rolls before display; the candidate is still untrusted during inspection. |
-| `web/src/lib/game/display.ts` event formatter | 1 | Intentionally formats missing/legacy event fields with fallbacks. Preserve accepted history while introducing a public event schema. |
+| Remaining scope                                                           | Findings | Assessment                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------- | -------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `convex/typeAdapters.ts`, `web/src/lib/map-import.ts` record guards       |        2 | Legitimate `Record<string, unknown>` while checking untrusted data. Backend readers now validate every nested engine member; map imports validate fields before construction. Keep these inputs unknown.                                    |
+| `convex/historyTimeline.ts` action parameters                             |        2 | Historical action objects are inspected defensively. A current engine `Action` excludes redacted/legacy representations. A shared public action schema must precede narrowing.                                                              |
+| `convex/gameplay.ts` RawEvent, redaction input/output, stored action cast |        4 | Persisted history and public redaction are a separate boundary. Do not assert current private engine event types onto public/redacted history. The broad stored action cast deserves a schema-backed replacement, not an annotation rename. |
+| `web/src/lib/game/types.ts` action/frame events                           |        2 | Public replay events include redacted and historical payloads. A shared public event schema is needed before replacing the open representation.                                                                                             |
+| `web/src/lib/game/history-timeline.ts` visibility input                   |        1 | Only the event discriminator is consumed; additional historical fields remain unknown.                                                                                                                                                      |
+| `web/src/lib/game/attack-dice-result.ts` inspected candidate              |        1 | Validates the discriminator, strings and rolls before display; the candidate is still untrusted during inspection.                                                                                                                          |
+| `web/src/lib/game/display.ts` event formatter                             |        1 | Intentionally formats missing/legacy event fields with fallbacks. Preserve accepted history while introducing a public event schema.                                                                                                        |
 
 Follow-up before broadening this rule: define version-aware public action/event
 contracts at persistence/redaction boundaries, test omitted secret card IDs and
@@ -91,14 +91,14 @@ The query-selection hook now accepts the boolean it actually consumes
 `Boolean(session)`, preserving every previous truthiness and pending-query
 condition. This removes one unnecessary unknown contract: 35 → 34 findings.
 
-| Remaining scope | Findings | Assessment |
-| --- | ---: | --- |
-| `convex/typeAdapters.ts` readers, structural helpers and callbacks | 19 | These functions inspect untrusted serialized engine data. They validate all nested members before returning typed GameState/GraphMap, with malformed/optional/identity tests from #21. Callback values remain unknown while being checked. |
-| `web/src/lib/map-import.ts` scalar parsers | 2 | `ensureString` and `ensureInteger` must inspect unknown imported JSON fields before constructing editor data. |
-| `convex/historyTimeline.ts` JSON equality inputs | 2 | Comparison accepts arbitrary field values without treating them as a domain object. No input parsing claim is made. |
-| Email/join-game/game error formatters | 5 | JavaScript can throw any value; error boundaries retain unknown and narrow it before accessing Error/string details. |
-| `web/src/lib/game/display.ts` historical event IDs | 3 | Missing/legacy IDs are validated as strings and receive explicit display fallbacks. A public history contract remains a separate follow-up. |
-| `web/src/lib/game/adapters.ts` query adapter inputs | 3 | These currently assert local view facades. Generated-query contracts and the producer's remaining `any` fields deserve assertion cleanup; this is a genuine weakness, not proof that all unknown inputs should be banned. |
+| Remaining scope                                                    | Findings | Assessment                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------ | -------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `convex/typeAdapters.ts` readers, structural helpers and callbacks |       19 | These functions inspect untrusted serialized engine data. They validate all nested members before returning typed GameState/GraphMap, with malformed/optional/identity tests from #21. Callback values remain unknown while being checked. |
+| `web/src/lib/map-import.ts` scalar parsers                         |        2 | `ensureString` and `ensureInteger` must inspect unknown imported JSON fields before constructing editor data.                                                                                                                              |
+| `convex/historyTimeline.ts` JSON equality inputs                   |        2 | Comparison accepts arbitrary field values without treating them as a domain object. No input parsing claim is made.                                                                                                                        |
+| Email/join-game/game error formatters                              |        5 | JavaScript can throw any value; error boundaries retain unknown and narrow it before accessing Error/string details.                                                                                                                       |
+| `web/src/lib/game/display.ts` historical event IDs                 |        3 | Missing/legacy IDs are validated as strings and receive explicit display fallbacks. A public history contract remains a separate follow-up.                                                                                                |
+| `web/src/lib/game/adapters.ts` query adapter inputs                |        3 | These currently assert local view facades. Generated-query contracts and the producer's remaining `any` fields deserve assertion cleanup; this is a genuine weakness, not proof that all unknown inputs should be banned.                  |
 
 Shared parsing already exists for engine persistence and map imports; preserve
 those runtime checks and their rejected-input behavior. Typed query adapters and
@@ -170,11 +170,11 @@ module-mock cleanup or artificial dependency seam to introduce in existing suite
 The CLI was also exercised on temporary, unexecuted fixtures using the checked-in
 audit config:
 
-| Call | Module-mocking diagnostics |
-| --- | ---: |
-| `import { mock } from "bun:test"; mock.module("dependency", () => ({}))` | 0 |
-| `import { vi } from "vitest"; vi.mock("dependency", () => ({}))` | 1 |
-| `import { jest } from "@jest/globals"; jest.mock("dependency", () => ({}))` | 1 |
+| Call                                                                        | Module-mocking diagnostics |
+| --------------------------------------------------------------------------- | -------------------------: |
+| `import { mock } from "bun:test"; mock.module("dependency", () => ({}))`    |                          0 |
+| `import { vi } from "vitest"; vi.mock("dependency", () => ({}))`            |                          1 |
+| `import { jest } from "@jest/globals"; jest.mock("dependency", () => ({}))` |                          1 |
 
 This rule provides **no Bun module-mocking protection**. The current absence of
 Bun module mocks comes from the source audit, not this rule. Its recognition of
@@ -183,3 +183,49 @@ Before claiming Bun coverage, add or upstream a separately reviewed detector and
 verify it through the native CLI. Future use of Bun module mocks requires fresh
 seam review; enabling the existing rule must not be cited as evidence that Bun
 module substitution is checked. Temporary fixtures were removed after the trial.
+
+## Formatting baseline
+
+This dedicated baseline changes presentation only. It runs Oxfmt 0.76.0 on
+existing authored-file scope, then autofixes only `require-readable-spacing`
+from vendored anti-slop revision `13909c9e07590f5a85d93c62712259fe14a883f7`, then
+runs Oxfmt again. The isolated temporary Oxlint config disables the default
+correctness category, includes only that one warning rule and the pinned local
+plugin, and repeats the normal vendor/generated/agent/dist exclusions. The
+temporary config is removed afterward. No other rule's autofix runs, no new
+normal rule severity is enabled, and `check` still has no formatter gate.
+
+The starting audit reported 2,449 spacing findings across 161 files. After this
+sequence, spacing diagnostics and `bun run format:check` drift are both zero;
+a further formatting pass leaves files unchanged. Other generic-rule counts
+remain unchanged: assertion evidence 491, runtime typeof 61, unknown parameters
+34, known-value widening 24, and unsafe dictionaries 13.
+
+Verification compares changed authored JS/TS source to the preceding commit.
+Transpiled JavaScript ASTs retain operators, literal decoded values, declaration
+kinds, optional-chain boundaries, computed property distinctions and tagged
+template raw content. The comparison ignores positions/comments, quote form,
+transparent parentheses and quoted noncomputed property-name spelling. A second
+source AST comparison checks type-bearing structure, normalizing JSX text
+representation only where the transpiled AST already proves identical output.
+Oxfmt's one added empty statement in the home keyboard Escape handler is an ASI
+guard; only empty entries in statement lists are ignored, never a loop/body
+slot. JSON/JSONC configuration values are also compared, including reordered
+package metadata, so the baseline introduces no configuration policy change.
+
+JSX whitespace needs special care: Oxfmt initially split or merged adjacent
+text children in four pages. Eight text runs in admin map preview, admin Slack,
+create game and lobby now use explicit string expressions to preserve their
+original compiled child strings and topology. These are deliberate
+representation-only edits, not a claim that every source difference is a blank
+line. Other JSX source whitespace changes compile identically. HTML/CSS changes
+are formatter line wrapping and equivalent quoting; the production CSS asset
+retains the same content hash (`index-B_u4n8YS.css`). Documentation changes
+include this record and the updated tooling baseline status. Static comparison
+and the full suite do not substitute for a browser visual regression test.
+
+After this baseline merges, enable readable-spacing in a separate policy PR,
+verifying compatibility again. A formatter gate can be considered independently;
+this baseline leaves the normal check sequence unchanged. Regeneration must
+use the pinned tools and isolated one-rule autofix; never run the entire audit's
+autofixes to update the baseline.

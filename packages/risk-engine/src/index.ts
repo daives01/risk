@@ -2,12 +2,16 @@
  * risk-engine - A deterministic, headless Risk game engine.
  */
 
-export const ENGINE_VERSION = "0.0.1" as const;
+export const ENGINE_VERSION = '0.0.1' as const
 
-export * from "./types.js";
-export { createRng } from "./rng.js";
-export type { Rng } from "./rng.js";
-export { validateMap, validateVisual, validateAuthoredMap } from "./map.js";
+export * from './types.js'
+
+export { createRng } from './rng.js'
+
+export type { Rng } from './rng.js'
+
+export { validateMap, validateVisual, validateAuthoredMap } from './map.js'
+
 export type {
   GraphMap,
   TerritoryInfo,
@@ -16,33 +20,57 @@ export type {
   TerritoryAnchor,
   MapVisual,
   AuthoredMap,
-} from "./map.js";
-export { defaultRuleset, resolveInitialArmies } from "./config.js";
-export type { RulesetConfig, SetupConfig, CombatConfig, FortifyConfig, CardsConfig, TeamsConfig } from "./config.js";
-export { calculateReinforcements } from "./reinforcements.js";
-export type { ReinforcementResult } from "./reinforcements.js";
-export { applyAction, ActionError } from "./engine.js";
-export type { ActionResult, ApplyActionOptions } from "./engine.js";
-export { createDeck, drawCard } from "./cards.js";
-export type { DeckCreationResult, DrawResult } from "./cards.js";
-export { canPlace, canAttack, canFortifyFrom, canFortifyTo, canTraverse } from "./permissions.js";
-export { getLegalActions } from "./legal-actions.js";
-export type { LegalActionsConfig } from "./legal-actions.js";
-export { PLAYER_COLOR_NAME_BY_HEX, PLAYER_COLOR_PALETTE, NEUTRAL_PLAYER_COLOR } from "./colors.js";
-export type { PlayerColor } from "./colors.js";
+} from './map.js'
+
+export { defaultRuleset, resolveInitialArmies } from './config.js'
+
+export type {
+  RulesetConfig,
+  SetupConfig,
+  CombatConfig,
+  FortifyConfig,
+  CardsConfig,
+  TeamsConfig,
+} from './config.js'
+
+export { calculateReinforcements } from './reinforcements.js'
+
+export type { ReinforcementResult } from './reinforcements.js'
+
+export { applyAction, ActionError } from './engine.js'
+
+export type { ActionResult, ApplyActionOptions } from './engine.js'
+
+export { createDeck, drawCard } from './cards.js'
+
+export type { DeckCreationResult, DrawResult } from './cards.js'
+
+export { canPlace, canAttack, canFortifyFrom, canFortifyTo, canTraverse } from './permissions.js'
+
+export { getLegalActions } from './legal-actions.js'
+
+export type { LegalActionsConfig } from './legal-actions.js'
+
+export { PLAYER_COLOR_NAME_BY_HEX, PLAYER_COLOR_PALETTE, NEUTRAL_PLAYER_COLOR } from './colors.js'
+
+export type { PlayerColor } from './colors.js'
+
 export {
   addRollsToFaceCounts,
   combineDieFaceCounts,
   createEmptyDiceRollCounts,
   createEmptyDieFaceCounts,
   summarizeDieFaceCounts,
-} from "./dice-roll-counts.js";
-export type { DiceRollCounts, DieFaceCounts } from "./dice-roll-counts.js";
+} from './dice-roll-counts.js'
+
+export type { DiceRollCounts, DieFaceCounts } from './dice-roll-counts.js'
+
 export {
   addCombatOutcome,
   combatLuckScore,
   combineCombatLuckStats,
   createEmptyCombatLuckStats,
   expectedCombatOutcome,
-} from "./combat-luck.js";
-export type { CombatLuckRoleStats, CombatLuckStats, ExpectedCombatOutcome } from "./combat-luck.js";
+} from './combat-luck.js'
+
+export type { CombatLuckRoleStats, CombatLuckStats, ExpectedCombatOutcome } from './combat-luck.js'

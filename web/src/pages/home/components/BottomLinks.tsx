@@ -1,13 +1,13 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from 'react-router-dom'
 
 export function BottomLinks() {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
 
   return (
     <div className="fixed bottom-4 left-4 flex items-center gap-3">
       <button
         type="button"
-        onClick={() => navigate("/faq")}
+        onClick={() => navigate('/faq')}
         className="text-xs font-medium text-muted-foreground/60 transition hover:text-muted-foreground"
       >
         FAQ
@@ -22,5 +22,5 @@ export function BottomLinks() {
         Support the dev
       </a>
     </div>
-  );
+  )
 }

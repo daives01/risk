@@ -1,69 +1,84 @@
-import { useEffect, useMemo, useState } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { useMutation, useQuery } from "convex/react";
-import type { FunctionArgs, FunctionReturnType } from "convex/server";
-import { ArrowLeft, Map } from "lucide-react";
-import { api } from "@backend/_generated/api";
-import { authClient } from "@/lib/auth-client";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { HelpPopover } from "@/components/ui/help-popover";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import { useEffect, useMemo, useState } from 'react'
+import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { useMutation, useQuery } from 'convex/react'
+import type { FunctionArgs, FunctionReturnType } from 'convex/server'
+import { ArrowLeft, Map } from 'lucide-react'
+import { api } from '@backend/_generated/api'
+import { authClient } from '@/lib/auth-client'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { HelpPopover } from '@/components/ui/help-popover'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import {
   CARD_INCREMENT_PRESET_ENTRIES,
   CARD_INCREMENT_PRESETS,
   type CardIncrementPresetKey,
-} from "@/lib/game/ruleset-summary";
+} from '@/lib/game/ruleset-summary'
 
 type RulesetOverridesInput = {
-  fortify: { fortifyMode: "adjacent" | "connected"; maxFortifiesPerTurn?: number };
-  cards: { forcedTradeHandSize: number; tradeValues: number[]; tradeValueOverflow: "repeatLast" | "continueByFive" };
+  fortify: { fortifyMode: 'adjacent' | 'connected'; maxFortifiesPerTurn?: number }
+  cards: {
+    forcedTradeHandSize: number
+    tradeValues: number[]
+    tradeValueOverflow: 'repeatLast' | 'continueByFive'
+  }
   teams: {
-    allowPlaceOnTeammate: boolean;
-    allowFortifyWithTeammate: boolean;
-    allowFortifyThroughTeammates: boolean;
-    continentBonusRecipient: "majorityHolderOnTeam" | "individual";
-  };
-};
+    allowPlaceOnTeammate: boolean
+    allowFortifyWithTeammate: boolean
+    allowFortifyThroughTeammates: boolean
+    continentBonusRecipient: 'majorityHolderOnTeam' | 'individual'
+  }
+}
 
-type GameTimingMode = "realtime" | "async_1d" | "async_3d";
-type GameVisibility = "public" | "unlisted";
-type MapListQuery = FunctionReturnType<typeof api.maps.list>;
-type MapListItem = MapListQuery[number];
-type SlackWorkspaceListQuery = FunctionReturnType<typeof api.slackAdmin.listMyWorkspaceOptions>;
-type SlackWorkspaceListItem = SlackWorkspaceListQuery[number];
+type GameTimingMode = 'realtime' | 'async_1d' | 'async_3d'
+
+type GameVisibility = 'public' | 'unlisted'
+
+type MapListQuery = FunctionReturnType<typeof api.maps.list>
+
+type MapListItem = MapListQuery[number]
+
+type SlackWorkspaceListQuery = FunctionReturnType<typeof api.slackAdmin.listMyWorkspaceOptions>
+
+type SlackWorkspaceListItem = SlackWorkspaceListQuery[number]
 
 const TIMING_MODE_OPTIONS: Array<{ value: GameTimingMode; label: string }> = [
-  { value: "realtime", label: "Realtime" },
-  { value: "async_1d", label: "Async (1 day / turn)" },
-  { value: "async_3d", label: "Async (3 days / turn)" },
-];
+  { value: 'realtime', label: 'Realtime' },
+  { value: 'async_1d', label: 'Async (1 day / turn)' },
+  { value: 'async_3d', label: 'Async (3 days / turn)' },
+]
 
 const FORTIFY_MODE_OPTIONS = [
-  { value: "connected", label: "Connected path" },
-  { value: "adjacent", label: "Adjacent only" },
-] as const;
+  { value: 'connected', label: 'Connected path' },
+  { value: 'adjacent', label: 'Adjacent only' },
+] as const
 
 const MAX_FORTIFY_OPTIONS = [
-  { value: "unlimited", label: "Unlimited" },
-  { value: "0", label: "0" },
-  { value: "1", label: "1" },
-  { value: "2", label: "2" },
-  { value: "3", label: "3" },
-] as const;
+  { value: 'unlimited', label: 'Unlimited' },
+  { value: '0', label: '0' },
+  { value: '1', label: '1' },
+  { value: '2', label: '2' },
+  { value: '3', label: '3' },
+] as const
 
 const TEAM_ASSIGNMENT_OPTIONS = [
-  { value: "manual", label: "Manual in lobby" },
-  { value: "balancedRandom", label: "Balanced random" },
-] as const;
+  { value: 'manual', label: 'Manual in lobby' },
+  { value: 'balancedRandom', label: 'Balanced random' },
+] as const
 
 const TEAM_CONTINENT_REWARD_OPTIONS = [
-  { value: "majorityHolderOnTeam", label: "Team majority holder" },
-  { value: "individual", label: "Individual only" },
-] as const;
+  { value: 'majorityHolderOnTeam', label: 'Team majority holder' },
+  { value: 'individual', label: 'Individual only' },
+] as const
 
 function RulesSwitch({
   label,
@@ -71,105 +86,136 @@ function RulesSwitch({
   onCheckedChange,
   disabled,
 }: {
-  label: string;
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  disabled?: boolean;
+  label: string
+  checked: boolean
+  onCheckedChange: (checked: boolean) => void
+  disabled?: boolean
 }) {
   return (
     <label className="flex items-center justify-between gap-3 border border-border/75 bg-background/65 px-3 py-2">
       <span className="text-sm text-foreground">{label}</span>
-      <Switch aria-label={label} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
+      <Switch
+        aria-label={label}
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        disabled={disabled}
+      />
     </label>
-  );
+  )
 }
 
 export default function CreateGamePage() {
-  const { data: session, isPending: sessionPending } = authClient.useSession();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const { data: session, isPending: sessionPending } = authClient.useSession()
+  const navigate = useNavigate()
+  const location = useLocation()
 
-  const maps = useQuery(api.maps.list);
+  const maps = useQuery(api.maps.list)
+
   const slackWorkspaceOptions = useQuery(
     api.slackAdmin.listMyWorkspaceOptions,
-    session ? {} : "skip",
-  );
-  const createGame = useMutation(api.lobby.createGame);
+    session ? {} : 'skip',
+  )
 
-  const [name, setName] = useState("");
-  const [selectedMapId, setSelectedMapId] = useState<string | null>(null);
-  const [maxPlayers, setMaxPlayers] = useState(6);
-  const [teamModeEnabled, setTeamModeEnabled] = useState(false);
-  const [visibility, setVisibility] = useState<GameVisibility>("public");
-  const [teamAssignmentStrategy, setTeamAssignmentStrategy] = useState<"manual" | "balancedRandom">("balancedRandom");
-  const [timingMode, setTimingMode] = useState<GameTimingMode>("realtime");
-  const [excludeWeekends, setExcludeWeekends] = useState(false);
-  const [slackNotificationsEnabled, setSlackNotificationsEnabled] = useState(false);
-  const [slackTeamId, setSlackTeamId] = useState<string | null>(null);
-  const [fortifyMode, setFortifyMode] = useState<"adjacent" | "connected">("connected");
-  const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | "unlimited">(1);
-  const [forcedTradeHandSize, setForcedTradeHandSize] = useState(5);
-  const [cardIncrementPreset, setCardIncrementPreset] = useState<CardIncrementPresetKey>("classic");
-  const [allowPlaceOnTeammate, setAllowPlaceOnTeammate] = useState(true);
-  const [allowFortifyWithTeammate, setAllowFortifyWithTeammate] = useState(true);
-  const [allowFortifyThroughTeammates, setAllowFortifyThroughTeammates] = useState(true);
-  const [continentBonusRecipient, setContinentBonusRecipient] = useState<"majorityHolderOnTeam" | "individual">("majorityHolderOnTeam");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const createGame = useMutation(api.lobby.createGame)
+
+  const [name, setName] = useState('')
+  const [selectedMapId, setSelectedMapId] = useState<string | null>(null)
+  const [maxPlayers, setMaxPlayers] = useState(6)
+  const [teamModeEnabled, setTeamModeEnabled] = useState(false)
+  const [visibility, setVisibility] = useState<GameVisibility>('public')
+
+  const [teamAssignmentStrategy, setTeamAssignmentStrategy] = useState<'manual' | 'balancedRandom'>(
+    'balancedRandom',
+  )
+
+  const [timingMode, setTimingMode] = useState<GameTimingMode>('realtime')
+  const [excludeWeekends, setExcludeWeekends] = useState(false)
+  const [slackNotificationsEnabled, setSlackNotificationsEnabled] = useState(false)
+  const [slackTeamId, setSlackTeamId] = useState<string | null>(null)
+  const [fortifyMode, setFortifyMode] = useState<'adjacent' | 'connected'>('connected')
+  const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | 'unlimited'>(1)
+  const [forcedTradeHandSize, setForcedTradeHandSize] = useState(5)
+  const [cardIncrementPreset, setCardIncrementPreset] = useState<CardIncrementPresetKey>('classic')
+  const [allowPlaceOnTeammate, setAllowPlaceOnTeammate] = useState(true)
+  const [allowFortifyWithTeammate, setAllowFortifyWithTeammate] = useState(true)
+  const [allowFortifyThroughTeammates, setAllowFortifyThroughTeammates] = useState(true)
+
+  const [continentBonusRecipient, setContinentBonusRecipient] = useState<
+    'majorityHolderOnTeam' | 'individual'
+  >('majorityHolderOnTeam')
+
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
   const sessionUsername =
-    (session?.user as { username?: string | null } | undefined)?.username ?? session?.user.name ?? "";
-  const gameNamePlaceholder = sessionUsername ? `${sessionUsername}'s Risk Game` : "Risk Game";
+    (session?.user as { username?: string | null } | undefined)?.username ??
+    session?.user.name ??
+    ''
+
+  const gameNamePlaceholder = sessionUsername ? `${sessionUsername}'s Risk Game` : 'Risk Game'
+
   const selectedMap = useMemo(
     () => maps?.find((map: MapListItem) => map.mapId === selectedMapId) ?? null,
     [maps, selectedMapId],
-  );
+  )
+
   const allowedPlayerCounts = useMemo(() => {
-    const min = selectedMap?.playerLimits.minPlayers ?? 2;
-    const max = selectedMap?.playerLimits.maxPlayers ?? 6;
-    if (max < min) return [];
-    return Array.from({ length: max - min + 1 }, (_, index) => min + index);
-  }, [selectedMap]);
+    const min = selectedMap?.playerLimits.minPlayers ?? 2
+    const max = selectedMap?.playerLimits.maxPlayers ?? 6
 
+    if (max < min) return []
+
+    return Array.from({ length: max - min + 1 }, (_, index) => min + index)
+  }, [selectedMap])
 
   useEffect(() => {
-    if (allowedPlayerCounts.length === 0) return;
-    const highestAllowed = allowedPlayerCounts[allowedPlayerCounts.length - 1]!;
+    if (allowedPlayerCounts.length === 0) return
+    const highestAllowed = allowedPlayerCounts[allowedPlayerCounts.length - 1]!
+
     if (!allowedPlayerCounts.includes(maxPlayers)) {
-      setMaxPlayers(highestAllowed);
+      setMaxPlayers(highestAllowed)
     }
-  }, [allowedPlayerCounts, maxPlayers]);
+  }, [allowedPlayerCounts, maxPlayers])
 
   useEffect(() => {
-    if (!maps || maps.length !== 1 || selectedMapId) return;
-    setSelectedMapId(maps[0]!.mapId);
-  }, [maps, selectedMapId]);
+    if (!maps || maps.length !== 1 || selectedMapId) return
+    setSelectedMapId(maps[0]!.mapId)
+  }, [maps, selectedMapId])
 
   if (sessionPending) {
-    return <div className="page-shell flex items-center justify-center">Loading...</div>;
+    return <div className="page-shell flex items-center justify-center">Loading...</div>
   }
 
   if (!session) {
-    const redirectPath = `${location.pathname}${location.search}${location.hash}`;
-    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />;
+    const redirectPath = `${location.pathname}${location.search}${location.hash}`
+
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />
   }
 
   async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    const trimmedName = name.trim() || gameNamePlaceholder;
+    event.preventDefault()
+    const trimmedName = name.trim() || gameNamePlaceholder
+
     if (!selectedMapId) {
-      setError("Please select a map");
-      return;
-    }
-    if (slackNotificationsEnabled && !slackTeamId) {
-      setError("Select a Slack workspace or disable Slack notifications");
-      return;
+      setError('Please select a map')
+
+      return
     }
 
-    setError(null);
-    setLoading(true);
+    if (slackNotificationsEnabled && !slackTeamId) {
+      setError('Select a Slack workspace or disable Slack notifications')
+
+      return
+    }
+
+    setError(null)
+    setLoading(true)
+
     try {
-      const fortify: RulesetOverridesInput["fortify"] = { fortifyMode };
-      if (maxFortifiesPerTurn !== "unlimited") fortify.maxFortifiesPerTurn = maxFortifiesPerTurn;
+      const fortify: RulesetOverridesInput['fortify'] = { fortifyMode }
+
+      if (maxFortifiesPerTurn !== 'unlimited') fortify.maxFortifiesPerTurn = maxFortifiesPerTurn
+
       const rulesetOverrides: RulesetOverridesInput = {
         fortify,
         cards: {
@@ -180,10 +226,11 @@ export default function CreateGamePage() {
         teams: {
           allowPlaceOnTeammate,
           allowFortifyWithTeammate,
-          allowFortifyThroughTeammates: fortifyMode === "connected" && allowFortifyThroughTeammates,
+          allowFortifyThroughTeammates: fortifyMode === 'connected' && allowFortifyThroughTeammates,
           continentBonusRecipient,
         },
-      };
+      }
+
       const createGameArgs: FunctionArgs<typeof api.lobby.createGame> = {
         name: trimmedName,
         mapId: selectedMapId,
@@ -195,14 +242,15 @@ export default function CreateGamePage() {
         excludeWeekends,
         slackNotificationsEnabled,
         rulesetOverrides,
-      };
-      if (slackNotificationsEnabled && slackTeamId) createGameArgs.slackTeamId = slackTeamId;
-      const { gameId } = await createGame(createGameArgs);
-      navigate(`/g/${gameId}`);
+      }
+
+      if (slackNotificationsEnabled && slackTeamId) createGameArgs.slackTeamId = slackTeamId
+      const { gameId } = await createGame(createGameArgs)
+      navigate(`/g/${gameId}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create game");
+      setError(err instanceof Error ? err.message : 'Failed to create game')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
 
@@ -217,7 +265,7 @@ export default function CreateGamePage() {
                 size="sm"
                 title="Back to home"
                 aria-label="Back to home"
-                onClick={() => navigate("/")}
+                onClick={() => navigate('/')}
               >
                 <ArrowLeft className="size-4" />
               </Button>
@@ -226,7 +274,11 @@ export default function CreateGamePage() {
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-5">
-              {error && <p className="rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+              {error && (
+                <p className="rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {error}
+                </p>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="name">Game Name</Label>
                 <Input
@@ -239,7 +291,9 @@ export default function CreateGamePage() {
 
               <div className="space-y-2">
                 <Label>Map</Label>
-                {maps === undefined && <p className="text-sm text-muted-foreground">Loading maps...</p>}
+                {maps === undefined && (
+                  <p className="text-sm text-muted-foreground">Loading maps...</p>
+                )}
                 {maps !== undefined && maps.length === 0 && (
                   <p className="text-sm text-muted-foreground">No maps available.</p>
                 )}
@@ -250,10 +304,11 @@ export default function CreateGamePage() {
                         key={map.mapId}
                         type="button"
                         onClick={() => setSelectedMapId(map.mapId)}
-                        className={`rounded-lg border p-3 text-left transition ${selectedMapId === map.mapId
-                          ? "border-primary bg-primary/12"
-                          : "bg-background/70 hover:border-primary/45"
-                          }`}
+                        className={`rounded-lg border p-3 text-left transition ${
+                          selectedMapId === map.mapId
+                            ? 'border-primary bg-primary/12'
+                            : 'bg-background/70 hover:border-primary/45'
+                        }`}
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-semibold">{map.name}</span>
@@ -273,7 +328,10 @@ export default function CreateGamePage() {
 
               <div className="space-y-2">
                 <Label htmlFor="maxPlayers">Max Players</Label>
-                <Select value={String(maxPlayers)} onValueChange={(value) => setMaxPlayers(Number(value))}>
+                <Select
+                  value={String(maxPlayers)}
+                  onValueChange={(value) => setMaxPlayers(Number(value))}
+                >
                   <SelectTrigger id="maxPlayers">
                     <SelectValue />
                   </SelectTrigger>
@@ -288,18 +346,20 @@ export default function CreateGamePage() {
               </div>
 
               <RulesSwitch
-                checked={visibility === "unlisted"}
-                onCheckedChange={(checked) => setVisibility(checked ? "unlisted" : "public")}
+                checked={visibility === 'unlisted'}
+                onCheckedChange={(checked) => setVisibility(checked ? 'unlisted' : 'public')}
                 label="Require invite code to join"
               />
               <p className="text-xs text-muted-foreground">
-                {visibility === "public"
-                  ? "Anyone can see and join this game."
-                  : "Only people you send the code to can join this game."}
+                {visibility === 'public'
+                  ? 'Anyone can see and join this game.'
+                  : 'Only people you send the code to can join this game.'}
               </p>
 
               <div className="space-y-3 rounded-lg border bg-background/70 p-3">
-                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Turn Timing</p>
+                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">
+                  Turn Timing
+                </p>
                 <div className="space-y-2">
                   <Label htmlFor="timingMode">Game Mode</Label>
                   <Select
@@ -318,15 +378,17 @@ export default function CreateGamePage() {
                     </SelectContent>
                   </Select>
                 </div>
-                {timingMode !== "realtime" && (
+                {timingMode !== 'realtime' && (
                   <RulesSwitch
                     label="Exclude weekends (EU mode)"
                     checked={excludeWeekends}
                     onCheckedChange={setExcludeWeekends}
                   />
                 )}
-                {timingMode === "realtime" && (
-                  <p className="text-xs text-muted-foreground">Realtime games have no turn deadlines.</p>
+                {timingMode === 'realtime' && (
+                  <p className="text-xs text-muted-foreground">
+                    Realtime games have no turn deadlines.
+                  </p>
                 )}
                 {slackWorkspaceOptions && slackWorkspaceOptions.length > 0 && (
                   <div className="space-y-2 pt-1">
@@ -335,8 +397,9 @@ export default function CreateGamePage() {
                       <Switch
                         checked={slackNotificationsEnabled}
                         onCheckedChange={(checked) => {
-                          setSlackNotificationsEnabled(checked);
-                          if (!checked) setSlackTeamId(null);
+                          setSlackNotificationsEnabled(checked)
+
+                          if (!checked) setSlackTeamId(null)
                         }}
                       />
                     </label>
@@ -351,11 +414,13 @@ export default function CreateGamePage() {
                             <SelectValue placeholder="Select workspace" />
                           </SelectTrigger>
                           <SelectContent>
-                            {(slackWorkspaceOptions ?? []).map((workspace: SlackWorkspaceListItem) => (
-                              <SelectItem key={workspace.teamId} value={workspace.teamId}>
-                                {workspace.teamName}
-                              </SelectItem>
-                            ))}
+                            {(slackWorkspaceOptions ?? []).map(
+                              (workspace: SlackWorkspaceListItem) => (
+                                <SelectItem key={workspace.teamId} value={workspace.teamId}>
+                                  {workspace.teamName}
+                                </SelectItem>
+                              ),
+                            )}
                           </SelectContent>
                         </Select>
                       </div>
@@ -365,17 +430,20 @@ export default function CreateGamePage() {
               </div>
 
               <div className="space-y-3 rounded-lg border bg-background/70 p-3">
-                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Game Rules</p>
+                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">
+                  Game Rules
+                </p>
 
                 <div className="space-y-2">
                   <Label htmlFor="fortifyMode">Fortify Mode</Label>
                   <Select
                     value={fortifyMode}
                     onValueChange={(value) => {
-                      const nextMode = value as "adjacent" | "connected";
-                      setFortifyMode(nextMode);
-                      if (nextMode === "adjacent") {
-                        setAllowFortifyThroughTeammates(false);
+                      const nextMode = value as 'adjacent' | 'connected'
+                      setFortifyMode(nextMode)
+
+                      if (nextMode === 'adjacent') {
+                        setAllowFortifyThroughTeammates(false)
                       }
                     }}
                   >
@@ -397,7 +465,7 @@ export default function CreateGamePage() {
                   <Select
                     value={String(maxFortifiesPerTurn)}
                     onValueChange={(value) =>
-                      setMaxFortifiesPerTurn(value === "unlimited" ? "unlimited" : Number(value))
+                      setMaxFortifiesPerTurn(value === 'unlimited' ? 'unlimited' : Number(value))
                     }
                   >
                     <SelectTrigger id="maxFortifiesPerTurn">
@@ -458,7 +526,7 @@ export default function CreateGamePage() {
                     <Select
                       value={teamAssignmentStrategy}
                       onValueChange={(value) =>
-                        setTeamAssignmentStrategy(value as "manual" | "balancedRandom")
+                        setTeamAssignmentStrategy(value as 'manual' | 'balancedRandom')
                       }
                     >
                       <SelectTrigger id="teamAssignmentStrategy">
@@ -479,23 +547,31 @@ export default function CreateGamePage() {
                         <HelpPopover
                           ariaLabel="Explain team continent reward options"
                           className="w-80 space-y-2 p-3"
-                          content={(
+                          content={
                             <>
-                              <p className="font-medium text-foreground">Continent reward options</p>
-                              <p className="text-muted-foreground">
-                                <strong className="text-foreground">Team majority holder:</strong> If your team fully controls a continent, only one teammate gets the full bonus. The teammate with the most territories in that continent wins; ties go to the teammate earlier in turn order.
+                              <p className="font-medium text-foreground">
+                                Continent reward options
                               </p>
                               <p className="text-muted-foreground">
-                                <strong className="text-foreground">Individual only:</strong> Continent bonuses are personal, you have to hold every territory in a continent to get the bonus.
+                                <strong className="text-foreground">Team majority holder:</strong>
+                                {
+                                  ' If your team fully controls a continent, only one teammate gets the full bonus. The teammate with the most territories in that continent wins; ties go to the teammate earlier in turn order.'
+                                }
+                              </p>
+                              <p className="text-muted-foreground">
+                                <strong className="text-foreground">Individual only:</strong>
+                                {
+                                  ' Continent bonuses are personal, you have to hold every territory in a continent to get the bonus.'
+                                }
                               </p>
                             </>
-                          )}
+                          }
                         />
                       </div>
                       <Select
                         value={continentBonusRecipient}
                         onValueChange={(value) =>
-                          setContinentBonusRecipient(value as "majorityHolderOnTeam" | "individual")
+                          setContinentBonusRecipient(value as 'majorityHolderOnTeam' | 'individual')
                         }
                       >
                         <SelectTrigger id="continentBonusRecipient">
@@ -523,7 +599,7 @@ export default function CreateGamePage() {
                     />
                     <RulesSwitch
                       checked={allowFortifyThroughTeammates}
-                      disabled={fortifyMode === "adjacent"}
+                      disabled={fortifyMode === 'adjacent'}
                       onCheckedChange={setAllowFortifyThroughTeammates}
                       label="Allow fortify through teammate chain"
                     />
@@ -532,10 +608,19 @@ export default function CreateGamePage() {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col gap-3 py-6">
-              <Button type="submit" className="w-full" disabled={loading || !selectedMapId || !name.trim()}>
-                {loading ? "Creating..." : "Create Game"}
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={loading || !selectedMapId || !name.trim()}
+              >
+                {loading ? 'Creating...' : 'Create Game'}
               </Button>
-              <Button type="button" variant="ghost" className="w-full" onClick={() => navigate("/")}>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => navigate('/')}
+              >
                 Cancel
               </Button>
             </CardFooter>
@@ -543,5 +628,5 @@ export default function CreateGamePage() {
         </Card>
       </div>
     </div>
-  );
+  )
 }

@@ -1,13 +1,21 @@
-import { describe, expect, test } from "bun:test";
-import { applyAction, defaultRuleset } from "risk-engine";
-import type { CardId, GameState, GraphMap, PlayerId, RulesetConfig, TeamId, TerritoryId } from "risk-engine";
+import { describe, expect, test } from 'bun:test'
+import { applyAction, defaultRuleset } from 'risk-engine'
+import type {
+  CardId,
+  GameState,
+  GraphMap,
+  PlayerId,
+  RulesetConfig,
+  TeamId,
+  TerritoryId,
+} from 'risk-engine'
 
-const P1 = "p1" as PlayerId;
-const P2 = "p2" as PlayerId;
-const P3 = "p3" as PlayerId;
-const P4 = "p4" as PlayerId;
-const TEAM_1 = "team-1" as TeamId;
-const TEAM_2 = "team-2" as TeamId;
+const P1 = 'p1' as PlayerId
+const P2 = 'p2' as PlayerId
+const P3 = 'p3' as PlayerId
+const P4 = 'p4' as PlayerId
+const TEAM_1 = 'team-1' as TeamId
+const TEAM_2 = 'team-2' as TeamId
 
 const teamRuleset: RulesetConfig = {
   ...defaultRuleset,
@@ -18,10 +26,10 @@ const teamRuleset: RulesetConfig = {
     allowPlaceOnTeammate: true,
     allowFortifyWithTeammate: true,
     allowFortifyThroughTeammates: true,
-    winCondition: "lastTeamStanding",
-    continentBonusRecipient: "majorityHolderOnTeam",
+    winCondition: 'lastTeamStanding',
+    continentBonusRecipient: 'majorityHolderOnTeam',
   },
-};
+}
 
 const map: GraphMap = {
   territories: {
@@ -38,15 +46,15 @@ const map: GraphMap = {
     t4: [],
     t5: [],
   },
-};
+}
 
 function makeState(overrides?: Partial<GameState>): GameState {
   return {
     players: {
-      [P1]: { status: "alive", teamId: TEAM_1 },
-      [P2]: { status: "alive", teamId: TEAM_1 },
-      [P3]: { status: "alive", teamId: TEAM_2 },
-      [P4]: { status: "alive", teamId: TEAM_2 },
+      [P1]: { status: 'alive', teamId: TEAM_1 },
+      [P2]: { status: 'alive', teamId: TEAM_1 },
+      [P3]: { status: 'alive', teamId: TEAM_2 },
+      [P4]: { status: 'alive', teamId: TEAM_2 },
     },
     turnOrder: [P1, P2, P3, P4],
     territories: {
@@ -55,13 +63,13 @@ function makeState(overrides?: Partial<GameState>): GameState {
       t3: { ownerId: P2, armies: 2 },
       t4: { ownerId: P3, armies: 2 },
       t5: { ownerId: P4, armies: 2 },
-    } as Record<string, { ownerId: PlayerId | "neutral"; armies: number }>,
-    turn: { currentPlayerId: P1, phase: "Reinforcement", round: 1 },
+    } as Record<string, { ownerId: PlayerId | 'neutral'; armies: number }>,
+    turn: { currentPlayerId: P1, phase: 'Reinforcement', round: 1 },
     reinforcements: { remaining: 4, sources: { territory: 4 } },
     deck: { draw: [], discard: [] },
     cardsById: {},
     hands: {
-      [P1]: ["c1" as CardId],
+      [P1]: ['c1' as CardId],
       [P2]: [],
       [P3]: [],
       [P4]: [],
@@ -69,48 +77,68 @@ function makeState(overrides?: Partial<GameState>): GameState {
     tradesCompleted: 0,
     capturedThisTurn: false,
     fortifiesUsedThisTurn: 0,
-    rng: { seed: "team-endgame", index: 0 },
+    rng: { seed: 'team-endgame', index: 0 },
     stateVersion: 1,
     rulesetVersion: 1,
     ...overrides,
-  };
+  }
 }
 
-describe("team endgame resign behavior", () => {
-  test("resigning only defeats the player and neutralizes only their territories", () => {
-    const initial = makeState();
-    const next = applyAction(initial, P1, { type: "Resign" }, map, teamRuleset.combat, teamRuleset.fortify, teamRuleset.cards, teamRuleset.teams).state;
+describe('team endgame resign behavior', () => {
+  test('resigning only defeats the player and neutralizes only their territories', () => {
+    const initial = makeState()
 
-    expect(next.players[P1]?.status).toBe("defeated");
-    expect(next.players[P2]?.status).toBe("alive");
-    expect(next.territories.t1?.ownerId).toBe("neutral");
-    expect(next.territories.t2?.ownerId).toBe("neutral");
-    expect(next.territories.t3?.ownerId).toBe(P2);
-    expect(next.turn.phase).toBe("Reinforcement");
-    expect(next.turn.currentPlayerId).toBe(P2);
-  });
+    const next = applyAction(
+      initial,
+      P1,
+      { type: 'Resign' },
+      map,
+      teamRuleset.combat,
+      teamRuleset.fortify,
+      teamRuleset.cards,
+      teamRuleset.teams,
+    ).state
 
-  test("resigning the final member of a team ends the game", () => {
+    expect(next.players[P1]?.status).toBe('defeated')
+    expect(next.players[P2]?.status).toBe('alive')
+    expect(next.territories.t1?.ownerId).toBe('neutral')
+    expect(next.territories.t2?.ownerId).toBe('neutral')
+    expect(next.territories.t3?.ownerId).toBe(P2)
+    expect(next.turn.phase).toBe('Reinforcement')
+    expect(next.turn.currentPlayerId).toBe(P2)
+  })
+
+  test('resigning the final member of a team ends the game', () => {
     const initial = makeState({
       players: {
-        [P1]: { status: "alive", teamId: TEAM_1 },
-        [P3]: { status: "alive", teamId: TEAM_2 },
+        [P1]: { status: 'alive', teamId: TEAM_1 },
+        [P3]: { status: 'alive', teamId: TEAM_2 },
       },
       turnOrder: [P1, P3],
       territories: {
         t1: { ownerId: P1, armies: 3 },
         t4: { ownerId: P3, armies: 2 },
-      } as Record<string, { ownerId: PlayerId | "neutral"; armies: number }>,
+      } as Record<string, { ownerId: PlayerId | 'neutral'; armies: number }>,
       hands: {
         [P1]: [],
         [P3]: [],
       },
-      turn: { currentPlayerId: P3, phase: "Reinforcement", round: 1 },
+      turn: { currentPlayerId: P3, phase: 'Reinforcement', round: 1 },
       reinforcements: { remaining: 3, sources: { territory: 3 } },
-    });
+    })
 
-    const next = applyAction(initial, P3, { type: "Resign" }, map, teamRuleset.combat, teamRuleset.fortify, teamRuleset.cards, teamRuleset.teams).state;
-    expect(next.players[P3]?.status).toBe("defeated");
-    expect(next.turn.phase).toBe("GameOver");
-  });
-});
+    const next = applyAction(
+      initial,
+      P3,
+      { type: 'Resign' },
+      map,
+      teamRuleset.combat,
+      teamRuleset.fortify,
+      teamRuleset.cards,
+      teamRuleset.teams,
+    ).state
+
+    expect(next.players[P3]?.status).toBe('defeated')
+    expect(next.turn.phase).toBe('GameOver')
+  })
+})

@@ -1,14 +1,14 @@
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 interface NumberStepperProps {
-  value: number;
-  min: number;
-  max: number;
-  onChange: (value: number) => void;
-  disabled?: boolean;
-  className?: string;
-  size?: "xs" | "sm";
+  value: number
+  min: number
+  max: number
+  onChange: (value: number) => void
+  disabled?: boolean
+  className?: string
+  size?: 'xs' | 'sm'
 }
 
 export function NumberStepper({
@@ -18,17 +18,18 @@ export function NumberStepper({
   onChange,
   disabled = false,
   className,
-  size = "sm",
+  size = 'sm',
 }: NumberStepperProps) {
-  const clampedValue = Math.max(min, Math.min(max, value));
-  const buttonSize = size === "xs" ? "xs" : "sm";
+  const clampedValue = Math.max(min, Math.min(max, value))
+  const buttonSize = size === 'xs' ? 'xs' : 'sm'
+
   const valueClassName =
-    size === "xs"
-      ? "inline-flex h-6 min-w-8 items-center justify-center border bg-background/80 px-2 text-xs font-semibold"
-      : "inline-flex h-8 min-w-10 items-center justify-center border bg-background/80 px-2 text-sm font-semibold";
+    size === 'xs'
+      ? 'inline-flex h-6 min-w-8 items-center justify-center border bg-background/80 px-2 text-xs font-semibold'
+      : 'inline-flex h-8 min-w-10 items-center justify-center border bg-background/80 px-2 text-sm font-semibold'
 
   return (
-    <div className={cn("flex items-center gap-1.5 whitespace-nowrap", className)}>
+    <div className={cn('flex items-center gap-1.5 whitespace-nowrap', className)}>
       <Button
         type="button"
         size={buttonSize}
@@ -49,5 +50,5 @@ export function NumberStepper({
         +
       </Button>
     </div>
-  );
+  )
 }

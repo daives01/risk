@@ -1,53 +1,55 @@
-import { describe, expect, test } from "bun:test";
-import { normalizeChatMessage, resolveTeamChannelAccess } from "./gameChat";
+import { describe, expect, test } from 'bun:test'
+import { normalizeChatMessage, resolveTeamChannelAccess } from './gameChat'
 
-describe("game chat", () => {
-  test("normalizes and validates message content", () => {
-    expect(normalizeChatMessage("  hello team  ")).toBe("hello team");
-    expect(() => normalizeChatMessage("   ")).toThrow("Message cannot be empty");
-    expect(() => normalizeChatMessage("x".repeat(301))).toThrow("Message cannot exceed 300 characters");
-  });
+describe('game chat', () => {
+  test('normalizes and validates message content', () => {
+    expect(normalizeChatMessage('  hello team  ')).toBe('hello team')
+    expect(() => normalizeChatMessage('   ')).toThrow('Message cannot be empty')
+    expect(() => normalizeChatMessage('x'.repeat(301))).toThrow(
+      'Message cannot exceed 300 characters',
+    )
+  })
 
-  test("allows all access without team assignment", () => {
+  test('allows all access without team assignment', () => {
     expect(
       resolveTeamChannelAccess({
-        channel: "all",
+        channel: 'all',
         teamModeEnabled: false,
         playerTeamId: null,
       }),
-    ).toBeNull();
+    ).toBeNull()
     expect(
       resolveTeamChannelAccess({
-        channel: "dm",
+        channel: 'dm',
         teamModeEnabled: false,
         playerTeamId: null,
       }),
-    ).toBeNull();
-  });
+    ).toBeNull()
+  })
 
-  test("restricts team channel to team-mode members", () => {
+  test('restricts team channel to team-mode members', () => {
     expect(() =>
       resolveTeamChannelAccess({
-        channel: "team",
+        channel: 'team',
         teamModeEnabled: false,
-        playerTeamId: "team-1",
+        playerTeamId: 'team-1',
       }),
-    ).toThrow("Team chat is unavailable in this game");
+    ).toThrow('Team chat is unavailable in this game')
 
     expect(() =>
       resolveTeamChannelAccess({
-        channel: "team",
+        channel: 'team',
         teamModeEnabled: true,
         playerTeamId: null,
       }),
-    ).toThrow("You are not assigned to a team in this game");
+    ).toThrow('You are not assigned to a team in this game')
 
     expect(
       resolveTeamChannelAccess({
-        channel: "team",
+        channel: 'team',
         teamModeEnabled: true,
-        playerTeamId: "team-2",
+        playerTeamId: 'team-2',
       }),
-    ).toBe("team-2");
-  });
-});
+    ).toBe('team-2')
+  })
+})

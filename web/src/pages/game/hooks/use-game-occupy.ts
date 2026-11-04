@@ -1,19 +1,19 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from 'react'
 
 interface PendingOccupy {
-  minMove: number;
-  maxMove: number;
+  minMove: number
+  maxMove: number
 }
 
 interface UseGameOccupyOptions {
-  pending: PendingOccupy | null | undefined;
-  stateVersion: number | null | undefined;
-  isMyTurn: boolean;
-  historyOpen: boolean;
-  controlsDisabled: boolean;
-  phase: string;
-  submitAction: (action: { type: "Occupy"; moveArmies: number }) => Promise<void> | void;
+  pending: PendingOccupy | null | undefined
+  stateVersion: number | null | undefined
+  isMyTurn: boolean
+  historyOpen: boolean
+  controlsDisabled: boolean
+  phase: string
+  submitAction: (action: { type: 'Occupy'; moveArmies: number }) => Promise<void> | void
 }
 
 export function useGameOccupy({
@@ -25,15 +25,15 @@ export function useGameOccupy({
   phase,
   submitAction,
 }: UseGameOccupyOptions) {
-  const [occupyMove, setOccupyMove] = useState(1);
-  const autoOccupySubmittedKeyRef = useRef<string | null>(null);
-  const pendingMinMove = pending?.minMove;
-  const pendingMaxMove = pending?.maxMove;
+  const [occupyMove, setOccupyMove] = useState(1)
+  const autoOccupySubmittedKeyRef = useRef<string | null>(null)
+  const pendingMinMove = pending?.minMove
+  const pendingMaxMove = pending?.maxMove
 
   useEffect(() => {
-    if (pendingMinMove === undefined || pendingMaxMove === undefined) return;
-    setOccupyMove(pendingMaxMove);
-  }, [pendingMaxMove, pendingMinMove, stateVersion]);
+    if (pendingMinMove === undefined || pendingMaxMove === undefined) return
+    setOccupyMove(pendingMaxMove)
+  }, [pendingMaxMove, pendingMinMove, stateVersion])
 
   useEffect(() => {
     if (
@@ -41,23 +41,21 @@ export function useGameOccupy({
       !isMyTurn ||
       historyOpen ||
       controlsDisabled ||
-      phase === "GameOver" ||
+      phase === 'GameOver' ||
       pending.minMove !== pending.maxMove
     ) {
-      return;
+      return
     }
-    const submissionKey = [
-      stateVersion ?? "unknown",
-      pending.minMove,
-      pending.maxMove,
-    ].join(":");
-    if (autoOccupySubmittedKeyRef.current === submissionKey) return;
-    autoOccupySubmittedKeyRef.current = submissionKey;
-    void submitAction({ type: "Occupy", moveArmies: pending.minMove });
-  }, [controlsDisabled, historyOpen, isMyTurn, pending, phase, stateVersion, submitAction]);
+
+    const submissionKey = [stateVersion ?? 'unknown', pending.minMove, pending.maxMove].join(':')
+
+    if (autoOccupySubmittedKeyRef.current === submissionKey) return
+    autoOccupySubmittedKeyRef.current = submissionKey
+    void submitAction({ type: 'Occupy', moveArmies: pending.minMove })
+  }, [controlsDisabled, historyOpen, isMyTurn, pending, phase, stateVersion, submitAction])
 
   return {
     occupyMove,
     setOccupyMove,
-  };
+  }
 }

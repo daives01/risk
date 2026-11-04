@@ -1,6 +1,9 @@
 {
   "name": "risk-engine",
   "version": "0.0.1",
+  "files": [
+    "dist"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,6 +19,5 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
-  },
-  "files": ["dist"]
+  }
 }

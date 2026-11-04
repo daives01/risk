@@ -1,13 +1,9 @@
 {
-  "extends": [
-    "./.oxlintrc.json"
-  ],
+  "extends": ["./.oxlintrc.json"],
   "categories": {
     "correctness": "off"
   },
-  "jsPlugins": [
-    "./vendor/anti-slop/index.ts"
-  ],
+  "jsPlugins": ["./vendor/anti-slop/index.ts"],
   "rules": {
     "anti-slop/no-array-filter-map": "warn",
     "anti-slop/no-reduce-accumulator-copy": "warn",
@@ -29,11 +25,5 @@
     "anti-slop/require-safety-comment-for-type-assertion": "warn",
     "oxc/no-accumulating-spread": "warn"
   },
-  "ignorePatterns": [
-    "**/dist/**",
-    "convex/_generated/**",
-    ".agents/**",
-    ".codex/**",
-    "vendor/**"
-  ]
+  "ignorePatterns": ["**/dist/**", "convex/_generated/**", ".agents/**", ".codex/**", "vendor/**"]
 }

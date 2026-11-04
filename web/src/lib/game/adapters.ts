@@ -1,36 +1,36 @@
-import type { GraphMap } from "risk-engine";
-import type { HandCard, MapVisual, PlayerRef, PublicState } from "@/lib/game/types";
+import type { GraphMap } from 'risk-engine'
+import type { HandCard, MapVisual, PlayerRef, PublicState } from '@/lib/game/types'
 
 type ViewLike = {
-  players?: PlayerRef[];
-  state?: unknown;
-  mapId?: string;
-  status?: string;
-  winningPlayerId?: string | null;
-  winningTeamId?: string | null;
-  teamModeEnabled?: boolean;
-  teamCount?: number | null;
-  teamNames?: Record<string, string> | null;
-  effectiveRuleset?: unknown;
-};
+  players?: PlayerRef[]
+  state?: unknown
+  mapId?: string
+  status?: string
+  winningPlayerId?: string | null
+  winningTeamId?: string | null
+  teamModeEnabled?: boolean
+  teamCount?: number | null
+  teamNames?: Record<string, string> | null
+  effectiveRuleset?: unknown
+}
 
 type PlayerViewLike = ViewLike & {
-  myEnginePlayerId?: string | null;
-  myHand?: HandCard[] | null;
-  teammateHands?: Record<string, HandCard[]> | null;
-  delegatableTurnHand?: HandCard[] | null;
-};
+  myEnginePlayerId?: string | null
+  myHand?: HandCard[] | null
+  teammateHands?: Record<string, HandCard[]> | null
+  delegatableTurnHand?: HandCard[] | null
+}
 
 type MapDocLike = {
-  graphMap?: GraphMap;
-  visual?: MapVisual;
-  imageUrl?: string | null;
-};
+  graphMap?: GraphMap
+  visual?: MapVisual
+  imageUrl?: string | null
+}
 
 export function adaptView(playerView: unknown, publicView: unknown) {
-  const resolvedPlayerView = (playerView ?? null) as PlayerViewLike | null;
-  const resolvedPublicView = (publicView ?? null) as ViewLike | null;
-  const view = (resolvedPlayerView ?? resolvedPublicView) as ViewLike | null;
+  const resolvedPlayerView = (playerView ?? null) as PlayerViewLike | null
+  const resolvedPublicView = (publicView ?? null) as ViewLike | null
+  const view = (resolvedPlayerView ?? resolvedPublicView) as ViewLike | null
 
   return {
     view,
@@ -40,25 +40,27 @@ export function adaptView(playerView: unknown, publicView: unknown) {
     delegatableTurnHand: resolvedPlayerView?.delegatableTurnHand ?? null,
     playerMap: view?.players ?? [],
     state: (view?.state ?? null) as PublicState | null,
-  };
+  }
 }
 
 export function adaptMapDoc(mapDoc: unknown) {
-  const resolved = (mapDoc ?? null) as MapDocLike | null;
+  const resolved = (mapDoc ?? null) as MapDocLike | null
+
   const visual = resolved?.visual
     ? {
-      ...resolved.visual,
-      nodeScale:
-        typeof resolved.visual.nodeScale === "number" &&
+        ...resolved.visual,
+        nodeScale:
+          typeof resolved.visual.nodeScale === 'number' &&
           Number.isFinite(resolved.visual.nodeScale) &&
           resolved.visual.nodeScale > 0
-          ? resolved.visual.nodeScale
-          : 1,
-    }
-    : undefined;
+            ? resolved.visual.nodeScale
+            : 1,
+      }
+    : undefined
+
   return {
     graphMap: resolved?.graphMap,
     mapVisual: visual,
     mapImageUrl: resolved?.imageUrl ?? null,
-  };
+  }
 }

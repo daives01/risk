@@ -1,21 +1,21 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { Toaster } from "@/components/ui/sonner";
-import { Providers } from "@/lib/providers";
-import LandingPage from "@/pages/landing";
-import HomePage from "@/pages/home";
-import LoginPage from "@/pages/login";
-import SignUpPage from "@/pages/signup";
-import VerifyEmailPage from "@/pages/verify-email";
-import ForgotPasswordPage from "@/pages/forgot-password";
-import ResetPasswordPage from "@/pages/reset-password";
-import CreateGamePage from "@/pages/create-game";
-import LobbyPage from "@/pages/lobby";
-import JoinGamePage from "@/pages/join-game";
-import GamePage from "@/pages/game";
-import AdminMapsPage from "@/pages/admin-maps";
-import AdminMapEditorPage from "@/pages/admin-map-editor";
-import AdminSlackPage from "@/pages/admin-slack";
-import FaqPage from "@/pages/faq";
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { Toaster } from '@/components/ui/sonner'
+import { Providers } from '@/lib/providers'
+import LandingPage from '@/pages/landing'
+import HomePage from '@/pages/home'
+import LoginPage from '@/pages/login'
+import SignUpPage from '@/pages/signup'
+import VerifyEmailPage from '@/pages/verify-email'
+import ForgotPasswordPage from '@/pages/forgot-password'
+import ResetPasswordPage from '@/pages/reset-password'
+import CreateGamePage from '@/pages/create-game'
+import LobbyPage from '@/pages/lobby'
+import JoinGamePage from '@/pages/join-game'
+import GamePage from '@/pages/game'
+import AdminMapsPage from '@/pages/admin-maps'
+import AdminMapEditorPage from '@/pages/admin-map-editor'
+import AdminSlackPage from '@/pages/admin-slack'
+import FaqPage from '@/pages/faq'
 
 function App() {
   return (
@@ -41,7 +41,7 @@ function App() {
         <Toaster />
       </BrowserRouter>
     </Providers>
-  );
+  )
 }
 
-export default App;
+export default App
