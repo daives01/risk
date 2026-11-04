@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { useLocation, useParams } from "react-router-dom";
 import { useMutation } from "convex/react";
 import type { OptimisticLocalStore } from "convex/browser";
-import type { FunctionReturnType } from "convex/server";
 import type { Id } from "@backend/_generated/dataModel";
 import { api } from "@backend/_generated/api";
 import { defaultRuleset } from "risk-engine";
@@ -50,23 +49,13 @@ import { cn } from "@/lib/utils";
 const HINT_ROTATION_MS = 18000;
 const ACTION_BUTTON_COOLDOWN_MS = 1000;
 
-type GameViewWithPlayers = {
-  players: Array<{
-    userId?: string;
-    allowTeammatesToAct?: boolean;
-  }>;
-};
-
-function updateGameDelegationView<Query extends typeof api.games.getGameView | typeof api.games.getGameViewAsPlayer>(
+function updateGameDelegationView(
   localStore: OptimisticLocalStore,
-  query: Query,
+  query: typeof api.games.getGameView | typeof api.games.getGameViewAsPlayer,
   args: { gameId: Id<"games">; userId: string; allow: boolean },
 ) {
   const queryArgs = { gameId: args.gameId } as const;
-  const existing = localStore.getQuery(
-    query,
-    queryArgs as unknown as Parameters<typeof localStore.getQuery>[1],
-  ) as unknown as GameViewWithPlayers | null | undefined;
+  const existing = localStore.getQuery(query, queryArgs);
   if (!existing) return;
 
   const next = {
@@ -77,11 +66,7 @@ function updateGameDelegationView<Query extends typeof api.games.getGameView | t
         : player,
     ),
   };
-  localStore.setQuery(
-    query,
-    queryArgs as unknown as Parameters<typeof localStore.setQuery>[1],
-    next as FunctionReturnType<Query>,
-  );
+  localStore.setQuery(query, queryArgs, next);
 }
 
 function isStalePlacementError(error: unknown) {

@@ -1,14 +1,9 @@
 import { useMutation } from "convex/react";
 import type { OptimisticLocalStore } from "convex/browser";
-import type { FunctionReturnType } from "convex/server";
 import { api } from "@backend/_generated/api";
 import type { Id } from "@backend/_generated/dataModel";
 import type { Action, TerritoryId } from "risk-engine";
 import type { PublicState } from "@/lib/game/types";
-
-type GameViewState = {
-  state: PublicState | null;
-};
 
 function applyOptimisticAction(state: PublicState, action: Action): PublicState | null {
   switch (action.type) {
@@ -86,18 +81,15 @@ function updateGameViewState(
   updater: (state: PublicState) => PublicState | null,
 ) {
   const queryArgs = { gameId } as const;
-  const updateQuery = <Query extends typeof api.games.getGameView | typeof api.games.getGameViewAsPlayer>(
-    query: Query,
+  const updateQuery = (
+    query: typeof api.games.getGameView | typeof api.games.getGameViewAsPlayer,
   ) => {
-    const existing = localStore.getQuery(
-      query,
-      queryArgs as unknown as Parameters<typeof localStore.getQuery>[1],
-    ) as unknown as GameViewState | null | undefined;
-    if (!existing || !existing.state) return;
+    const existing = localStore.getQuery(query, queryArgs);
+    if (!existing || existing.status === "lobby" || !existing.state) return;
     const nextState = updater(existing.state);
     if (!nextState) return;
-    const payload = ({ ...existing, state: nextState } as unknown) as FunctionReturnType<Query>;
-    localStore.setQuery(query, queryArgs as unknown as Parameters<typeof localStore.setQuery>[1], payload);
+    const payload = { ...existing, state: nextState };
+    localStore.setQuery(query, queryArgs, payload);
   };
   updateQuery(api.games.getGameView);
   updateQuery(api.games.getGameViewAsPlayer);
