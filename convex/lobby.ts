@@ -900,10 +900,9 @@ export const startGame = mutation({
       const pid = playerIds[i]!;
       const playerDoc = playerDocs[i]!;
       const teamId = teamMode.enabled ? teamAssignmentsByUserId[playerDoc.userId] : undefined;
-      players[pid] = {
-        status: "alive",
-        ...(teamId ? { teamId: teamId as TeamId } : {}),
-      };
+      const player: { status: "alive"; teamId?: TeamId } = { status: "alive" };
+      if (teamId) player.teamId = teamId as TeamId;
+      players[pid] = player;
     }
 
     // Create card deck

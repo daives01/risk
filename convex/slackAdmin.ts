@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { components } from "./_generated/api.js";
 import { authComponent } from "./auth.js";
 import { requireAdmin } from "./adminAuth";
-import { normalizeChannelId, normalizeSlackUserId, normalizeTeamId } from "./slackValidation";
+import { buildWorkspaceUpdatePatch, normalizeSlackUserId, normalizeTeamId } from "./slackValidation";
 
 export const listWorkspaces = query({
   args: {},
@@ -61,14 +61,7 @@ export const updateWorkspace = mutation({
       .withIndex("by_teamId", (q) => q.eq("teamId", normalizedTeamId))
       .unique();
     if (!workspace) throw new Error("Slack workspace not found");
-    await ctx.db.patch(workspace._id, {
-      ...(args.teamName ? { teamName: args.teamName.trim() } : {}),
-      ...(args.defaultChannelId
-        ? { defaultChannelId: normalizeChannelId(args.defaultChannelId) }
-        : {}),
-      ...(args.status ? { status: args.status } : {}),
-      updatedAt: Date.now(),
-    });
+    await ctx.db.patch(workspace._id, buildWorkspaceUpdatePatch(args));
   },
 });
 

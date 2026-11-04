@@ -1,5 +1,6 @@
 import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { authComponent } from "./auth.js";
 import { components } from "./_generated/api.js";
 import { validateAuthoredMap } from "risk-engine";
@@ -217,15 +218,12 @@ export const saveGraph = mutation({
       .unique();
     if (!map) throw new Error("Map not found");
 
-    await ctx.db.patch(map._id, {
-      ...(name ? { name } : {}),
-      graphMap,
-      playerLimits,
-      authoring: {
-        status: "draft",
-        updatedAt: Date.now(),
-      },
-    });
+    const patch: Partial<Pick<Doc<"maps">, "name" | "graphMap" | "playerLimits" | "authoring">> = {};
+    if (name) patch.name = name;
+    patch.graphMap = graphMap;
+    patch.playerLimits = playerLimits;
+    patch.authoring = { status: "draft", updatedAt: Date.now() };
+    await ctx.db.patch(map._id, patch);
   },
 });
 

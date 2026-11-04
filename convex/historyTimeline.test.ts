@@ -90,6 +90,46 @@ describe("history timeline compact states", () => {
     stateVersion: 7,
   };
 
+  test("applies zero/false values, keeps omitted optionals and does not mutate previous state", () => {
+    const before = structuredClone(previous);
+    const patch = {
+      capturedThisTurn: false, tradesCompleted: 0, deckCount: 0, discardCount: 0,
+      handSizes: {}, stateVersion: 0, territories: { alaska: { armies: 0 } },
+      fortifiesUsedThisTurn: 0,
+    };
+    const next = applyTimelineStatePatch({ ...previous, capturedThisTurn: true }, patch);
+    expect(next).toMatchObject({
+      capturedThisTurn: false, tradesCompleted: 0, deckCount: 0, discardCount: 0,
+      handSizes: {}, stateVersion: 0, fortifiesUsedThisTurn: 0,
+    });
+    expect(next.territories.alaska).toEqual({ ownerId: "p1", armies: 0 });
+    expect(next.pending).toBe(previous.pending);
+    expect(next.reinforcements).toBe(previous.reinforcements);
+    expect(previous).toEqual(before);
+    expect(patch.territories.alaska).toEqual({ armies: 0 });
+  });
+
+  test("distinguishes omission, explicit undefined and null deletion of optional fields", () => {
+    const omitted = applyTimelineStatePatch(previous, {});
+    expect(Object.prototype.hasOwnProperty.call(omitted, "pending")).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(omitted, "reinforcements")).toBe(true);
+    const removed = applyTimelineStatePatch(previous, {
+      pending: null, reinforcements: null, fortifiesUsedThisTurn: null,
+    });
+    expect(Object.prototype.hasOwnProperty.call(removed, "pending")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(removed, "reinforcements")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(removed, "fortifiesUsedThisTurn")).toBe(false);
+    const explicit = applyTimelineStatePatch(previous, { pending: undefined });
+    expect(Object.prototype.hasOwnProperty.call(explicit, "pending")).toBe(true);
+    expect(explicit.pending).toBeUndefined();
+    const withoutOptionals = { ...previous };
+    delete withoutOptionals.pending;
+    delete withoutOptionals.reinforcements;
+    const unchanged = applyTimelineStatePatch(withoutOptionals, {});
+    expect(Object.prototype.hasOwnProperty.call(unchanged, "pending")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(unchanged, "reinforcements")).toBe(false);
+  });
+
   test("builds sparse patches and reconstructs the next public state", () => {
     const next = {
       ...previous,

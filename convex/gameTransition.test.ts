@@ -2,18 +2,18 @@ import { describe, expect, test } from "bun:test";
 import { convexTest } from "convex-test";
 import type { GameState, PlayerId, TerritoryId } from "risk-engine";
 import schema from "./schema";
+import { internal } from "./_generated/api";
 import { executeGameTransition, GameTransitionRejected } from "./gameTransition";
 
 const P1 = "p1" as PlayerId;
 const P2 = "p2" as PlayerId;
 
 function state(phase: "Reinforcement" | "Attack" = "Attack"): GameState {
-  return {
+  const initial: GameState = {
     players: { [P1]: { status: "alive" }, [P2]: { status: "alive" } },
     turnOrder: [P1, P2],
     territories: { t1: { ownerId: P1, armies: 3 }, t2: { ownerId: P2, armies: 3 } },
     turn: { currentPlayerId: P1, phase, round: 1 },
-    ...(phase === "Reinforcement" ? { reinforcements: { remaining: 3 } } : {}),
     deck: { draw: [], discard: [] },
     cardsById: {},
     hands: { [P1]: [], [P2]: [] },
@@ -23,6 +23,8 @@ function state(phase: "Reinforcement" | "Attack" = "Attack"): GameState {
     stateVersion: 7,
     rulesetVersion: 1,
   };
+  if (phase === "Reinforcement") return { ...initial, reinforcements: { remaining: 3 } };
+  return initial;
 }
 
 async function seed(phase: "Reinforcement" | "Attack" = "Attack") {
@@ -138,6 +140,35 @@ describe("Game Transition transaction", () => {
     expect((persisted.current?.privateState as GameState).turn.phase).toBe("Fortify");
   });
 
+  test("User transitions cancel the owned timeout job without adding completion fields", async () => {
+    const { t, gameId } = await seed();
+    const jobId = await t.run(async (ctx) => {
+      const id = await ctx.scheduler.runAt(Date.now() + 86_400_000, internal.asyncTurns.processExpiredTurn, {
+        gameId, expectedPlayerId: P1, expectedTurnStartedAt: 1,
+      });
+      await ctx.db.patch(gameId, { turnTimeoutJobId: id });
+      return id;
+    });
+    await t.mutation((ctx) => executeGameTransition(ctx, {
+      gameId,
+      source: { type: "user", playerId: P1, actingUserId: "user-1", wasDelegated: false },
+      intent: { type: "action", action: { type: "EndAttackPhase" }, expectedVersion: 7 },
+      now: Date.now(),
+    }));
+    const persisted = await t.run(async (ctx) => ({
+      game: await ctx.db.get(gameId),
+      job: await ctx.db.system.get(jobId),
+      frame: await ctx.db.query("gameActions").unique(),
+    }));
+    expect(persisted.job?.state.kind).toBe("canceled");
+    expect(persisted.game?.status).toBe("active");
+    expect(Object.prototype.hasOwnProperty.call(persisted.game, "finishedAt")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(persisted.game, "winningPlayerId")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(persisted.game, "winningTeamId")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(persisted.frame, "wasDelegated")).toBe(true);
+    expect(persisted.frame?.wasDelegated).toBe(false);
+  });
+
   test("keeps a reinforcement batch as one delegated History Frame", async () => {
     const { t, gameId } = await seed("Reinforcement");
     await t.mutation((ctx) => executeGameTransition(ctx as any, {
@@ -156,6 +187,13 @@ describe("Game Transition transaction", () => {
   test("commits every system-timeout frame contiguously without User provenance", async () => {
     const { t, gameId } = await seed("Reinforcement");
     const transitionNow = Date.now();
+    const ownedJobId = await t.run(async (ctx) => {
+      const id = await ctx.scheduler.runAt(transitionNow + 86_400_000, internal.asyncTurns.processExpiredTurn, {
+        gameId, expectedPlayerId: P1, expectedTurnStartedAt: transitionNow - 100,
+      });
+      await ctx.db.patch(gameId, { turnTimeoutJobId: id });
+      return id;
+    });
     await t.run((ctx) => ctx.db.patch(gameId, {
       timingMode: "async_1d",
       turnStartedAt: transitionNow - 100,
@@ -174,7 +212,12 @@ describe("Game Transition transaction", () => {
       snapshots: await ctx.db.query("gameStateSnapshots").collect(),
       current: await ctx.db.query("gameStates").unique(),
       scheduled: await ctx.db.system.query("_scheduled_functions").collect(),
+      ownedJob: await ctx.db.system.get(ownedJobId),
     }));
+    expect(persisted.ownedJob?.state.kind).toBe("pending");
+    expect(persisted.frames.every((frame) =>
+      !Object.prototype.hasOwnProperty.call(frame, "actingUserId")
+      && !Object.prototype.hasOwnProperty.call(frame, "wasDelegated"))).toBe(true);
     expect(persisted.frames.map((frame) => frame.index)).toEqual(persisted.frames.map((_, index) => index));
     expect(persisted.frames.every((frame) => frame.createdAt === transitionNow && frame.actingUserId === undefined && frame.wasDelegated === undefined)).toBe(true);
     expect(persisted.frames[0]?.events).toContainEqual({ type: "TurnTimedOut", playerId: P1 });

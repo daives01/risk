@@ -1,5 +1,6 @@
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { FunctionArgs } from "convex/server";
 import type { MutationCtx } from "./_generated/server";
 import {
   ActionError,
@@ -75,6 +76,9 @@ export function applyTimeoutPolicy(args: {
   const historyFrames: GameTransitionHistoryFrame[] = [];
   const apply = (action: Action) => {
     const beforeState = workingState;
+    let options: Parameters<typeof applyAction>[8];
+    if (action.type === "PlaceReinforcements") options = { allowPlacementWithoutForcedTrade: true };
+    else if (action.type === "EndAttackPhase") options = { allowTurnAdvanceWithoutForcedTrade: true };
     const result = applyAction(
       beforeState,
       args.playerId,
@@ -84,12 +88,7 @@ export function applyTimeoutPolicy(args: {
       args.ruleset.fortify,
       args.ruleset.cards,
       args.ruleset.teams,
-      action.type === "PlaceReinforcements" || action.type === "EndAttackPhase"
-        ? {
-          ...(action.type === "PlaceReinforcements" ? { allowPlacementWithoutForcedTrade: true } : {}),
-          ...(action.type === "EndAttackPhase" ? { allowTurnAdvanceWithoutForcedTrade: true } : {}),
-        }
-        : undefined,
+      options,
     );
     historyFrames.push({ action, events: result.events, beforeState, afterState: result.state });
     workingState = result.state;
@@ -134,10 +133,10 @@ function winnerFrom(events: readonly unknown[]) {
   const event = events.find((value) => value && typeof value === "object" && (value as { type?: string }).type === "GameEnded") as
     | { winningPlayerId?: unknown; winningTeamId?: unknown }
     | undefined;
-  return {
-    ...(typeof event?.winningPlayerId === "string" ? { winningPlayerId: event.winningPlayerId } : {}),
-    ...(typeof event?.winningTeamId === "string" ? { winningTeamId: event.winningTeamId } : {}),
-  };
+  const winner: Partial<Pick<Doc<"games">, "winningPlayerId" | "winningTeamId">> = {};
+  if (typeof event?.winningPlayerId === "string") winner.winningPlayerId = event.winningPlayerId;
+  if (typeof event?.winningTeamId === "string") winner.winningTeamId = event.winningTeamId;
+  return winner;
 }
 
 export async function executeGameTransition(
@@ -215,12 +214,16 @@ export async function executeGameTransition(
     const events = args.intent.type === "timeout" && offset === 0
       ? [{ type: "TurnTimedOut", playerId: args.source.playerId }, ...frame.events]
       : frame.events;
-    await ctx.db.insert("gameActions", {
+    const historyFrame: Omit<Doc<"gameActions">, "_id" | "_creationTime"> = {
       gameId: args.gameId, index, playerId: args.source.playerId, action: frame.action, events,
       publicStatePatch: buildTimelineStatePatch(publicGameStateProjection(frame.beforeState), publicGameStateProjection(frame.afterState)),
-      ...(args.source.type === "user" ? { actingUserId: args.source.actingUserId, wasDelegated: args.source.wasDelegated } : {}),
       stateVersionBefore: frame.beforeState.stateVersion, stateVersionAfter: frame.afterState.stateVersion, createdAt: now,
-    });
+    };
+    if (args.source.type === "user") {
+      historyFrame.actingUserId = args.source.actingUserId;
+      historyFrame.wasDelegated = args.source.wasDelegated;
+    }
+    await ctx.db.insert("gameActions", historyFrame);
     await persistFrameGameLuck(ctx, {
       gameId: args.gameId,
       attackerId: args.source.playerId,
@@ -237,18 +240,24 @@ export async function executeGameTransition(
     previousState: state, nextState, now, currentTurnStartedAt: game.turnStartedAt ?? undefined,
     currentTurnDeadlineAt: game.turnDeadlineAt ?? undefined,
   });
-  const turnTimeoutJobId = await scheduleTurnTimeout({
+  const timeoutArgs: Parameters<typeof scheduleTurnTimeout>[0] = {
     scheduler: ctx.scheduler,
-    ...(args.source.type === "user" ? { currentJobId: game.turnTimeoutJobId } : {}),
     gameId: args.gameId, turnDeadlineAt: timing.turnDeadlineAt, turnStartedAt: timing.turnStartedAt,
     expectedPlayerId: timing.turnStartedAt ? nextState.turn.currentPlayerId : undefined,
-  });
+  };
+  if (args.source.type === "user") timeoutArgs.currentJobId = game.turnTimeoutJobId;
+  const turnTimeoutJobId = await scheduleTurnTimeout(timeoutArgs);
   await upsertCurrentGameState(ctx, { gameId: args.gameId, state: nextState, updatedAt: now });
   const isGameOver = nextState.turn.phase === "GameOver";
-  await ctx.db.patch(args.gameId, {
+  const gamePatch: Partial<Pick<Doc<"games">, "turnStartedAt" | "turnDeadlineAt" | "turnTimeoutJobId" | "status" | "finishedAt" | "winningPlayerId" | "winningTeamId">> = {
     turnStartedAt: timing.turnStartedAt, turnDeadlineAt: timing.turnDeadlineAt, turnTimeoutJobId,
-    ...(isGameOver ? { status: "finished" as const, finishedAt: now, ...winnerFrom(allEvents) } : {}),
-  });
+  };
+  if (isGameOver) {
+    gamePatch.status = "finished";
+    gamePatch.finishedAt = now;
+    Object.assign(gamePatch, winnerFrom(allEvents));
+  }
+  await ctx.db.patch(args.gameId, gamePatch);
   if (timing.shouldNotify && timing.turnStartedAt) {
     await ctx.scheduler.runAfter(0, (internal as any).turnNotifications.sendTurnNotifications, {
       gameId: args.gameId, expectedPlayerId: nextState.turn.currentPlayerId, turnStartedAt: timing.turnStartedAt,
@@ -257,10 +266,11 @@ export async function executeGameTransition(
   const eliminated = allEvents.filter((event): event is { eliminatedId: string; byId?: string } =>
     !!event && typeof event === "object" && (event as { type?: string }).type === "PlayerEliminated" && typeof (event as { eliminatedId?: unknown }).eliminatedId === "string");
   if (eliminated.length > 0) {
-    await ctx.scheduler.runAfter(0, (internal as any).eliminationNotifications.sendEliminationNotifications, {
+    const notificationArgs: FunctionArgs<typeof internal.eliminationNotifications.sendEliminationNotifications> = {
       gameId: args.gameId, eliminatedPlayerIds: eliminated.map((event) => event.eliminatedId),
-      ...(typeof eliminated[0]?.byId === "string" ? { byPlayerId: eliminated[0].byId } : {}),
-    });
+    };
+    if (typeof eliminated[0]?.byId === "string") notificationArgs.byPlayerId = eliminated[0].byId;
+    await ctx.scheduler.runAfter(0, internal.eliminationNotifications.sendEliminationNotifications, notificationArgs);
   }
   return { events: allEvents, newVersion: nextState.stateVersion, frameCount: historyFrames.length };
 }
