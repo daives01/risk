@@ -23,6 +23,23 @@ const resolver = buildChatMentionResolver(
 );
 
 describe("chat mentions", () => {
+  test("team aliases omit absent IDs, deduplicate and retain sorted numbering", () => {
+    const teams = buildChatMentionResolver(
+      [
+        { displayName: "A", enginePlayerId: null, teamId: "z" },
+        { displayName: "B", enginePlayerId: null, teamId: "" },
+        { displayName: "C", enginePlayerId: null },
+        { displayName: "D", enginePlayerId: null, teamId: "z" },
+      ],
+      { a: "Alpha", z: "Zulu" },
+      { territories: {} },
+    );
+    expect(teams.resolve("team1")).toEqual({ kind: "team", teamId: "a" });
+    expect(teams.resolve("team2")).toEqual({ kind: "team", teamId: "z" });
+    expect(teams.resolve("team3")).toBeNull();
+    expect(teams.options.map((option) => option.label)).toEqual(["Alpha", "Zulu"]);
+  });
+
   test("resolves players, teams, and territories", () => {
     expect(resolver.resolve("Ada Lovelace")).toEqual({ kind: "player", playerId: "p1" });
     expect(resolver.resolve("red team")).toEqual({ kind: "team", teamId: "red" });

@@ -114,7 +114,7 @@ export function buildChatMentionResolver(
 
   const teamIds = [
     ...new Set([
-      ...playerOptions.map((player) => player.teamId).filter((teamId): teamId is string => !!teamId),
+      ...playerOptions.flatMap((player) => player.teamId ? [player.teamId] : []),
       ...Object.keys(teamNames),
     ]),
   ].sort((a, b) => a.localeCompare(b));
