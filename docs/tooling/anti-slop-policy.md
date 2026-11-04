@@ -114,3 +114,11 @@ and Promise/PromiseLike wrappers; it does not prove that inferred returns or
 `any` are parsed. Unknown parser inputs remain permitted under the input decision
 above. Functions should expose their checked output contract, without changing
 unknown inputs into trusted values simply to satisfy lint.
+
+## Unknown aliases
+
+`no-unknown-type-aliases` is enforced workspace-wide at a zero baseline. The
+pinned rule resolves local aliases/unions that conceal the unknown top type;
+unknown remains explicit at parsing/error inputs. This does not prohibit domain
+objects with individual unknown fields pending validation, and does not claim
+cross-module type-checker analysis or runtime validation.
