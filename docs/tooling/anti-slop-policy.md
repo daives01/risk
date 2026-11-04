@@ -229,3 +229,23 @@ verifying compatibility again. A formatter gate can be considered independently;
 this baseline leaves the normal check sequence unchanged. Regeneration must
 use the pinned tools and isolated one-rule autofix; never run the entire audit's
 autofixes to update the baseline.
+
+## Readable-spacing enforcement
+
+After the dedicated baseline, `require-readable-spacing` is enforced as an
+error workspace-wide at zero findings. `bun run check` reaches it through the
+normal Oxlint lint command. No formatter-drift gate is added.
+
+`bun run format` now runs Oxfmt, the isolated `format:spacing` autofix, Oxfmt
+again, and a final spacing-only check with warnings denied. This makes the
+published command cooperate with the readability policy and fail visibly if
+reflow leaves unresolved findings. `format:check` still checks Oxfmt drift;
+the normal lint gate separately checks readable spacing.
+
+`.oxlintrc.spacing.json` disables the default correctness category and enables
+only this one warning rule from the pinned generic plugin. It does not extend
+the normal/audit rule presets, so formatting cannot autofix unrelated candidate
+policies. Its vendor/generated/agent/dist exclusions match the normal audit
+scope. Keep exclusions synchronized across the normal, audit and spacing-only
+configs when scope changes. Upstream rule or formatter upgrades require fresh
+convergence and semantic review; newly added upstream rules remain opt-in.
