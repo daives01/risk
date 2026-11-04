@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { GameEvent, GameState } from "risk-engine";
+import type { GameEvent, GameState, PlayerId, TerritoryId } from "risk-engine";
 import {
   applyTimelineStatePatch,
   buildTimelineStatePatch,
@@ -8,17 +8,40 @@ import {
   type TimelinePublicState,
 } from "./historyTimeline";
 
-const baseState = {
-  turn: {
-    round: 3,
-    currentPlayerId: "p2",
-    phase: "Attack",
-  },
-} as GameState;
+// SAFETY: These literal strings identify the players used by this complete timeline fixture.
+const P1 = "p1" as PlayerId;
+// SAFETY: This fixture's current-player ID is the same p2 key declared in players below.
+const P2 = "p2" as PlayerId;
+// SAFETY: This fixture declares p3 as the defeated player referenced by the elimination event.
+const P3 = "p3" as PlayerId;
+// SAFETY: The a and b strings are territory keys in this fixture, not unvalidated external IDs.
+const A = "a" as TerritoryId;
+// SAFETY: The b string is the source territory key declared in this fixture.
+const B = "b" as TerritoryId;
+
+const baseState: GameState = {
+  players: { p1: { status: "alive" }, p2: { status: "alive" }, p3: { status: "defeated" } },
+  turnOrder: [P1, P2],
+  territories: { a: { ownerId: P1, armies: 1 }, b: { ownerId: P2, armies: 2 } },
+  turn: { round: 3, currentPlayerId: P2, phase: "Attack" },
+  deck: { draw: [], discard: [] },
+  cardsById: {},
+  hands: { p1: [], p2: [], p3: [] },
+  tradesCompleted: 0,
+  capturedThisTurn: true,
+  rng: { seed: "timeline-fixture", index: 0 },
+  stateVersion: 1,
+  rulesetVersion: 1,
+};
+
+const capture: GameEvent = { type: "TerritoryCaptured", from: B, to: A, newOwnerId: P1 };
+const elimination: GameEvent = {
+  type: "PlayerEliminated", eliminatedId: P3, byId: P1, cardsTransferred: [],
+};
 
 describe("history timeline summaries", () => {
   test("describes known event types", () => {
-    expect(describeTimelineStep({ type: "Attack" }, [{ type: "TerritoryCaptured", to: "a" } as GameEvent])).toBe(
+    expect(describeTimelineStep({ type: "Attack" }, [capture])).toBe(
       "Territory captured",
     );
     expect(describeTimelineStep({ type: "PlaceReinforcementsBatch" }, [])).toBe("Placement batch confirmed");
@@ -29,10 +52,7 @@ describe("history timeline summaries", () => {
       action: { type: "Attack" },
       actionType: "Attack",
       actorId: "p1",
-      events: [
-        { type: "TerritoryCaptured", to: "a", newOwnerId: "p1" } as GameEvent,
-        { type: "PlayerEliminated", eliminatedId: "p3", byId: "p1", cardsTransferred: [] } as unknown as GameEvent,
-      ],
+      events: [capture, elimination],
       state: baseState,
     });
 
