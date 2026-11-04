@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const envDir = path.resolve(__dirname, "..")
+  const envDir = path.resolve(import.meta.dirname, "..")
   const env = loadEnv(mode, envDir, "")
 
   return {
@@ -21,8 +21,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        "@": path.resolve(__dirname, "./src"),
-        "@backend": path.resolve(__dirname, "../convex"),
+        "@": path.resolve(import.meta.dirname, "./src"),
+        "@backend": path.resolve(import.meta.dirname, "../convex"),
       },
     },
   }
