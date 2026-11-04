@@ -105,7 +105,7 @@ export default function GamePage() {
   const { mapPanelRef } = useMapPanelSize();
 
   const typedGameId = gameId as Id<"games"> | undefined;
-  const { playerView, publicView } = useGameViewQueries(session, sessionPending, typedGameId);
+  const { playerView, publicView } = useGameViewQueries(Boolean(session), sessionPending, typedGameId);
   const { view, myEnginePlayerId, myHand, teammateHands, delegatableTurnHand, playerMap, state } = adaptView(playerView, publicView);
   const [chatChannel, setChatChannel] = useState<ChatChannel>("all");
   const [chatRecipientEnginePlayerId, setChatRecipientEnginePlayerId] = useState<string | null>(null);

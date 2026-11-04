@@ -78,3 +78,30 @@ be tightened independently where that improves their owner contracts. Public
 redaction needs the history-schema follow-up described above. This decision
 neither declares every remaining annotation ideal nor fabricates a finite key
 set for runtime dictionaries.
+
+## Unknown inputs
+
+`no-unknown-parameters` remains audit-only. Its pinned implementation has no
+configuration options and exempts only a `cause` parameter and type-predicate
+subjects. Unknown input is required at genuine parsing/error boundaries;
+relabeling it as trusted data would remove the reason to validate it.
+
+The query-selection hook now accepts the boolean it actually consumes
+(`hasSession`), rather than an unknown session object. Its caller supplies
+`Boolean(session)`, preserving every previous truthiness and pending-query
+condition. This removes one unnecessary unknown contract: 35 → 34 findings.
+
+| Remaining scope | Findings | Assessment |
+| --- | ---: | --- |
+| `convex/typeAdapters.ts` readers, structural helpers and callbacks | 19 | These functions inspect untrusted serialized engine data. They validate all nested members before returning typed GameState/GraphMap, with malformed/optional/identity tests from #21. Callback values remain unknown while being checked. |
+| `web/src/lib/map-import.ts` scalar parsers | 2 | `ensureString` and `ensureInteger` must inspect unknown imported JSON fields before constructing editor data. |
+| `convex/historyTimeline.ts` JSON equality inputs | 2 | Comparison accepts arbitrary field values without treating them as a domain object. No input parsing claim is made. |
+| Email/join-game/game error formatters | 5 | JavaScript can throw any value; error boundaries retain unknown and narrow it before accessing Error/string details. |
+| `web/src/lib/game/display.ts` historical event IDs | 3 | Missing/legacy IDs are validated as strings and receive explicit display fallbacks. A public history contract remains a separate follow-up. |
+| `web/src/lib/game/adapters.ts` query adapter inputs | 3 | These currently assert local view facades. Generated-query contracts and the producer's remaining `any` fields deserve assertion cleanup; this is a genuine weakness, not proof that all unknown inputs should be banned. |
+
+Shared parsing already exists for engine persistence and map imports; preserve
+those runtime checks and their rejected-input behavior. Typed query adapters and
+external response parsing remain bounded assertion-cleanup work. Broader adoption
+requires a rule policy that supports actual parser/error inputs; moving a parser's
+unknown parameter into a cosmetic wrapper is not an acceptable substitute.
