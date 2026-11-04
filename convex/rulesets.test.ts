@@ -8,6 +8,32 @@ import {
 } from "./rulesets";
 
 describe("rulesets", () => {
+  test("sanitization omits empty/deprecated groups and undefined fields while retaining false and zero", () => {
+    expect(sanitizeRulesetOverrides(undefined)).toBeUndefined();
+    expect(sanitizeRulesetOverrides({ cards: {}, teams: {}, fortify: {} })).toBeUndefined();
+    expect(sanitizeRulesetOverrides({
+      combat: { allowAttackerDiceChoice: false },
+      cards: { awardCardOnCapture: false, forcedTradeHandSize: undefined },
+      teams: { preventAttackingTeammates: false, allowPlaceOnTeammate: undefined },
+      fortify: { fortifyMode: undefined },
+    })).toBeUndefined();
+    const input = {
+      cards: { forcedTradeHandSize: 0, tradeValues: [], awardCardOnCapture: false },
+      teams: { allowPlaceOnTeammate: false, allowFortifyWithTeammate: false, allowFortifyThroughTeammates: false },
+      fortify: { maxFortifiesPerTurn: 0 },
+    };
+    const before = structuredClone(input);
+    const sanitized = sanitizeRulesetOverrides(input);
+    expect(sanitized).toEqual({
+      cards: { forcedTradeHandSize: 0, tradeValues: [] },
+      teams: { allowPlaceOnTeammate: false, allowFortifyWithTeammate: false, allowFortifyThroughTeammates: false },
+      fortify: { maxFortifiesPerTurn: 0 },
+    });
+    expect(Object.prototype.hasOwnProperty.call(sanitized?.cards ?? {}, "awardCardOnCapture")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(sanitized ?? {}, "combat")).toBe(false);
+    expect(input).toEqual(before);
+  });
+
   test("resolves selected override fields on top of defaults", () => {
     const ruleset = resolveRulesetFromOverrides(false, {
       combat: { allowAttackerDiceChoice: false },

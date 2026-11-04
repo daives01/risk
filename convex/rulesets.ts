@@ -193,51 +193,29 @@ export function validateRulesetOverrides(overrides?: RulesetOverrides): void {
 export function sanitizeRulesetOverrides(overrides?: RulesetOverrides): RulesetOverrides | undefined {
   if (!overrides) return undefined;
 
-  const cards = overrides.cards
-    ? {
-        ...(overrides.cards.forcedTradeHandSize !== undefined
-          ? { forcedTradeHandSize: overrides.cards.forcedTradeHandSize }
-          : {}),
-        ...(overrides.cards.tradeValues !== undefined
-          ? { tradeValues: overrides.cards.tradeValues }
-          : {}),
-        ...(overrides.cards.tradeValueOverflow !== undefined
-          ? { tradeValueOverflow: overrides.cards.tradeValueOverflow }
-          : {}),
-      }
-    : undefined;
-  const teams = overrides.teams
-    ? {
-        ...(overrides.teams.allowPlaceOnTeammate !== undefined
-          ? { allowPlaceOnTeammate: overrides.teams.allowPlaceOnTeammate }
-          : {}),
-        ...(overrides.teams.allowFortifyWithTeammate !== undefined
-          ? { allowFortifyWithTeammate: overrides.teams.allowFortifyWithTeammate }
-          : {}),
-        ...(overrides.teams.allowFortifyThroughTeammates !== undefined
-          ? { allowFortifyThroughTeammates: overrides.teams.allowFortifyThroughTeammates }
-          : {}),
-        ...(overrides.teams.continentBonusRecipient !== undefined
-          ? { continentBonusRecipient: overrides.teams.continentBonusRecipient }
-          : {}),
-      }
-    : undefined;
-  const fortify = overrides.fortify
-    ? {
-        ...(overrides.fortify.fortifyMode !== undefined
-          ? { fortifyMode: overrides.fortify.fortifyMode }
-          : {}),
-        ...(overrides.fortify.maxFortifiesPerTurn !== undefined
-          ? { maxFortifiesPerTurn: overrides.fortify.maxFortifiesPerTurn }
-          : {}),
-      }
-    : undefined;
+  const cards: NonNullable<RulesetOverrides["cards"]> = {};
+  if (overrides.cards) {
+    if (overrides.cards.forcedTradeHandSize !== undefined) cards.forcedTradeHandSize = overrides.cards.forcedTradeHandSize;
+    if (overrides.cards.tradeValues !== undefined) cards.tradeValues = overrides.cards.tradeValues;
+    if (overrides.cards.tradeValueOverflow !== undefined) cards.tradeValueOverflow = overrides.cards.tradeValueOverflow;
+  }
+  const teams: NonNullable<RulesetOverrides["teams"]> = {};
+  if (overrides.teams) {
+    if (overrides.teams.allowPlaceOnTeammate !== undefined) teams.allowPlaceOnTeammate = overrides.teams.allowPlaceOnTeammate;
+    if (overrides.teams.allowFortifyWithTeammate !== undefined) teams.allowFortifyWithTeammate = overrides.teams.allowFortifyWithTeammate;
+    if (overrides.teams.allowFortifyThroughTeammates !== undefined) teams.allowFortifyThroughTeammates = overrides.teams.allowFortifyThroughTeammates;
+    if (overrides.teams.continentBonusRecipient !== undefined) teams.continentBonusRecipient = overrides.teams.continentBonusRecipient;
+  }
+  const fortify: NonNullable<RulesetOverrides["fortify"]> = {};
+  if (overrides.fortify) {
+    if (overrides.fortify.fortifyMode !== undefined) fortify.fortifyMode = overrides.fortify.fortifyMode;
+    if (overrides.fortify.maxFortifiesPerTurn !== undefined) fortify.maxFortifiesPerTurn = overrides.fortify.maxFortifiesPerTurn;
+  }
 
-  const sanitized = {
-    ...(fortify && Object.keys(fortify).length > 0 ? { fortify } : {}),
-    ...(cards && Object.keys(cards).length > 0 ? { cards } : {}),
-    ...(teams && Object.keys(teams).length > 0 ? { teams } : {}),
-  };
+  const sanitized: RulesetOverrides = {};
+  if (Object.keys(fortify).length > 0) sanitized.fortify = fortify;
+  if (Object.keys(cards).length > 0) sanitized.cards = cards;
+  if (Object.keys(teams).length > 0) sanitized.teams = teams;
 
   return Object.keys(sanitized).length > 0 ? sanitized : undefined;
 }
