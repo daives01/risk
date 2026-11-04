@@ -18,9 +18,10 @@
     "test:e2e:ui": "bun e2e/run.ts --ui",
     "check": "bun run typecheck && bun run lint && bun run test && bun run build",
     "lint:ox": "oxlint .",
-    "format": "oxfmt --write",
+    "format": "oxfmt --write && bun run format:spacing && oxfmt --write && oxlint -c .oxlintrc.spacing.json --deny-warnings .",
     "format:check": "oxfmt --check",
-    "audit:anti-slop": "oxlint -c .oxlintrc.audit.json --format json ."
+    "audit:anti-slop": "oxlint -c .oxlintrc.audit.json --format json .",
+    "format:spacing": "oxlint -c .oxlintrc.spacing.json --fix ."
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.13.0",

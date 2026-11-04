@@ -14,7 +14,8 @@
     "anti-slop/no-object-parameters": "error",
     "anti-slop/no-unknown-returns": "error",
     "anti-slop/no-unknown-type-aliases": "error",
-    "anti-slop/no-module-mocking": "error"
+    "anti-slop/no-module-mocking": "error",
+    "anti-slop/require-readable-spacing": "error"
   },
   "overrides": [
     {

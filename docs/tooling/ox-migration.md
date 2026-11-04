@@ -10,9 +10,9 @@ errors fail the check. This expands coverage without suppressing existing findin
 A dedicated formatting baseline now applies Oxfmt 0.76.0 and the pinned
 anti-slop readable-spacing autofix to authored files. Both formatter drift and
 spacing diagnostics are zero after that baseline. The configuration keeps the
-single-quote/no-semicolon style. Formatting and readable-spacing enforcement
-are still deliberately outside the normal `check` gate pending a separate
-policy PR. Generated Convex code, vendor sources, lockfiles, and agent assets
+single-quote/no-semicolon style. Readable spacing is now an Oxlint error in
+`check`; formatter drift remains a separate `format:check` command. `format`
+runs Oxfmt, the isolated spacing autofix, Oxfmt again and a final spacing check. Generated Convex code, vendor sources, lockfiles, and agent assets
 remain excluded. See [the baseline verification and update sequence](anti-slop-policy.md#formatting-baseline).
 
 ## Anti-slop assessment
