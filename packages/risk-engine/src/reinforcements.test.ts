@@ -62,7 +62,7 @@ function makeMap(
   territoryIds: string[],
   continents?: Record<string, { territoryIds: string[]; bonus: number }>,
 ): GraphMap {
-  const territories: Record<string, {}> = {};
+  const territories: GraphMap["territories"] = {};
   const adjacency: Record<string, TerritoryId[]> = {};
   for (const id of territoryIds) {
     territories[id] = {};
