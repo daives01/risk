@@ -122,3 +122,39 @@ pinned rule resolves local aliases/unions that conceal the unknown top type;
 unknown remains explicit at parsing/error inputs. This does not prohibit domain
 objects with individual unknown fields pending validation, and does not claim
 cross-module type-checker analysis or runtime validation.
+
+## Runtime narrowing
+
+`no-runtime-typeof` deliberately remains audit-only. Its default audit reports
+61 findings. A separate trial with the supported `allowInTypeGuards: true`
+option reports 50; exempting predicate bodies does not make a blanket ban fit
+this repository. No normal-check option or rule enforcement is added.
+
+Concrete counterexamples that remain in the trial:
+
+- `risk-engine/src/rng.ts` dispatches on its documented `string | number` seed.
+  A string must be hashed while a numeric seed must retain its numeric path;
+  this is deterministic domain behavior, not an unparsed-input shortcut.
+- `web/src/components/game/map-canvas.tsx` distinguishes a `number | string`
+  CSS height and validates numeric node scale before rendering. Wrapping these
+  checks in named predicates solely for lint would add ceremony without stronger
+  validation. The browser-availability check is already exempt as an undefined
+  existence probe and is not one of the flagged findings.
+- Runtime checks in `risk-engine/src/index.test.ts` assert that branded IDs
+  remain strings. They test nominal IDs' runtime representation, not function
+  exports.
+
+Other findings include map/engine persistence validation and defensive handling
+of legacy replay fields. Those checks must preserve both accepted and rejected
+input behavior. Boundary parsing already exists and is tested; deleting its
+narrowing or asserting inputs as trusted would weaken it. The default audit
+stays at 61 → 61 with all locations visible, rather than hiding findings through
+predicate wrappers or disables. Reconsider only a narrower policy that can
+separate missing boundary validation from valid union dispatch and runtime representation checks.
+
+To reproduce the option trial, copy `.oxlintrc.audit.json` to a temporary config
+in the repository root (so its relative plugin path stays valid), change only
+`anti-slop/no-runtime-typeof` to `["warn", { "allowInTypeGuards": true }]`, and
+run `bunx oxlint -c <temporary-config> --format json .`. Compare the rule's
+locations with the default audit, then remove the temporary config. The trial
+does not change the normal gate or the checked-in audit defaults.
