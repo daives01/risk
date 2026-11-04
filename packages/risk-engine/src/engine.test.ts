@@ -2088,7 +2088,6 @@ describe("Card transfer on elimination", () => {
 
 // ── Team integration tests ──────────────────────────────────────────
 
-import type { TeamId } from "./types.js";
 
 const TEAM_A = "teamA" as TeamId;
 const TEAM_B = "teamB" as TeamId;

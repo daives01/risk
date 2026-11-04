@@ -1,19 +1,25 @@
 {
   "name": "risk",
   "private": true,
-  "workspaces": ["packages/*", "web"],
+  "workspaces": [
+    "packages/*",
+    "web"
+  ],
   "scripts": {
     "dev": "bun run scripts/dev.ts",
     "dev:web": "bun --filter web dev",
     "dev:backend": "convex dev",
     "seed:maps": "bun scripts/seed-maps.ts",
-    "lint": "bun --filter web lint",
+    "lint": "bun run lint:ox && bun --filter web lint",
     "build": "bun --filter risk-engine build && bun --filter web build",
     "typecheck": "tsc --build && tsc -p convex/tsconfig.json && tsc -p e2e/tsconfig.json",
     "test": "bun test",
     "test:e2e": "bun e2e/run.ts",
     "test:e2e:ui": "bun e2e/run.ts --ui",
-    "check": "bun run typecheck && bun run lint && bun run test && bun run build"
+    "check": "bun run typecheck && bun run lint && bun run test && bun run build",
+    "lint:ox": "oxlint .",
+    "format": "oxfmt --write",
+    "format:check": "oxfmt --check"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.13.0",
@@ -28,7 +34,9 @@
     "@playwright/test": "^1.64.1",
     "@types/bun": "^1.4.4",
     "convex-test": "^0.0.67",
-    "typescript": "~6.0.0"
+    "typescript": "~6.0.0",
+    "oxfmt": "0.76.0",
+    "oxlint": "1.91.0"
   },
   "overrides": {
     "@babel/core": "^7.29.13",
