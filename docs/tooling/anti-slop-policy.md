@@ -249,3 +249,22 @@ policies. Its vendor/generated/agent/dist exclusions match the normal audit
 scope. Keep exclusions synchronized across the normal, audit and spacing-only
 configs when scope changes. Upstream rule or formatter upgrades require fresh
 convergence and semantic review; newly added upstream rules remain opt-in.
+
+## Naming policy
+
+`no-shape-in-symbol-names` is deliberately not adopted; it remains visible in
+the audit at 0 → 0 findings. The pinned rule bans a case-insensitive `shape`
+substring in local identifier/private/JSX names, while exempting statically
+borrowed member names. It has no domain vocabulary option.
+
+Separate unexecuted CLI fixtures confirm that `territoryShape` and
+`reshapeTerritory` each produce a diagnostic, while `geometry.shape` as a
+borrowed member produces none. These are trial examples, not current repository
+findings. A map renderer can legitimately name geometry or a geometry operation
+with those words; the substring alone does not establish a weak abstraction.
+
+Keep the owner/domain language in `CONTEXT.md` and review names for their actual
+role. There is no current symbol to rename, and introducing mechanical aliases
+or banning valid geometry vocabulary would add no evidence. No disable or
+customized vendor implementation hides the rule. Reconsider only a policy that
+distinguishes vague catch-all names from meaningful geometric terminology.
