@@ -78,10 +78,10 @@ function resolveWinner(
 
   if (aliveTeams.size !== 1) return null;
   const winningTeamId = players[alivePlayers[0]!]!.teamId;
-  return {
-    ...(alivePlayers.length === 1 ? { winningPlayerId: alivePlayers[0] } : {}),
-    ...(winningTeamId ? { winningTeamId } : {}),
-  };
+  const winner: { winningPlayerId?: PlayerId; winningTeamId?: TeamId } = {};
+  if (alivePlayers.length === 1) winner.winningPlayerId = alivePlayers[0];
+  if (winningTeamId) winner.winningTeamId = winningTeamId;
+  return winner;
 }
 
 // ── Action handlers ───────────────────────────────────────────────────
