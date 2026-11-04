@@ -1062,6 +1062,7 @@ describe("Win condition", () => {
         ) as GameEnded;
         expect(gameEndedEvent).toBeDefined();
         expect(gameEndedEvent.winningPlayerId).toBe(P1);
+        expect(Object.hasOwn(gameEndedEvent, "winningTeamId")).toBe(false);
 
         // Event order: AttackResolved, TerritoryCaptured, PlayerEliminated, GameEnded
         const types = result.events.map((e) => e.type);
@@ -1137,6 +1138,25 @@ describe("Win condition", () => {
     expect(elimEvent).toBeUndefined();
   });
 
+  test("a team's sole surviving player wins with both IDs", () => {
+    // SAFETY: These synthetic team strings are used consistently in this fixture's player records.
+    const teamA = "teamA" as TeamId;
+    // SAFETY: This synthetic team is assigned to the surviving fixture player P2 below.
+    const teamB = "teamB" as TeamId;
+    const state = makeAttackState({
+      players: { p1: { status: "alive", teamId: teamA }, p2: { status: "alive", teamId: teamB } },
+      turnOrder: [P1, P2],
+    });
+    const result = applyAction(
+      state, P1, { type: "Resign" }, testMap, defaultRuleset.combat,
+      defaultRuleset.fortify, defaultRuleset.cards,
+      { ...defaultRuleset.teams, teamsEnabled: true, winCondition: "lastTeamStanding" },
+    );
+    expect(result.events.find((event) => event.type === "GameEnded")).toEqual({
+      type: "GameEnded", winningPlayerId: P2, winningTeamId: teamB,
+    });
+  });
+
   test("team game ends with winningTeamId when last enemy team is eliminated", () => {
     const teamA = "teamA" as TeamId;
     const teamB = "teamB" as TeamId;
@@ -1183,6 +1203,7 @@ describe("Win condition", () => {
       const gameEndedEvent = result.events.find((e) => e.type === "GameEnded") as GameEnded;
       expect(gameEndedEvent.winningTeamId).toBe(teamA);
       expect(gameEndedEvent.winningPlayerId).toBeUndefined();
+      expect(Object.hasOwn(gameEndedEvent, "winningPlayerId")).toBe(false);
       return;
     }
 
