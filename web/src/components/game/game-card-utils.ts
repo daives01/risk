@@ -1,15 +1,22 @@
+import type { CardKind } from "risk-engine";
+
 export interface GameCardData {
   cardId: string;
   kind: string;
 }
 
-const kindOrder: Record<string, number> = { A: 0, B: 1, C: 2, W: 3 };
+const kindOrder = { A: 0, B: 1, C: 2, W: 3 } satisfies Record<CardKind, number>;
+
+export function isCardKind(kind: string): kind is CardKind {
+  return kind === "A" || kind === "B" || kind === "C" || kind === "W";
+}
 
 export function sortCardsByKind<T extends GameCardData>(cards: readonly T[]): T[] {
-  return [...cards].sort((left, right) =>
-    (kindOrder[left.kind] ?? Number.MAX_SAFE_INTEGER) -
-    (kindOrder[right.kind] ?? Number.MAX_SAFE_INTEGER),
-  );
+  return [...cards].sort((left, right) => {
+    const leftOrder = isCardKind(left.kind) ? kindOrder[left.kind] : Number.MAX_SAFE_INTEGER;
+    const rightOrder = isCardKind(right.kind) ? kindOrder[right.kind] : Number.MAX_SAFE_INTEGER;
+    return leftOrder - rightOrder;
+  });
 }
 
 export function resolveAutoSelectState(

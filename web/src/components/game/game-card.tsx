@@ -1,15 +1,16 @@
 import type { CSSProperties } from "react";
+import type { CardKind } from "risk-engine";
 import cardArt from "@/assets/card-art/card-art.svg";
-import { sortCardsByKind, type GameCardData } from "./game-card-utils";
+import { isCardKind, sortCardsByKind, type GameCardData } from "./game-card-utils";
 
 const artworkCrop = (viewBox: string) => `${cardArt}#svgView(viewBox(${viewBox}))`;
 
-const cardMeta: Record<string, { name: string; color: string; artwork: string }> = {
+const cardMeta = {
   A: { name: "Infantry", color: "#c87362", artwork: artworkCrop("60,265,320,320") },
   B: { name: "Cavalry", color: "#6e9eb5", artwork: artworkCrop("430,265,330,320") },
   C: { name: "Artillery", color: "#c5a25b", artwork: artworkCrop("800,265,320,320") },
   W: { name: "Wild", color: "#9a7db3", artwork: artworkCrop("1170,265,300,320") },
-};
+} satisfies Record<CardKind, { name: string; color: string; artwork: string }>;
 
 interface GameCardProps {
   card: GameCardData;
@@ -20,7 +21,7 @@ interface GameCardProps {
 }
 
 export function GameCard({ card, compact = false, selected = false, disabled = false, onClick }: GameCardProps) {
-  const meta = cardMeta[card.kind] ?? {
+  const meta = isCardKind(card.kind) ? cardMeta[card.kind] : {
     name: card.kind,
     color: "var(--muted-foreground)",
     artwork: cardMeta.W.artwork,

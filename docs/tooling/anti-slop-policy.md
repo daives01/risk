@@ -33,3 +33,48 @@ legacy/malformed history, then derive backend/frontend replay consumers from
 those contracts. Re-evaluate the parser exemptions upstream separately. Until
 then these 13 findings remain visible in the opt-in audit, with no claim that
 all dictionary contracts are validated.
+
+## Known-value widening
+
+`no-known-value-widening` remains audit-only for the entire workspace. Finite
+frontend lookup tables are useful to tighten independently: card metadata and
+sort ranks now satisfy `Record<CardKind, ...>` while retaining finite keys, and
+an explicit runtime `CardKind` predicate validates arbitrary card-kind strings
+before indexing. Unknown values still use the display fallback and stable final
+sort group. Prototype-like names (`constructor`, `__proto__`, `toString`) now take
+that same fallback rather than resolving inherited object properties.
+
+Verification URL errors now select only supported codes through a domain lookup
+function, retaining each supported message and the generic fallback for arbitrary
+codes. The classic-map color/continent/territory tables keep inferred finite keys;
+`satisfies` validates metadata without adding an open index signature to their
+inferred types, and territory continent references must name a known continent.
+Their dynamic grouping accumulator remains an open dictionary.
+
+This bounded review removes six frontend findings: frontend 9 → 3, global
+30 → 24 (engine 12 and backend 9 unchanged). Remaining frontend findings are
+`map-editor-validation.ts`'s runtime adjacency builder,
+`classic-map-layout.ts`'s grouping accumulator, and `admin-map-editor.tsx`'s
+runtime adjacency editor. Their keys come from runtime data.
+Backend findings include `historyTimeline.ts`'s sparse territory-entry builder
+and `lobby.ts`'s runtime player record; engine reinforcement source accumulators
+are similarly incremental. `gameTransition.ts`'s incremental winner object uses
+the same legitimate construction pattern, although this pinned detector does
+not report its Doc-derived annotation. Those annotations express the final
+owned contract while fields are added under real runtime conditions. Removing them or adding equivalent aliases merely to
+silence this rule would obscure that contract. No blanket enforcement, aliases,
+or disables are introduced. Reconsider broader adoption only if upstream can
+distinguish harmful loss of finite information from honest construction and
+open runtime dictionaries; the remaining findings stay visible in the audit.
+
+The remaining 24 diagnostics are accounted for as follows: engine reinforcement
+helpers/source construction (6), fixed reinforcement fixtures (3), permission
+fixtures (2), incremental winner construction (1); backend team-order/endgame
+fixtures (4), sparse history patches (1), runtime team assignments (1), public
+trade-action redaction (1), fixed seed anchors (1), incremental lobby player
+construction (1); frontend open adjacency construction/editing (2) and continent
+grouping (1). Fixed fixtures, seed anchors, and partial helper results can still
+be tightened independently where that improves their owner contracts. Public
+redaction needs the history-schema follow-up described above. This decision
+neither declares every remaining annotation ideal nor fabricates a finite key
+set for runtime dictionaries.

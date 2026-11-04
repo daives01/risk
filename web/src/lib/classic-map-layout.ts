@@ -1,4 +1,4 @@
-export const PLAYER_COLORS: Record<string, { bg: string; border: string; text: string }> = {
+export const PLAYER_COLORS = {
   p0: { bg: "bg-red-500", border: "border-red-600", text: "text-red-500" },
   p1: { bg: "bg-blue-500", border: "border-blue-600", text: "text-blue-500" },
   p2: { bg: "bg-green-500", border: "border-green-600", text: "text-green-500" },
@@ -6,18 +6,18 @@ export const PLAYER_COLORS: Record<string, { bg: string; border: string; text: s
   p4: { bg: "bg-purple-500", border: "border-purple-600", text: "text-purple-500" },
   p5: { bg: "bg-orange-500", border: "border-orange-600", text: "text-orange-500" },
   neutral: { bg: "bg-gray-400", border: "border-gray-500", text: "text-gray-400" },
-};
+} satisfies Record<string, { bg: string; border: string; text: string }>;
 
-export const CONTINENT_DISPLAY: Record<string, { name: string; color: string }> = {
+export const CONTINENT_DISPLAY = {
   "north-america": { name: "North America", color: "bg-amber-50 border-amber-200" },
   "south-america": { name: "South America", color: "bg-red-50 border-red-200" },
   "europe": { name: "Europe", color: "bg-blue-50 border-blue-200" },
   "africa": { name: "Africa", color: "bg-orange-50 border-orange-200" },
   "asia": { name: "Asia", color: "bg-green-50 border-green-200" },
   "australia": { name: "Australia", color: "bg-purple-50 border-purple-200" },
-};
+} satisfies Record<string, { name: string; color: string }>;
 
-export const TERRITORY_DISPLAY: Record<string, { name: string; continent: string }> = {
+export const TERRITORY_DISPLAY = {
   // North America
   "alaska": { name: "Alaska", continent: "north-america" },
   "northwest-territory": { name: "NW Territory", continent: "north-america" },
@@ -66,7 +66,7 @@ export const TERRITORY_DISPLAY: Record<string, { name: string; continent: string
   "new-guinea": { name: "New Guinea", continent: "australia" },
   "western-australia": { name: "W. Australia", continent: "australia" },
   "eastern-australia": { name: "E. Australia", continent: "australia" },
-};
+} satisfies Record<string, { name: string; continent: keyof typeof CONTINENT_DISPLAY }>;
 
 export function getTerritoriesByContinent(): Record<string, string[]> {
   const groups: Record<string, string[]> = {};
