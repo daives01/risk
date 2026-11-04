@@ -158,3 +158,28 @@ in the repository root (so its relative plugin path stays valid), change only
 run `bunx oxlint -c <temporary-config> --format json .`. Compare the rule's
 locations with the default audit, then remove the temporary config. The trial
 does not change the normal gate or the checked-in audit defaults.
+
+## Module mocking
+
+`no-module-mocking` is enforced workspace-wide for the pinned detector's actual
+Jest/Vitest coverage. Repository findings are 0 → 0. A separate source search
+for mock/jest/vi identifiers, mockModule and unstable_mockModule across authored
+JS/TS found no module mocks, including no Bun `mock.module` use. There is no
+module-mock cleanup or artificial dependency seam to introduce in existing suites.
+
+The CLI was also exercised on temporary, unexecuted fixtures using the checked-in
+audit config:
+
+| Call | Module-mocking diagnostics |
+| --- | ---: |
+| `import { mock } from "bun:test"; mock.module("dependency", () => ({}))` | 0 |
+| `import { vi } from "vitest"; vi.mock("dependency", () => ({}))` | 1 |
+| `import { jest } from "@jest/globals"; jest.mock("dependency", () => ({}))` | 1 |
+
+This rule provides **no Bun module-mocking protection**. The current absence of
+Bun module mocks comes from the source audit, not this rule. Its recognition of
+framework method calls is syntactic, not arbitrary alias/data-flow analysis.
+Before claiming Bun coverage, add or upstream a separately reviewed detector and
+verify it through the native CLI. Future use of Bun module mocks requires fresh
+seam review; enabling the existing rule must not be cited as evidence that Bun
+module substitution is checked. Temporary fixtures were removed after the trial.
