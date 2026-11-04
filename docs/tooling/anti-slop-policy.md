@@ -136,12 +136,13 @@ Concrete counterexamples that remain in the trial:
   A string must be hashed while a numeric seed must retain its numeric path;
   this is deterministic domain behavior, not an unparsed-input shortcut.
 - `web/src/components/game/map-canvas.tsx` distinguishes a `number | string`
-  CSS height and checks browser availability. These checks preserve valid
-  rendering/host environments; wrapping them in named predicates solely for
-  lint would add ceremony without stronger validation.
-- Runtime export tests in `risk-engine/src/index.test.ts` check that the built
-  API actually exposes functions. Static type declarations alone cannot prove
-  those runtime exports exist.
+  CSS height and validates numeric node scale before rendering. Wrapping these
+  checks in named predicates solely for lint would add ceremony without stronger
+  validation. The browser-availability check is already exempt as an undefined
+  existence probe and is not one of the flagged findings.
+- Runtime checks in `risk-engine/src/index.test.ts` assert that branded IDs
+  remain strings. They test nominal IDs' runtime representation, not function
+  exports.
 
 Other findings include map/engine persistence validation and defensive handling
 of legacy replay fields. Those checks must preserve both accepted and rejected
@@ -149,7 +150,7 @@ input behavior. Boundary parsing already exists and is tested; deleting its
 narrowing or asserting inputs as trusted would weaken it. The default audit
 stays at 61 → 61 with all locations visible, rather than hiding findings through
 predicate wrappers or disables. Reconsider only a narrower policy that can
-separate missing boundary validation from valid union dispatch and host checks.
+separate missing boundary validation from valid union dispatch and runtime representation checks.
 
 To reproduce the option trial, copy `.oxlintrc.audit.json` to a temporary config
 in the repository root (so its relative plugin path stays valid), change only
