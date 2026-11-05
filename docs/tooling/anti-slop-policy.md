@@ -706,3 +706,14 @@ capabilities/receiver, finite values and invalid luck selections. Root checks
 findings fall 24 to zero repository-wide. Deferred counts are runtime-typeof80,
 unknown parameters45, widening24, dictionary7. No new enforcement scope here;
 global assertion enforcement and closing inventory follow in the next PR.
+
+### Final assertion enforcement and inventory
+
+Assertion evidence is now a global error. The temporary engine-only assertion
+entry is removed; engine dictionary enforcement remains the intentional permanent
+scope. All selected rules have zero findings. The final inventory accounts for
+all 18 pinned generic rules plus the built-in accumulator rule, explicit deferrals,
+coverage limits and exact upgrade coupling. Historical step-1 counts are retained
+as a labeled baseline. Root checks (634 tests), formatting and audit pass. A normal
+config CLI probe rejects an unjustified assertion and accepts concrete evidence.
+Issue closure follows independent review, CI and merge of this final policy PR.
