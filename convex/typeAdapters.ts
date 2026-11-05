@@ -1,5 +1,5 @@
 import type { GameState, GraphMap } from 'risk-engine'
-import type { TimelinePublicState } from './historyTimeline'
+import type { TimelinePublicState, TimelineStatePatch } from './historyTimeline'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -188,4 +188,43 @@ export function readPublicGameStateNullable(value: unknown): TimelinePublicState
   if (value == null) return null
 
   return readPublicGameState(value)
+}
+
+function isTerritoryPatch(value: unknown): boolean {
+  return (
+    isRecord(value) && isOptional(value.ownerId, isString) && isOptional(value.armies, isNumber)
+  )
+}
+
+function isTimelineStatePatch(value: unknown): value is TimelineStatePatch {
+  return (
+    isRecord(value) &&
+    isOptional(value.players, (players) => isDictionary(players, isPublicPlayerState)) &&
+    isOptional(value.turnOrder, (order) => isList(order, isString)) &&
+    isOptional(value.territories, (territories) => isDictionary(territories, isTerritoryPatch)) &&
+    isOptional(value.turn, isTurnState) &&
+    (value.pending === null || isOptional(value.pending, isPendingOccupy)) &&
+    (value.reinforcements === null || isOptional(value.reinforcements, isReinforcements)) &&
+    isOptional(value.capturedThisTurn, (captured) => typeof captured === 'boolean') &&
+    isOptional(value.tradesCompleted, isNumber) &&
+    (value.fortifiesUsedThisTurn === null || isOptional(value.fortifiesUsedThisTurn, isNumber)) &&
+    isOptional(value.deckCount, isNumber) &&
+    isOptional(value.discardCount, isNumber) &&
+    isOptional(value.handSizes, (sizes) => isDictionary(sizes, isNumber)) &&
+    isOptional(value.stateVersion, isNumber)
+  )
+}
+
+export function readTimelineStatePatch(value: unknown): TimelineStatePatch {
+  if (!isTimelineStatePatch(value)) throw new Error('Invalid public state patch')
+
+  return value
+}
+
+export function readTimelineStatePatchOptional(
+  value: unknown,
+): TimelineStatePatch | null | undefined {
+  if (value === null || value === undefined) return value
+
+  return readTimelineStatePatch(value)
 }
