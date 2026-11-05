@@ -2,10 +2,13 @@ import { useMutation } from 'convex/react'
 import type { OptimisticLocalStore } from 'convex/browser'
 import { api } from '@backend/_generated/api'
 import type { Id } from '@backend/_generated/dataModel'
-import type { Action, TerritoryId } from 'risk-engine'
+import type { FunctionArgs } from 'convex/server'
 import type { PublicState } from '@/lib/game/types'
 
-function applyOptimisticAction(state: PublicState, action: Action): PublicState | null {
+function applyOptimisticAction(
+  state: PublicState,
+  action: FunctionArgs<typeof api.gameplay.submitAction>['action'],
+): PublicState | null {
   switch (action.type) {
     case 'PlaceReinforcements': {
       if (state.turn.phase !== 'Reinforcement' && state.turn.phase !== 'Attack') return null
@@ -121,11 +124,10 @@ function updateGameViewState(
 export function useGameActions() {
   const submitActionMutation = useMutation(api.gameplay.submitAction).withOptimisticUpdate(
     (localStore, args) => {
-      const action = args.action as Action
       updateGameViewState(localStore, args.gameId, (state) => {
         if (state.stateVersion !== args.expectedVersion) return null
 
-        return applyOptimisticAction(state, action)
+        return applyOptimisticAction(state, args.action)
       })
     },
   )
@@ -141,7 +143,7 @@ export function useGameActions() {
         if (!nextState) return null
         nextState = applyOptimisticAction(nextState, {
           type: 'PlaceReinforcements',
-          territoryId: placement.territoryId as TerritoryId,
+          territoryId: placement.territoryId,
           count: placement.count,
         })
       }
@@ -166,6 +168,8 @@ export function useGameActions() {
       const optimisticSuffix = `${args.channel}:${existing.length}:${args.text.slice(0, 20)}`
 
       const optimisticMessage = {
+        // SAFETY: Convex optimistic stores require the query's document ID type. This local-only
+        // sentinel is rejected by isPendingChatMessageId before any edit/delete mutation.
         _id: `optimistic:${optimisticSuffix}` as Id<'gameChatMessages'>,
         channel: args.channel,
         teamId: null,

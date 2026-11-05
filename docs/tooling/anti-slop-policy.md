@@ -671,3 +671,19 @@ Tests cover invalid/prototype-like options, palette labels and preset schedules.
 Root checks (611 tests), formatting and audit pass; independent review approves
 with no findings. Assertion findings fall 78 to 49; other counts and enforcement
 scopes are unchanged. No lobby findings remain unexplained.
+
+### Game UI wire actions and chat identity
+
+Generated view and mutation contracts replace game facades and private engine
+ID/action assertions. Optimistic and auto-attack paths consume actual wire action
+arguments. Chat callbacks carry generated message IDs; pending optimistic sentinel
+IDs are rejected before edit start, edit submission and deletion. The cache-only
+sentinel assertion documents that guard; route text retains one documented SDK
+boundary. Existing auth, query skips, optimistic state and layout remain intact.
+
+Unknown attack event fields use runtime property guards, preserving numeric
+filtering, defaults, and stopping at the latest matching malformed attack rather
+than searching older ones. Tests cover legacy/unknown event fields, malformed
+latest events and pending message IDs. Root checks (614 tests), formatting and
+audit pass; independent review approves. Assertion findings fall 49 to 24;
+dictionary findings fall 8 to 7. Other counts/scopes remain unchanged.

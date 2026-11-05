@@ -14,7 +14,6 @@ import type { FunctionArgs } from 'convex/server'
 import type { Id } from '@backend/_generated/dataModel'
 import { api } from '@backend/_generated/api'
 import { defaultRuleset } from 'risk-engine'
-import type { Action, CardId, TerritoryId } from 'risk-engine'
 import { authClient } from '@/lib/auth-client'
 import { adaptMapDoc, adaptView } from '@/lib/game/adapters'
 import { getPlayerColor, getPlayerName } from '@/lib/game/display'
@@ -34,9 +33,10 @@ import type { ReinforcementDraft } from '@/lib/game/types'
 import { ROTATING_HINTS } from '@/lib/game/rotating-hints'
 import { territorySignature } from '@/lib/game/history-debug'
 import { formatCardIncrementLabel } from '@/lib/game/ruleset-summary'
-import { findAutoTradeSet, type TradeSetsConfig } from '@/lib/game/trade-cards'
+import { findAutoTradeSet } from '@/lib/game/trade-cards'
 import { formatTurnTimer } from '@/lib/game/turn-timer'
 import { buildAttackDiceResult, type AttackDiceResult } from '@/lib/game/attack-dice-result'
+import { isPendingChatMessageId } from '@/lib/game/chat-message-id'
 import { useGameActions } from '@/lib/game/use-game-actions'
 import { useGameRuntimeQueries, useGameViewQueries } from '@/lib/game/use-game-queries'
 import { useGameShortcuts } from '@/lib/game/use-game-shortcuts'
@@ -114,12 +114,14 @@ export default function GamePage() {
 
     if (typeof window === 'undefined') return false
 
-    return (window as { __RISK_HISTORY_DEBUG?: boolean }).__RISK_HISTORY_DEBUG === true
+    return '__RISK_HISTORY_DEBUG' in window && window.__RISK_HISTORY_DEBUG === true
   }, [location.search])
 
   const { data: session, isPending: sessionPending } = authClient.useSession()
   const { mapPanelRef } = useMapPanelSize()
 
+  // SAFETY: the route carries the Convex game document ID; Convex validates it at the SDK boundary.
+  // Keep a missing route parameter undefined so queries retain their skip behavior.
   const typedGameId = gameId as Id<'games'> | undefined
 
   const { playerView, publicView } = useGameViewQueries(
@@ -138,7 +140,7 @@ export default function GamePage() {
   )
 
   const [chatDraft, setChatDraft] = useState('')
-  const [chatEditingMessageId, setChatEditingMessageId] = useState<string | null>(null)
+  const [chatEditingMessageId, setChatEditingMessageId] = useState<ChatMessage['_id'] | null>(null)
   const [chatEditingChannel, setChatEditingChannel] = useState<ChatChannel | null>(null)
   const { mapDoc, chatMessages } = useGameRuntimeQueries(typedGameId, !!session, view?.mapId)
   const { graphMap, mapVisual, mapImageUrl } = adaptMapDoc(mapDoc)
@@ -315,28 +317,8 @@ export default function GamePage() {
     isAttackTradePlacementPhase ||
     (state?.turn.phase === 'Attack' && hasQueuedPlacements)
 
-  const effectiveTeams = (
-    view?.effectiveRuleset as {
-      teams?: {
-        teamsEnabled?: boolean
-        allowPlaceOnTeammate?: boolean
-        allowFortifyWithTeammate?: boolean
-        allowFortifyThroughTeammates?: boolean
-        preventAttackingTeammates?: boolean
-      }
-    } | null
-  )?.teams
-
-  const effectiveRuleset = view?.effectiveRuleset as {
-    combat?: { maxDefendDice?: number }
-    cards?: {
-      forcedTradeHandSize?: number
-      tradeSets?: TradeSetsConfig
-      tradeValues?: number[]
-      tradeValueOverflow?: 'repeatLast' | 'continueByFive'
-    }
-    fortify?: { maxFortifiesPerTurn?: number; fortifyMode?: 'adjacent' | 'connected' }
-  } | null
+  const effectiveRuleset = view?.effectiveRuleset
+  const effectiveTeams = effectiveRuleset?.teams
 
   const effectiveCards = effectiveRuleset?.cards
   const effectiveFortify = effectiveRuleset?.fortify
@@ -376,10 +358,7 @@ export default function GamePage() {
   const teamsEnabled = effectiveTeams?.teamsEnabled ?? false
   const preventAttackingTeammates = effectiveTeams?.preventAttackingTeammates ?? false
 
-  const teamNames = useMemo(
-    () => (view?.teamNames as Record<string, string> | null) ?? {},
-    [view?.teamNames],
-  )
+  const teamNames = useMemo(() => view?.teamNames ?? {}, [view?.teamNames])
 
   const myTeamId = myEnginePlayerId && state ? state.players[myEnginePlayerId]?.teamId : undefined
 
@@ -399,17 +378,15 @@ export default function GamePage() {
   const canTradeInCurrentState = phase === 'Reinforcement' || (phase === 'Attack' && mustTradeNow)
   const autoTradeCardIds = findAutoTradeSet(effectiveHand ?? [], tradeSets)
 
-  const timingMode =
-    (view as { timingMode?: 'realtime' | 'async_1d' | 'async_3d' } | null)?.timingMode ?? 'realtime'
+  const timingMode = view?.timingMode ?? 'realtime'
 
-  const excludeWeekends = (view as { excludeWeekends?: boolean } | null)?.excludeWeekends ?? false
-  const turnDeadlineAt = (view as { turnDeadlineAt?: number | null } | null)?.turnDeadlineAt ?? null
+  const excludeWeekends = view?.excludeWeekends ?? false
+  const turnDeadlineAt = view?.turnDeadlineAt ?? null
   const remainingTurnMs = turnDeadlineAt ? Math.max(0, turnDeadlineAt - nowMs) : null
 
-  const winningPlayerId =
-    (view as { winningPlayerId?: string | null } | null)?.winningPlayerId ?? null
+  const winningPlayerId = view?.winningPlayerId ?? null
 
-  const winningTeamId = (view as { winningTeamId?: string | null } | null)?.winningTeamId ?? null
+  const winningTeamId = view?.winningTeamId ?? null
 
   const isWinner = useMemo(() => {
     if (!myEnginePlayerId) return false
@@ -715,7 +692,7 @@ export default function GamePage() {
 
   const submitAction = useCallback(
     async (
-      action: Exclude<Action, { type: 'Resign' }>,
+      action: FunctionArgs<typeof api.gameplay.submitAction>['action'],
       options?: {
         preserveSelection?: boolean
         preserveAttackDice?: boolean
@@ -1186,7 +1163,7 @@ export default function GamePage() {
     if (selectedCardIds.size !== 3) return
     void submitAction({
       type: 'TradeCards',
-      cardIds: Array.from(selectedCardIds) as CardId[],
+      cardIds: Array.from(selectedCardIds),
     })
   }, [canTradeInCurrentState, selectedCardIds, submitAction])
 
@@ -1195,8 +1172,8 @@ export default function GamePage() {
     void submitAction(
       {
         type: 'Attack',
-        from: selectedFrom as TerritoryId,
-        to: selectedTo as TerritoryId,
+        from: selectedFrom,
+        to: selectedTo,
         attackerDice: attackDice,
       },
       { preserveSelection: true, preserveAttackDice: true },
@@ -1268,9 +1245,10 @@ export default function GamePage() {
     }
 
     try {
-      if (isEditing) {
+      if (chatEditingMessageId) {
+        if (isPendingChatMessageId(chatEditingMessageId)) return
         await editGameChatMessageMutation({
-          messageId: chatEditingMessageId as Id<'gameChatMessages'>,
+          messageId: chatEditingMessageId,
           text,
         })
       } else {
@@ -1310,6 +1288,7 @@ export default function GamePage() {
   ])
 
   const handleStartEditChatMessage = useCallback((message: ChatMessage) => {
+    if (isPendingChatMessageId(message._id)) return
     setChatEditingMessageId(message._id)
     setChatEditingChannel(message.channel)
     setChatChannel(message.channel)
@@ -1330,12 +1309,14 @@ export default function GamePage() {
   }, [])
 
   const handleDeleteChatMessage = useCallback(
-    async (messageId: string) => {
+    async (messageId: ChatMessage['_id']) => {
+      if (isPendingChatMessageId(messageId)) return
+
       if (!confirm('Delete this message?')) return
 
       try {
         await deleteGameChatMessageMutation({
-          messageId: messageId as Id<'gameChatMessages'>,
+          messageId,
         })
 
         if (chatEditingMessageId === messageId) {
@@ -1884,16 +1865,16 @@ export default function GamePage() {
             onSubmitFortify: () => {
               void submitAction({
                 type: 'Fortify',
-                from: selectedFrom as TerritoryId,
-                to: selectedTo as TerritoryId,
+                from: selectedFrom,
+                to: selectedTo,
                 count: fortifyCount,
               })
             },
             onSubmitFortifyAll: () => {
               void submitAction({
                 type: 'Fortify',
-                from: selectedFrom as TerritoryId,
-                to: selectedTo as TerritoryId,
+                from: selectedFrom,
+                to: selectedTo,
                 count: Math.max(1, (state.territories[selectedFrom]?.armies ?? 2) - 1),
               })
             },
