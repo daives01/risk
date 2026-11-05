@@ -6,6 +6,17 @@ import {
 } from './luck-comparison-transition'
 
 describe('luck comparison transition', () => {
+  test('retains non-team selections instead of decoding arbitrary text', () => {
+    expect(
+      resolveLuckComparisonPresentation({
+        comparisonMode: 'teams',
+        transitionTarget: 'individual',
+        selectedId: 'xxxxxred',
+        players: [{ id: 'player-1', teamId: 'red' }],
+      }),
+    ).toEqual({ mode: 'individual', selectedId: 'xxxxxred' })
+  })
+
   test('encodes and decodes team subject IDs centrally', () => {
     const subjectId = toTeamLuckSubjectId('red')
     expect(subjectId).toBe('team:red')

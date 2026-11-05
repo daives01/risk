@@ -323,9 +323,10 @@ export default function AdminSlackPage() {
                             <Label>Status</Label>
                             <Select
                               value={workspaceStatusDraft}
-                              onValueChange={(value) =>
-                                setWorkspaceStatusDraft(value as 'active' | 'disabled')
-                              }
+                              onValueChange={(value) => {
+                                if (value === 'active' || value === 'disabled')
+                                  setWorkspaceStatusDraft(value)
+                              }}
                             >
                               <SelectTrigger className="h-9">
                                 <SelectValue />

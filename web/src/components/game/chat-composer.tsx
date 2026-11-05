@@ -521,13 +521,20 @@ export function ChatComposer({
           <Select
             value={selectValue}
             onValueChange={(value) => {
-              if (value.startsWith('dm:')) {
-                onSelectChannel('dm', value.slice('dm:'.length))
+              const dmTarget = dmTargetOptions.find(
+                (option) =>
+                  option.recipientEnginePlayerId &&
+                  value === `dm:${option.recipientEnginePlayerId}`,
+              )
+
+              if (dmTarget) {
+                onSelectChannel('dm', dmTarget.recipientEnginePlayerId)
 
                 return
               }
 
-              onSelectChannel(value as ChatChannel, null)
+              if (value === 'all' || (value === 'team' && teamGameEnabled && teamAvailable))
+                onSelectChannel(value, null)
             }}
           >
             <SelectTrigger

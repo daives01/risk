@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '@backend/_generated/api'
-import type { Id } from '@backend/_generated/dataModel'
 import { authClient } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -65,7 +64,7 @@ export default function AdminMapsPage() {
           continents: {},
         },
         visual: {
-          imageStorageId: storageId as Id<'_storage'>,
+          imageStorageId: storageId,
           imageWidth: width,
           imageHeight: height,
           nodeScale: 1,

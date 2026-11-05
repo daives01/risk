@@ -1,6 +1,6 @@
 import { useEffect, type RefObject } from 'react'
 import { type NavigateFunction } from 'react-router-dom'
-import { hasModifierKey, isTypingTarget } from '@/lib/keyboard-shortcuts'
+import { blurFocusedElement, hasModifierKey, isTypingTarget } from '@/lib/keyboard-shortcuts'
 import type { HomeTab, GamesFilter } from '@/pages/home/types'
 
 type UseHomeKeyboardShortcutsOptions = {
@@ -27,7 +27,7 @@ export function useHomeKeyboardShortcuts({
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        ;(document.activeElement as HTMLElement | null)?.blur?.()
+        blurFocusedElement(document.activeElement)
 
         return
       }

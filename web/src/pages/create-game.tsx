@@ -5,6 +5,7 @@ import type { FunctionArgs, FunctionReturnType } from 'convex/server'
 import { ArrowLeft, Map } from 'lucide-react'
 import { api } from '@backend/_generated/api'
 import { authClient } from '@/lib/auth-client'
+import { findSelectOption } from '@/lib/select-option'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { HelpPopover } from '@/components/ui/help-popover'
@@ -24,20 +25,9 @@ import {
   type CardIncrementPresetKey,
 } from '@/lib/game/ruleset-summary'
 
-type RulesetOverridesInput = {
-  fortify: { fortifyMode: 'adjacent' | 'connected'; maxFortifiesPerTurn?: number }
-  cards: {
-    forcedTradeHandSize: number
-    tradeValues: number[]
-    tradeValueOverflow: 'repeatLast' | 'continueByFive'
-  }
-  teams: {
-    allowPlaceOnTeammate: boolean
-    allowFortifyWithTeammate: boolean
-    allowFortifyThroughTeammates: boolean
-    continentBonusRecipient: 'majorityHolderOnTeam' | 'individual'
-  }
-}
+type RulesetOverridesInput = NonNullable<
+  FunctionArgs<typeof api.lobby.createGame>['rulesetOverrides']
+>
 
 type GameTimingMode = 'realtime' | 'async_1d' | 'async_3d'
 
@@ -147,10 +137,7 @@ export default function CreateGamePage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const sessionUsername =
-    (session?.user as { username?: string | null } | undefined)?.username ??
-    session?.user.name ??
-    ''
+  const sessionUsername = session?.user.username ?? session?.user.name ?? ''
 
   const gameNamePlaceholder = sessionUsername ? `${sessionUsername}'s Risk Game` : 'Risk Game'
 
@@ -212,7 +199,7 @@ export default function CreateGamePage() {
     setLoading(true)
 
     try {
-      const fortify: RulesetOverridesInput['fortify'] = { fortifyMode }
+      const fortify: NonNullable<RulesetOverridesInput['fortify']> = { fortifyMode }
 
       if (maxFortifiesPerTurn !== 'unlimited') fortify.maxFortifiesPerTurn = maxFortifiesPerTurn
 
@@ -330,7 +317,11 @@ export default function CreateGamePage() {
                 <Label htmlFor="maxPlayers">Max Players</Label>
                 <Select
                   value={String(maxPlayers)}
-                  onValueChange={(value) => setMaxPlayers(Number(value))}
+                  onValueChange={(value) => {
+                    const count = allowedPlayerCounts.find((count) => String(count) === value)
+
+                    if (count !== undefined) setMaxPlayers(count)
+                  }}
                 >
                   <SelectTrigger id="maxPlayers">
                     <SelectValue />
@@ -364,7 +355,11 @@ export default function CreateGamePage() {
                   <Label htmlFor="timingMode">Game Mode</Label>
                   <Select
                     value={timingMode}
-                    onValueChange={(value) => setTimingMode(value as GameTimingMode)}
+                    onValueChange={(value) => {
+                      const option = findSelectOption(TIMING_MODE_OPTIONS, value)
+
+                      if (option) setTimingMode(option.value)
+                    }}
                   >
                     <SelectTrigger id="timingMode">
                       <SelectValue />
@@ -439,7 +434,9 @@ export default function CreateGamePage() {
                   <Select
                     value={fortifyMode}
                     onValueChange={(value) => {
-                      const nextMode = value as 'adjacent' | 'connected'
+                      const nextMode = findSelectOption(FORTIFY_MODE_OPTIONS, value)?.value
+
+                      if (!nextMode) return
                       setFortifyMode(nextMode)
 
                       if (nextMode === 'adjacent') {
@@ -464,9 +461,14 @@ export default function CreateGamePage() {
                   <Label htmlFor="maxFortifiesPerTurn">Fortifies Per Turn</Label>
                   <Select
                     value={String(maxFortifiesPerTurn)}
-                    onValueChange={(value) =>
-                      setMaxFortifiesPerTurn(value === 'unlimited' ? 'unlimited' : Number(value))
-                    }
+                    onValueChange={(value) => {
+                      const option = findSelectOption(MAX_FORTIFY_OPTIONS, value)
+
+                      if (option)
+                        setMaxFortifiesPerTurn(
+                          option.value === 'unlimited' ? 'unlimited' : Number(option.value),
+                        )
+                    }}
                   >
                     <SelectTrigger id="maxFortifiesPerTurn">
                       <SelectValue />
@@ -497,9 +499,11 @@ export default function CreateGamePage() {
                   <Label htmlFor="cardIncrementPreset">Card Reward Increment</Label>
                   <Select
                     value={cardIncrementPreset}
-                    onValueChange={(value) =>
-                      setCardIncrementPreset(value as CardIncrementPresetKey)
-                    }
+                    onValueChange={(value) => {
+                      const entry = CARD_INCREMENT_PRESET_ENTRIES.find(([key]) => key === value)
+
+                      if (entry) setCardIncrementPreset(entry[0])
+                    }}
                   >
                     <SelectTrigger id="cardIncrementPreset">
                       <SelectValue />
@@ -525,9 +529,11 @@ export default function CreateGamePage() {
                     <Label htmlFor="teamAssignmentStrategy">Team Assignment</Label>
                     <Select
                       value={teamAssignmentStrategy}
-                      onValueChange={(value) =>
-                        setTeamAssignmentStrategy(value as 'manual' | 'balancedRandom')
-                      }
+                      onValueChange={(value) => {
+                        const option = findSelectOption(TEAM_ASSIGNMENT_OPTIONS, value)
+
+                        if (option) setTeamAssignmentStrategy(option.value)
+                      }}
                     >
                       <SelectTrigger id="teamAssignmentStrategy">
                         <SelectValue />
@@ -570,9 +576,11 @@ export default function CreateGamePage() {
                       </div>
                       <Select
                         value={continentBonusRecipient}
-                        onValueChange={(value) =>
-                          setContinentBonusRecipient(value as 'majorityHolderOnTeam' | 'individual')
-                        }
+                        onValueChange={(value) => {
+                          const option = findSelectOption(TEAM_CONTINENT_REWARD_OPTIONS, value)
+
+                          if (option) setContinentBonusRecipient(option.value)
+                        }}
                       >
                         <SelectTrigger id="continentBonusRecipient">
                           <SelectValue />

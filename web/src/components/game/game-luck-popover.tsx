@@ -63,15 +63,15 @@ function summarizeDiceLuck(counts: DieFaceCounts) {
   return { ...summary, deviation: summary.average === null ? null : summary.average - 3.5 }
 }
 
-function toSubject(
-  id: string,
+function toSubject<Id extends string>(
+  id: Id,
   name: string,
   color: string,
   counts: DiceRollCounts,
   combat: CombatLuckStats,
   metric: 'dice' | 'combat',
   teamId?: string | null,
-): GameLuckSubject {
+): GameLuckSubject & { id: Id } {
   const summary = summarizeDiceLuck(combineDieFaceCounts(counts.attack, counts.defense))
   const battles = combat.attack.battles + combat.defense.battles
 
@@ -192,7 +192,7 @@ function LuckComparisonField({
   onTransitionComplete,
 }: {
   players: GameLuckSubject[]
-  teams: GameLuckSubject[]
+  teams: (GameLuckSubject & { id: TeamLuckSubjectId })[]
   metric: 'dice' | 'combat'
   mode: 'individual' | 'teams'
   transitionTarget: 'individual' | 'teams' | null
@@ -224,7 +224,7 @@ function LuckComparisonField({
     const teamPositions = teams
       .filter((team) => team.luckScore !== null)
       .map((team) => {
-        const teamId = fromTeamLuckSubjectId(team.id as TeamLuckSubjectId)
+        const teamId = fromTeamLuckSubjectId(team.id)
         const members = positioned.filter(({ player }) => player.teamId === teamId)
         const left = Math.max(8, Math.min(95, ((team.luckScore! + domain) / (domain * 2)) * 100))
         const colors = members.map(({ player }) => player.color)
@@ -278,10 +278,7 @@ function LuckComparisonField({
     if (!transitionTarget) return mode === 'individual' ? playerPoints : teamPoints
 
     const teamsById = new Map(
-      layout.teamPositions.map((position) => [
-        fromTeamLuckSubjectId(position.team.id as TeamLuckSubjectId),
-        position,
-      ]),
+      layout.teamPositions.map((position) => [fromTeamLuckSubjectId(position.team.id), position]),
     )
 
     return layout.positioned.map(({ player }, index) => {

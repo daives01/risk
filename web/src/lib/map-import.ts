@@ -116,13 +116,13 @@ function ensureString(value: unknown, path: string[], errors: string[]): string 
 }
 
 function ensureInteger(value: unknown, path: string[], errors: string[]): number {
-  if (!Number.isInteger(value)) {
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
     errors.push(`${formatPath(path)} must be an integer`)
 
     return 0
   }
 
-  return value as number
+  return value
 }
 
 export function parseMapImportJson(input: string): MapImportParseResult {

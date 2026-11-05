@@ -13,3 +13,24 @@ export function hasModifierKey(event: KeyboardEvent) {
 export function hasCommandModifier(event: KeyboardEvent) {
   return event.metaKey || event.ctrlKey
 }
+
+export function blurFocusedElement(element: unknown) {
+  if (
+    element &&
+    typeof element === 'object' &&
+    'blur' in element &&
+    typeof element.blur === 'function'
+  )
+    element.blur()
+}
+
+export function browserPlatform(browser: { platform: string; userAgentData?: unknown }) {
+  const data = browser.userAgentData
+
+  return data !== null &&
+    typeof data === 'object' &&
+    'platform' in data &&
+    typeof data.platform === 'string'
+    ? data.platform
+    : browser.platform
+}
