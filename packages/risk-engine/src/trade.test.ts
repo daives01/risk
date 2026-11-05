@@ -1,10 +1,10 @@
+import { playerId, territoryId, cardId, eventOfType } from './testing/fixtures.js'
 import { describe, expect, test } from 'bun:test'
 import { applyAction, ActionError } from './engine.js'
 import type {
   CardId,
   CardsTraded,
   GameState,
-  PlayerId,
   TerritoryId,
   TradeCards,
   PlaceReinforcements,
@@ -14,18 +14,18 @@ import { defaultRuleset } from './config.js'
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-const P1 = 'p1' as PlayerId
-const P2 = 'p2' as PlayerId
-const T1 = 't1' as TerritoryId
-const T2 = 't2' as TerritoryId
-const T3 = 't3' as TerritoryId
+const P1 = playerId('p1')
+const P2 = playerId('p2')
+const T1 = territoryId('t1')
+const T2 = territoryId('t2')
+const T3 = territoryId('t3')
 
-const C1 = 'c1' as CardId
-const C2 = 'c2' as CardId
-const C3 = 'c3' as CardId
-const C4 = 'c4' as CardId
-const C5 = 'c5' as CardId
-const C6 = 'c6' as CardId
+const C1 = cardId('c1')
+const C2 = cardId('c2')
+const C3 = cardId('c3')
+const C4 = cardId('c4')
+const C5 = cardId('c5')
+const C6 = cardId('c6')
 
 const cardsConfig: CardsConfig = defaultRuleset.cards
 
@@ -86,7 +86,7 @@ describe('TradeCards', () => {
     )
 
     expect(result.events).toHaveLength(1)
-    const event = result.events[0] as CardsTraded
+    const event = eventOfType(result.events[0], 'CardsTraded')
     expect(event.type).toBe('CardsTraded')
     expect(event.playerId).toBe(P1)
     expect(event.cardIds).toEqual([C1, C2, C3])
@@ -107,7 +107,7 @@ describe('TradeCards', () => {
       cardsConfig,
     )
 
-    const event = result.events[0] as CardsTraded
+    const event = eventOfType(result.events[0], 'CardsTraded')
     expect(event.type).toBe('CardsTraded')
     // C1=A, C4=B, C5=C — one of each
     expect(event.value).toBe(4 + 2) // tradeValues[0]=4 + territory bonus (C1 → T1 owned by P1)
@@ -128,7 +128,7 @@ describe('TradeCards', () => {
       cardsConfig,
     )
 
-    const event = result.events[0] as CardsTraded
+    const event = eventOfType(result.events[0], 'CardsTraded')
     expect(event.type).toBe('CardsTraded')
   })
 
@@ -147,7 +147,7 @@ describe('TradeCards', () => {
       cardsConfig,
     )
 
-    const event = result.events[0] as CardsTraded
+    const event = eventOfType(result.events[0], 'CardsTraded')
     expect(event.type).toBe('CardsTraded')
   })
 
@@ -189,7 +189,7 @@ describe('TradeCards', () => {
       cardsConfig,
     )
 
-    const event = result.events[0] as CardsTraded
+    const event = eventOfType(result.events[0], 'CardsTraded')
     expect(event.type).toBe('CardsTraded')
     expect(result.state.turn.phase).toBe('Attack')
     expect(result.state.reinforcements?.remaining).toBe(6)
@@ -351,7 +351,7 @@ describe('TradeCards - trade values schedule', () => {
       cardsConfig,
     )
 
-    const event = result.events[0] as CardsTraded
+    const event = eventOfType(result.events[0], 'CardsTraded')
     // value = tradeValues[0] (4) + territory bonus (2) = 6
     expect(event.value).toBe(6)
   })
@@ -369,7 +369,7 @@ describe('TradeCards - trade values schedule', () => {
       cardsConfig,
     )
 
-    const event = result.events[0] as CardsTraded
+    const event = eventOfType(result.events[0], 'CardsTraded')
     // tradeValues[1] = 6 + territory bonus 2 = 8
     expect(event.value).toBe(8)
   })
@@ -393,7 +393,7 @@ describe('TradeCards - trade values schedule', () => {
       repeatLastConfig,
     )
 
-    const event = result.events[0] as CardsTraded
+    const event = eventOfType(result.events[0], 'CardsTraded')
     // tradeValues[last]=15 + territory bonus 2 = 17
     expect(event.value).toBe(17)
   })
@@ -413,7 +413,7 @@ describe('TradeCards - trade values schedule', () => {
       cardsConfig,
     )
 
-    const event = result.events[0] as CardsTraded
+    const event = eventOfType(result.events[0], 'CardsTraded')
     expect(event.value).toBe(42) // 40 + territory bonus 2
   })
 })
@@ -433,7 +433,7 @@ describe('TradeCards - territory bonus', () => {
       cardsConfig,
     )
 
-    const event = result.events[0] as CardsTraded
+    const event = eventOfType(result.events[0], 'CardsTraded')
     expect(event.value).toBe(4 + 2) // base + bonus
   })
 
@@ -458,7 +458,7 @@ describe('TradeCards - territory bonus', () => {
       cardsConfig,
     )
 
-    const event = result.events[0] as CardsTraded
+    const event = eventOfType(result.events[0], 'CardsTraded')
     expect(event.value).toBe(4) // base only, no bonus
   })
 
@@ -480,7 +480,7 @@ describe('TradeCards - territory bonus', () => {
       config,
     )
 
-    const event = result.events[0] as CardsTraded
+    const event = eventOfType(result.events[0], 'CardsTraded')
     expect(event.value).toBe(4) // base only
   })
 
@@ -498,7 +498,7 @@ describe('TradeCards - territory bonus', () => {
       cardsConfig,
     )
 
-    const event = result.events[0] as CardsTraded
+    const event = eventOfType(result.events[0], 'CardsTraded')
     expect(event.value).toBe(4 + 2) // only one bonus, not 2*2
   })
 })
@@ -520,9 +520,9 @@ describe('TradeCards - wild handling', () => {
   })
 
   test('three wilds is valid three-of-a-kind', () => {
-    const CW1 = 'cw1' as CardId
-    const CW2 = 'cw2' as CardId
-    const CW3 = 'cw3' as CardId
+    const CW1 = cardId('cw1')
+    const CW2 = cardId('cw2')
+    const CW3 = cardId('cw3')
 
     const state = makeState({
       cardsById: {
@@ -693,9 +693,9 @@ describe('Forced trade enforcement', () => {
 
 describe('TradeCards - multiple trades in one turn', () => {
   test('can trade multiple times, values escalate', () => {
-    const CX1 = 'cx1' as CardId
-    const CX2 = 'cx2' as CardId
-    const CX3 = 'cx3' as CardId
+    const CX1 = cardId('cx1')
+    const CX2 = cardId('cx2')
+    const CX3 = cardId('cx3')
 
     const state = makeState({
       cardsById: {
@@ -720,7 +720,7 @@ describe('TradeCards - multiple trades in one turn', () => {
       cardsConfig,
     )
 
-    const e1 = r1.events[0] as CardsTraded
+    const e1 = eventOfType(r1.events[0], 'CardsTraded')
     expect(e1.value).toBe(4) // tradeValues[0], no territory bonus
     expect(e1.tradesCompletedAfter).toBe(1)
 
@@ -735,7 +735,7 @@ describe('TradeCards - multiple trades in one turn', () => {
       cardsConfig,
     )
 
-    const e2 = r2.events[0] as CardsTraded
+    const e2 = eventOfType(r2.events[0], 'CardsTraded')
     expect(e2.value).toBe(6) // tradeValues[1], no territory bonus
     expect(e2.tradesCompletedAfter).toBe(2)
   })

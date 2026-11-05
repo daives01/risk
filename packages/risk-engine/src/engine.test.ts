@@ -1,10 +1,10 @@
+import { playerId, territoryId, cardId, teamId, eventOfType } from './testing/fixtures.js'
 import { describe, expect, test } from 'bun:test'
 import { applyAction, ActionError } from './engine.js'
 import type {
   AttackAction,
   AttackResolved,
   CardDrawn,
-  CardId,
   EndAttackPhase,
   EndTurn,
   Fortify,
@@ -14,8 +14,6 @@ import type {
   OccupyAction,
   OccupyResolved,
   PlayerEliminated,
-  PlayerId,
-  TeamId,
   PlaceReinforcements,
   ReinforcementsGranted,
   ReinforcementsPlaced,
@@ -30,15 +28,15 @@ import { defaultRuleset } from './config.js'
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-const P1 = 'p1' as PlayerId
-const P2 = 'p2' as PlayerId
-const P3 = 'p3' as PlayerId
-const T1 = 't1' as TerritoryId
-const T2 = 't2' as TerritoryId
-const T3 = 't3' as TerritoryId
-const T4 = 't4' as TerritoryId
-const T5 = 't5' as TerritoryId
-const T6 = 't6' as TerritoryId
+const P1 = playerId('p1')
+const P2 = playerId('p2')
+const P3 = playerId('p3')
+const T1 = territoryId('t1')
+const T2 = territoryId('t2')
+const T3 = territoryId('t3')
+const T4 = territoryId('t4')
+const T5 = territoryId('t5')
+const T6 = territoryId('t6')
 
 const testMap: GraphMap = {
   territories: {
@@ -101,7 +99,7 @@ describe('Resign', () => {
         [T2]: { ownerId: P2, armies: 2 },
       },
       cardsById: { c1: { kind: 'A' } },
-      hands: { [P1]: ['c1' as CardId], [P2]: [] },
+      hands: { [P1]: [cardId('c1')], [P2]: [] },
     })
 
     const result = applyAction(
@@ -118,7 +116,7 @@ describe('Resign', () => {
     expect(result.state.players[P1]?.status).toBe('defeated')
     expect(result.state.territories[T1]?.ownerId).toBe('neutral')
     expect(result.state.hands[P1]).toEqual([])
-    expect(result.state.deck.discard).toEqual(['c1'])
+    expect(result.state.deck.discard).toEqual([cardId('c1')])
     expect(result.state.turn.phase).toBe('GameOver')
     expect(result.events).toContainEqual({ type: 'GameEnded', winningPlayerId: P2 })
   })
@@ -174,7 +172,7 @@ describe('PlaceReinforcements', () => {
     const result = applyAction(state, P1, place(T1, 2))
 
     expect(result.events).toHaveLength(1)
-    const event = result.events[0] as ReinforcementsPlaced
+    const event = eventOfType(result.events[0], 'ReinforcementsPlaced')
     expect(event.type).toBe('ReinforcementsPlaced')
     expect(event.playerId).toBe(P1)
     expect(event.territoryId).toBe(T1)
@@ -254,8 +252,8 @@ describe('PlaceReinforcements', () => {
 
   test('rejects nonexistent territory', () => {
     const state = makeState()
-    expect(() => applyAction(state, P1, place('fake' as TerritoryId, 1))).toThrow(ActionError)
-    expect(() => applyAction(state, P1, place('fake' as TerritoryId, 1))).toThrow(/does not exist/)
+    expect(() => applyAction(state, P1, place(territoryId('fake'), 1))).toThrow(ActionError)
+    expect(() => applyAction(state, P1, place(territoryId('fake'), 1))).toThrow(/does not exist/)
   })
 
   test('does not mutate original state', () => {
@@ -334,7 +332,7 @@ describe('Attack', () => {
     const result = applyAction(state, P1, attack(T1, T3), testMap, defaultCombat)
 
     expect(result.events.length).toBeGreaterThanOrEqual(1)
-    const event = result.events[0] as AttackResolved
+    const event = eventOfType(result.events[0], 'AttackResolved')
     expect(event.type).toBe('AttackResolved')
     expect(event.from).toBe(T1)
     expect(event.to).toBe(T3)
@@ -349,7 +347,7 @@ describe('Attack', () => {
     const state = makeAttackState()
     const result = applyAction(state, P1, attack(T1, T3), testMap, defaultCombat)
 
-    const event = result.events[0] as AttackResolved
+    const event = eventOfType(result.events[0], 'AttackResolved')
     expect(result.state.territories[T1].armies).toBe(3 - event.attackerLosses)
     expect(result.state.territories[T3].armies).toBe(4 - event.defenderLosses)
   })
@@ -371,8 +369,8 @@ describe('Attack', () => {
     const r1 = applyAction(state, P1, attack(T1, T3), testMap, defaultCombat)
     const r2 = applyAction(state, P1, attack(T1, T3), testMap, defaultCombat)
 
-    const e1 = r1.events[0] as AttackResolved
-    const e2 = r2.events[0] as AttackResolved
+    const e1 = eventOfType(r1.events[0], 'AttackResolved')
+    const e2 = eventOfType(r2.events[0], 'AttackResolved')
     expect(e1.attackRolls).toEqual(e2.attackRolls)
     expect(e1.defendRolls).toEqual(e2.defendRolls)
     expect(e1.attackerLosses).toBe(e2.attackerLosses)
@@ -384,7 +382,7 @@ describe('Attack', () => {
     const state = makeAttackState()
     const result = applyAction(state, P1, attack(T1, T3), testMap, defaultCombat)
 
-    const event = result.events[0] as AttackResolved
+    const event = eventOfType(result.events[0], 'AttackResolved')
     expect(event.attackDice).toBe(2) // min(maxAttackDice=3, armies-1=2) = 2
   })
 
@@ -392,7 +390,7 @@ describe('Attack', () => {
     const state = makeAttackState()
     const result = applyAction(state, P1, attack(T1, T3, 1), testMap, defaultCombat)
 
-    const event = result.events[0] as AttackResolved
+    const event = eventOfType(result.events[0], 'AttackResolved')
     expect(event.attackDice).toBe(1)
   })
 
@@ -401,7 +399,7 @@ describe('Attack', () => {
     const state = makeAttackState()
     const result = applyAction(state, P1, attack(T1, T3), testMap, defaultCombat)
 
-    const event = result.events[0] as AttackResolved
+    const event = eventOfType(result.events[0], 'AttackResolved')
     expect(event.defendDice).toBe(2)
   })
 
@@ -416,7 +414,7 @@ describe('Attack', () => {
 
     const result = applyAction(state, P1, attack(T1, T3), testMap, defaultCombat)
 
-    const event = result.events[0] as AttackResolved
+    const event = eventOfType(result.events[0], 'AttackResolved')
     expect(event.defendDice).toBe(1)
   })
 
@@ -436,7 +434,7 @@ describe('Attack', () => {
     for (let seed = 0; seed < 100; seed++) {
       const s = { ...state, rng: { seed, index: 0 } }
       const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat)
-      const attackEvent = result.events[0] as AttackResolved
+      const attackEvent = eventOfType(result.events[0], 'AttackResolved')
 
       if (attackEvent.defenderLosses === 1) {
         captured = true
@@ -445,7 +443,7 @@ describe('Attack', () => {
         expect(result.state.territories[T3].armies).toBe(0)
 
         // TerritoryCaptured event emitted
-        const captureEvent = result.events[1] as TerritoryCaptured
+        const captureEvent = eventOfType(result.events[1], 'TerritoryCaptured')
         expect(captureEvent.type).toBe('TerritoryCaptured')
         expect(captureEvent.from).toBe(T1)
         expect(captureEvent.to).toBe(T3)
@@ -481,7 +479,7 @@ describe('Attack', () => {
     for (let seed = 0; seed < 100; seed++) {
       const s = { ...state, rng: { seed, index: 0 } }
       const result = applyAction(s, P1, attack(T1, T3, 2), testMap, defaultCombat)
-      const attackEvent = result.events[0] as AttackResolved
+      const attackEvent = eventOfType(result.events[0], 'AttackResolved')
 
       if (attackEvent.defenderLosses === 1) {
         // minMove should be the attacker dice used (2)
@@ -503,7 +501,7 @@ describe('Attack', () => {
     })
 
     const result = applyAction(state, P1, attack(T1, T3), testMap, defaultCombat)
-    const event = result.events[0] as AttackResolved
+    const event = eventOfType(result.events[0], 'AttackResolved')
     // Defender has 10 armies, losing at most 2 → always survives
     expect(result.state.territories[T3].armies).toBeGreaterThan(0)
     expect(result.state.territories[T3].ownerId).toBe(P2)
@@ -562,7 +560,7 @@ describe('Attack', () => {
     })
 
     const result = applyAction(state, P1, attack(T1, T3), testMap, defaultCombat)
-    const event = result.events[0] as AttackResolved
+    const event = eventOfType(result.events[0], 'AttackResolved')
 
     for (let i = 1; i < event.attackRolls.length; i++) {
       expect(event.attackRolls[i - 1]).toBeGreaterThanOrEqual(event.attackRolls[i]!)
@@ -602,14 +600,14 @@ describe('Attack', () => {
   test('rejects attack from nonexistent territory', () => {
     const state = makeAttackState()
     expect(() =>
-      applyAction(state, P1, attack('fake' as TerritoryId, T3), testMap, defaultCombat),
+      applyAction(state, P1, attack(territoryId('fake'), T3), testMap, defaultCombat),
     ).toThrow(/does not exist/)
   })
 
   test('rejects attack to nonexistent territory', () => {
     const state = makeAttackState()
     expect(() =>
-      applyAction(state, P1, attack(T1, 'fake' as TerritoryId), testMap, defaultCombat),
+      applyAction(state, P1, attack(T1, territoryId('fake')), testMap, defaultCombat),
     ).toThrow(/does not exist/)
   })
 
@@ -719,7 +717,7 @@ describe('Occupy', () => {
     const result = applyAction(state, P1, occupy(2))
 
     expect(result.events).toHaveLength(1)
-    const event = result.events[0] as OccupyResolved
+    const event = eventOfType(result.events[0], 'OccupyResolved')
     expect(event.type).toBe('OccupyResolved')
     expect(event.playerId).toBe(P1)
     expect(event.from).toBe(T1)
@@ -827,7 +825,7 @@ describe('Occupy', () => {
     for (let seed = 0; seed < 100; seed++) {
       const s = { ...state, rng: { seed, index: 0 } }
       const attackResult = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat)
-      const attackEvent = attackResult.events[0] as AttackResolved
+      const attackEvent = eventOfType(attackResult.events[0], 'AttackResolved')
 
       if (attackEvent.defenderLosses === 1) {
         // Territory captured → pending occupy set
@@ -848,7 +846,7 @@ describe('Occupy', () => {
         expect(occupyResult.state.turn.phase).toBe('Attack')
 
         // OccupyResolved event
-        const occupyEvent = occupyResult.events[0] as OccupyResolved
+        const occupyEvent = eventOfType(occupyResult.events[0], 'OccupyResolved')
         expect(occupyEvent.type).toBe('OccupyResolved')
         expect(occupyEvent.playerId).toBe(P1)
         expect(occupyEvent.moved).toBe(pending.minMove)
@@ -903,11 +901,11 @@ describe('EndAttackPhase', () => {
   })
 
   test('rejects when forced elimination trade is required', () => {
-    const C1 = 'c1' as CardId
-    const C2 = 'c2' as CardId
-    const C3 = 'c3' as CardId
-    const C4 = 'c4' as CardId
-    const C5 = 'c5' as CardId
+    const C1 = cardId('c1')
+    const C2 = cardId('c2')
+    const C3 = cardId('c3')
+    const C4 = cardId('c4')
+    const C5 = cardId('c5')
 
     const state = makeAttackState({
       hands: { p1: [C1, C2, C3, C4, C5] },
@@ -953,16 +951,17 @@ describe('Player elimination', () => {
     for (let seed = 0; seed < 100; seed++) {
       const s = { ...state, rng: { seed, index: 0 } }
       const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat)
-      const attackEvent = result.events[0] as AttackResolved
+      const attackEvent = eventOfType(result.events[0], 'AttackResolved')
 
       if (attackEvent.defenderLosses === 1) {
         // P2 should be defeated
         expect(result.state.players['p2']!.status).toBe('defeated')
 
         // PlayerEliminated event emitted
-        const elimEvent = result.events.find(
-          (e) => e.type === 'PlayerEliminated',
-        ) as PlayerEliminated
+        const elimEvent = eventOfType(
+          result.events.find((e) => e.type === 'PlayerEliminated'),
+          'PlayerEliminated',
+        )
 
         expect(elimEvent).toBeDefined()
         expect(elimEvent.eliminatedId).toBe(P2)
@@ -990,7 +989,7 @@ describe('Player elimination', () => {
     for (let seed = 0; seed < 100; seed++) {
       const s = { ...state, rng: { seed, index: 0 } }
       const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat)
-      const attackEvent = result.events[0] as AttackResolved
+      const attackEvent = eventOfType(result.events[0], 'AttackResolved')
 
       if (attackEvent.defenderLosses === 1) {
         // P2 should still be alive
@@ -1019,7 +1018,7 @@ describe('Player elimination', () => {
     for (let seed = 0; seed < 100; seed++) {
       const s = { ...state, rng: { seed, index: 0 } }
       const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat)
-      const attackEvent = result.events[0] as AttackResolved
+      const attackEvent = eventOfType(result.events[0], 'AttackResolved')
 
       if (attackEvent.defenderLosses === 1) {
         // No PlayerEliminated event for neutral
@@ -1050,14 +1049,18 @@ describe('Win condition', () => {
     for (let seed = 0; seed < 100; seed++) {
       const s = { ...state, rng: { seed, index: 0 } }
       const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat)
-      const attackEvent = result.events[0] as AttackResolved
+      const attackEvent = eventOfType(result.events[0], 'AttackResolved')
 
       if (attackEvent.defenderLosses === 1) {
         // Game should be over
         expect(result.state.turn.phase).toBe('GameOver')
 
         // GameEnded event
-        const gameEndedEvent = result.events.find((e) => e.type === 'GameEnded') as GameEnded
+        const gameEndedEvent = eventOfType(
+          result.events.find((e) => e.type === 'GameEnded'),
+          'GameEnded',
+        )
+
         expect(gameEndedEvent).toBeDefined()
         expect(gameEndedEvent.winningPlayerId).toBe(P1)
         expect(Object.hasOwn(gameEndedEvent, 'winningTeamId')).toBe(false)
@@ -1098,7 +1101,7 @@ describe('Win condition', () => {
     for (let seed = 0; seed < 100; seed++) {
       const s = { ...state, rng: { seed, index: 0 } }
       const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat)
-      const attackEvent = result.events[0] as AttackResolved
+      const attackEvent = eventOfType(result.events[0], 'AttackResolved')
 
       if (attackEvent.defenderLosses === 1) {
         // P2 eliminated but game continues — P3 still alive
@@ -1140,9 +1143,9 @@ describe('Win condition', () => {
 
   test("a team's sole surviving player wins with both IDs", () => {
     // SAFETY: These synthetic team strings are used consistently in this fixture's player records.
-    const teamA = 'teamA' as TeamId
+    const teamA = teamId('teamA')
     // SAFETY: This synthetic team is assigned to the surviving fixture player P2 below.
-    const teamB = 'teamB' as TeamId
+    const teamB = teamId('teamB')
 
     const state = makeAttackState({
       players: { p1: { status: 'alive', teamId: teamA }, p2: { status: 'alive', teamId: teamB } },
@@ -1168,8 +1171,8 @@ describe('Win condition', () => {
   })
 
   test('team game ends with winningTeamId when last enemy team is eliminated', () => {
-    const teamA = 'teamA' as TeamId
-    const teamB = 'teamB' as TeamId
+    const teamA = teamId('teamA')
+    const teamB = teamId('teamB')
 
     const teamsConfig: TeamsConfig = {
       teamsEnabled: true,
@@ -1209,12 +1212,17 @@ describe('Win condition', () => {
         teamsConfig,
       )
 
-      const attackEvent = result.events[0] as AttackResolved
+      const attackEvent = eventOfType(result.events[0], 'AttackResolved')
 
       if (attackEvent.defenderLosses !== 1) continue
 
       expect(result.state.turn.phase).toBe('GameOver')
-      const gameEndedEvent = result.events.find((e) => e.type === 'GameEnded') as GameEnded
+
+      const gameEndedEvent = eventOfType(
+        result.events.find((e) => e.type === 'GameEnded'),
+        'GameEnded',
+      )
+
       expect(gameEndedEvent.winningTeamId).toBe(teamA)
       expect(gameEndedEvent.winningPlayerId).toBeUndefined()
       expect(Object.hasOwn(gameEndedEvent, 'winningPlayerId')).toBe(false)
@@ -1407,7 +1415,7 @@ describe('Fortify', () => {
     )
 
     expect(result.events).toHaveLength(1)
-    const event = result.events[0] as FortifyResolved
+    const event = eventOfType(result.events[0], 'FortifyResolved')
     expect(event.type).toBe('FortifyResolved')
     expect(event.playerId).toBe(P1)
     expect(event.from).toBe(T1)
@@ -1452,7 +1460,7 @@ describe('Fortify', () => {
       applyAction(
         state,
         P1,
-        fortify('fake' as TerritoryId, T2, 1),
+        fortify(territoryId('fake'), T2, 1),
         fortifyMap,
         undefined,
         connectedFortify,
@@ -1466,7 +1474,7 @@ describe('Fortify', () => {
       applyAction(
         state,
         P1,
-        fortify(T1, 'fake' as TerritoryId, 1),
+        fortify(T1, territoryId('fake'), 1),
         fortifyMap,
         undefined,
         connectedFortify,
@@ -1683,16 +1691,16 @@ describe('EndTurn', () => {
 
     expect(result.events).toHaveLength(3)
 
-    const turnEnded = result.events[0] as TurnEnded
+    const turnEnded = eventOfType(result.events[0], 'TurnEnded')
     expect(turnEnded.type).toBe('TurnEnded')
     expect(turnEnded.playerId).toBe(P1)
 
-    const turnAdvanced = result.events[1] as TurnAdvanced
+    const turnAdvanced = eventOfType(result.events[1], 'TurnAdvanced')
     expect(turnAdvanced.type).toBe('TurnAdvanced')
     expect(turnAdvanced.nextPlayerId).toBe(P2)
     expect(turnAdvanced.round).toBe(1)
 
-    const reinforcements = result.events[2] as ReinforcementsGranted
+    const reinforcements = eventOfType(result.events[2], 'ReinforcementsGranted')
     expect(reinforcements.type).toBe('ReinforcementsGranted')
     expect(reinforcements.playerId).toBe(P2)
     expect(reinforcements.amount).toBe(3)
@@ -1709,7 +1717,7 @@ describe('EndTurn', () => {
     expect(result.state.turn.round).toBe(2)
 
     // TurnAdvanced event reflects the new round
-    const turnAdvanced = result.events[1] as TurnAdvanced
+    const turnAdvanced = eventOfType(result.events[1], 'TurnAdvanced')
     expect(turnAdvanced.round).toBe(2)
   })
 
@@ -1839,9 +1847,9 @@ describe('EndTurn', () => {
 // ── Card draw on EndTurn tests ────────────────────────────────────────
 
 describe('Card draw on EndTurn', () => {
-  const C1 = 'c1' as CardId
-  const C2 = 'c2' as CardId
-  const C3 = 'c3' as CardId
+  const C1 = cardId('c1')
+  const C2 = cardId('c2')
+  const C3 = cardId('c3')
 
   function makeCardEndTurnState(overrides?: Partial<GameState>): GameState {
     return makeState({
@@ -1881,14 +1889,18 @@ describe('Card draw on EndTurn', () => {
     )
 
     // CardDrawn event should be first
-    const cardDrawn = result.events.find((e) => e.type === 'CardDrawn') as CardDrawn
+    const cardDrawn = eventOfType(
+      result.events.find((e) => e.type === 'CardDrawn'),
+      'CardDrawn',
+    )
+
     expect(cardDrawn).toBeDefined()
     expect(cardDrawn.playerId).toBe(P1)
     expect(cardDrawn.cardId).toBe(C1) // first card in draw pile
 
     // Card added to player's hand
-    expect(result.state.hands[P1 as string]).toContain(C1)
-    expect(result.state.hands[P1 as string]).toHaveLength(1)
+    expect(result.state.hands[P1]).toContain(C1)
+    expect(result.state.hands[P1]).toHaveLength(1)
 
     // Deck draw pile reduced
     expect(result.state.deck.draw).toHaveLength(2)
@@ -1910,7 +1922,7 @@ describe('Card draw on EndTurn', () => {
 
     const cardDrawn = result.events.find((e) => e.type === 'CardDrawn')
     expect(cardDrawn).toBeUndefined()
-    expect(result.state.hands[P1 as string]).toHaveLength(0)
+    expect(result.state.hands[P1]).toHaveLength(0)
     expect(result.state.deck.draw).toHaveLength(3)
   })
 
@@ -1920,7 +1932,7 @@ describe('Card draw on EndTurn', () => {
 
     const cardDrawn = result.events.find((e) => e.type === 'CardDrawn')
     expect(cardDrawn).toBeUndefined()
-    expect(result.state.hands[P1 as string]).toHaveLength(0)
+    expect(result.state.hands[P1]).toHaveLength(0)
   })
 
   test('does not draw when awardCardOnCapture is false', () => {
@@ -1979,7 +1991,11 @@ describe('Card draw on EndTurn', () => {
       defaultRuleset.cards,
     )
 
-    const cardDrawn = result.events.find((e) => e.type === 'CardDrawn') as CardDrawn
+    const cardDrawn = eventOfType(
+      result.events.find((e) => e.type === 'CardDrawn'),
+      'CardDrawn',
+    )
+
     expect(cardDrawn).toBeDefined()
     // Card came from the reshuffled discard
     expect([C1, C2, C3]).toContain(cardDrawn.cardId)
@@ -2027,7 +2043,7 @@ describe('Card draw on EndTurn', () => {
     const totalAfter =
       result.state.deck.draw.length +
       result.state.deck.discard.length +
-      Object.values(result.state.hands).reduce((sum, h) => sum + (h as readonly CardId[]).length, 0)
+      Object.values(result.state.hands).reduce((sum, h) => sum + h.length, 0)
 
     expect(totalAfter).toBe(totalBefore)
   })
@@ -2048,7 +2064,7 @@ describe('Card draw on EndTurn', () => {
       defaultRuleset.cards,
     )
 
-    expect(result.state.hands[P1 as string]).toEqual([C3, C1])
+    expect(result.state.hands[P1]).toEqual([C3, C1])
   })
 
   test('clears capturedThisTurn after draw', () => {
@@ -2071,9 +2087,9 @@ describe('Card draw on EndTurn', () => {
 // ── Card transfer on elimination tests ────────────────────────────────
 
 describe('Card transfer on elimination', () => {
-  const C1 = 'c1' as CardId
-  const C2 = 'c2' as CardId
-  const C3 = 'c3' as CardId
+  const C1 = cardId('c1')
+  const C2 = cardId('c2')
+  const C3 = cardId('c3')
 
   test('transfers cards from eliminated player to attacker', () => {
     const state = makeAttackState({
@@ -2091,20 +2107,21 @@ describe('Card transfer on elimination', () => {
     for (let seed = 0; seed < 100; seed++) {
       const s = { ...state, rng: { seed, index: 0 } }
       const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat)
-      const attackEvent = result.events[0] as AttackResolved
+      const attackEvent = eventOfType(result.events[0], 'AttackResolved')
 
       if (attackEvent.defenderLosses === 1) {
         // P2 eliminated — cards transferred
-        const elimEvent = result.events.find(
-          (e) => e.type === 'PlayerEliminated',
-        ) as PlayerEliminated
+        const elimEvent = eventOfType(
+          result.events.find((e) => e.type === 'PlayerEliminated'),
+          'PlayerEliminated',
+        )
 
         expect(elimEvent.cardsTransferred).toEqual([C2, C3])
 
         // P1 now has all cards
-        expect(result.state.hands[P1 as string]).toEqual([C1, C2, C3])
+        expect(result.state.hands[P1]).toEqual([C1, C2, C3])
         // P2 hand is empty
-        expect(result.state.hands[P2 as string]).toEqual([])
+        expect(result.state.hands[P2]).toEqual([])
 
         return
       }
@@ -2130,15 +2147,15 @@ describe('Card transfer on elimination', () => {
     for (let seed = 0; seed < 100; seed++) {
       const s = { ...state, rng: { seed, index: 0 } }
       const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat)
-      const attackEvent = result.events[0] as AttackResolved
+      const attackEvent = eventOfType(result.events[0], 'AttackResolved')
 
       if (attackEvent.defenderLosses === 1) {
         // P2 not eliminated (has T4)
         const elimEvent = result.events.find((e) => e.type === 'PlayerEliminated')
         expect(elimEvent).toBeUndefined()
         // Hands unchanged
-        expect(result.state.hands[P1 as string]).toEqual([])
-        expect(result.state.hands[P2 as string]).toEqual([C1, C2])
+        expect(result.state.hands[P1]).toEqual([])
+        expect(result.state.hands[P2]).toEqual([C1, C2])
 
         return
       }
@@ -2163,16 +2180,17 @@ describe('Card transfer on elimination', () => {
     for (let seed = 0; seed < 100; seed++) {
       const s = { ...state, rng: { seed, index: 0 } }
       const result = applyAction(s, P1, attack(T1, T3), testMap, defaultCombat)
-      const attackEvent = result.events[0] as AttackResolved
+      const attackEvent = eventOfType(result.events[0], 'AttackResolved')
 
       if (attackEvent.defenderLosses === 1) {
-        const elimEvent = result.events.find(
-          (e) => e.type === 'PlayerEliminated',
-        ) as PlayerEliminated
+        const elimEvent = eventOfType(
+          result.events.find((e) => e.type === 'PlayerEliminated'),
+          'PlayerEliminated',
+        )
 
         expect(elimEvent.cardsTransferred).toEqual([])
-        expect(result.state.hands[P1 as string]).toEqual([C1])
-        expect(result.state.hands[P2 as string]).toEqual([])
+        expect(result.state.hands[P1]).toEqual([C1])
+        expect(result.state.hands[P2]).toEqual([])
 
         return
       }
@@ -2182,13 +2200,13 @@ describe('Card transfer on elimination', () => {
   })
 
   test('requires forced trade during Attack after elimination transfer exceeds threshold', () => {
-    const C1 = 'c1' as CardId
-    const C2 = 'c2' as CardId
-    const C3 = 'c3' as CardId
-    const C4 = 'c4' as CardId
-    const C5 = 'c5' as CardId
-    const C6 = 'c6' as CardId
-    const C7 = 'c7' as CardId
+    const C1 = cardId('c1')
+    const C2 = cardId('c2')
+    const C3 = cardId('c3')
+    const C4 = cardId('c4')
+    const C5 = cardId('c5')
+    const C6 = cardId('c6')
+    const C7 = cardId('c7')
 
     const state = makeAttackState({
       players: { p1: { status: 'alive' }, p2: { status: 'alive' }, p3: { status: 'alive' } },
@@ -2227,7 +2245,7 @@ describe('Card transfer on elimination', () => {
         defaultRuleset.cards,
       )
 
-      const attackEvent = result.events[0] as AttackResolved
+      const attackEvent = eventOfType(result.events[0], 'AttackResolved')
 
       if (attackEvent.defenderLosses !== 1) continue
 
@@ -2247,7 +2265,7 @@ describe('Card transfer on elimination', () => {
         defaultRuleset.cards,
       )
 
-      expect(afterOccupy.state.hands[P1 as string]).toHaveLength(7)
+      expect(afterOccupy.state.hands[P1]).toHaveLength(7)
       expect(() =>
         applyAction(
           afterOccupy.state,
@@ -2280,8 +2298,8 @@ describe('Card transfer on elimination', () => {
 
 // ── Team integration tests ──────────────────────────────────────────
 
-const TEAM_A = 'teamA' as TeamId
-const TEAM_B = 'teamB' as TeamId
+const TEAM_A = teamId('teamA')
+const TEAM_B = teamId('teamB')
 
 const teamsFullAccess: TeamsConfig = {
   teamsEnabled: true,

@@ -1,10 +1,10 @@
+import { territoryId, continentId } from './testing/fixtures.js'
 import { describe, expect, test } from 'bun:test'
 import { validateMap, validateVisual, validateAuthoredMap } from './map.js'
 import type { GraphMap, MapVisual } from './map.js'
-import type { TerritoryId, ContinentId } from './types.js'
 
-const t = (id: string) => id as TerritoryId
-const c = (id: string) => id as ContinentId
+const t = territoryId
+const c = continentId
 
 function makeValidMap(): GraphMap {
   return {
@@ -179,8 +179,9 @@ describe('validateVisual', () => {
 
   test('rejects missing anchor', () => {
     const visual = makeValidVisual()
-    delete (visual.territoryAnchors as Record<string, { x: number; y: number }>).B
-    const result = validateVisual(makeValidMap(), visual)
+    const { B: _missing, ...anchors } = visual.territoryAnchors
+    const incomplete = { ...visual, territoryAnchors: anchors }
+    const result = validateVisual(makeValidMap(), incomplete)
     expect(result.valid).toBe(false)
     expect(result.errors.some((e) => e.includes('Missing anchor for territory "B"'))).toBe(true)
   })
@@ -188,11 +189,12 @@ describe('validateVisual', () => {
   test('rejects out-of-range anchor coordinates', () => {
     const visual = makeValidVisual()
 
-    ;(visual.territoryAnchors as Record<string, { x: number; y: number }>).A = {
-      x: 1.2,
-      y: -0.1,
+    const outOfRange = {
+      ...visual,
+      territoryAnchors: { ...visual.territoryAnchors, A: { x: 1.2, y: -0.1 } },
     }
-    const result = validateVisual(makeValidMap(), visual)
+
+    const result = validateVisual(makeValidMap(), outOfRange)
     expect(result.valid).toBe(false)
     expect(result.errors.some((e) => e.includes('Anchor x for territory "A"'))).toBe(true)
     expect(result.errors.some((e) => e.includes('Anchor y for territory "A"'))).toBe(true)
@@ -201,8 +203,8 @@ describe('validateVisual', () => {
   test('rejects non-positive node scale', () => {
     const visual = makeValidVisual()
 
-    ;(visual as { nodeScale?: number }).nodeScale = 0
-    const result = validateVisual(makeValidMap(), visual)
+    const scaled = { ...visual, nodeScale: 0 }
+    const result = validateVisual(makeValidMap(), scaled)
     expect(result.valid).toBe(false)
     expect(result.errors).toContain('nodeScale must be a positive number')
   })
@@ -210,8 +212,8 @@ describe('validateVisual', () => {
   test('accepts positive node scale', () => {
     const visual = makeValidVisual()
 
-    ;(visual as { nodeScale?: number }).nodeScale = 0.8
-    const result = validateVisual(makeValidMap(), visual)
+    const scaled = { ...visual, nodeScale: 0.8 }
+    const result = validateVisual(makeValidMap(), scaled)
     expect(result.valid).toBe(true)
   })
 })

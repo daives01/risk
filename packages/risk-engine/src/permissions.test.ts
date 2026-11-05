@@ -1,13 +1,14 @@
+import { playerId, teamId } from './testing/fixtures.js'
 import { describe, expect, test } from 'bun:test'
 import { canPlace, canAttack, canFortifyFrom, canFortifyTo, canTraverse } from './permissions.js'
-import type { PlayerId, PlayerState, TeamId } from './types.js'
+import type { PlayerState } from './types.js'
 import type { TeamsConfig } from './config.js'
 
-const P1 = 'p1' as PlayerId
-const P2 = 'p2' as PlayerId
-const P3 = 'p3' as PlayerId
-const TEAM_A = 'teamA' as TeamId
-const TEAM_B = 'teamB' as TeamId
+const P1 = playerId('p1')
+const P2 = playerId('p2')
+const P3 = playerId('p3')
+const TEAM_A = teamId('teamA')
+const TEAM_B = teamId('teamB')
 
 const noTeamPlayers: Record<string, PlayerState> = {
   p1: { status: 'alive' },

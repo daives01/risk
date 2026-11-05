@@ -297,3 +297,34 @@ already established. Regression coverage checks exact unknown-key/asymmetry
 errors and confirms that a reverse edge does not erase invalid membership
 errors. Existing deterministic engine, action-order, card and resignation
 suites continue to pass; no gameplay rule or external contract is changed.
+
+## Assertion evidence: engine test fixtures
+
+Engine test assertion-comment findings are 233 → 0; the entire engine scope is
+now zero, and global findings are 480 → 247. The existing engine override now
+enforces `require-safety-comment-for-type-assertion` as an error. Maps, backend
+and frontend remain visible in the audit. When those scopes reach zero, move
+this rule to the global rules and remove its engine-scoped key.
+
+Private `src/testing/fixtures.ts` constructors label synthetic strings with the
+five nominal ID categories. Each of their five assertions documents precisely
+that test-only purpose; they neither validate external input nor establish
+membership in a state/map. They are excluded from the production build and are
+not exported from the package index. The three documented production assertions
+from the preceding change remain unchanged.
+
+Event expectations now check the discriminator of the exact supplied event,
+including undefined. Indexed checks retain their original index, and existing
+searches retain their predicates. A negative test covers missing and wrong-kind
+events. Action fixtures use actual discriminant narrowing; empty decks use the
+owning DeckState contract, and malformed visual fixtures are constructed without
+casting away readonly contracts. Redundant string assertions are removed without
+runtime coercion. Four pre-existing nominal matcher errors now use synthetic
+CardId expected values, preserving the exact strings being compared.
+
+`typecheck:engine-tests` is part of root typecheck and checks every engine test
+and its private support with strict TypeScript and no emit. Previously the
+production project excluded tests. The full root check passes, including 557
+tests and production builds; formatting and the fresh audit pass as well. No
+unchecked event assertions, action any casts, or undocumented engine assertions
+remain.

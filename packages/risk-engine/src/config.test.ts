@@ -10,7 +10,7 @@ describe('RulesetConfig', () => {
 
   test('defaultRuleset is JSON-serializable', () => {
     const json = JSON.stringify(defaultRuleset)
-    const parsed = JSON.parse(json) as RulesetConfig
+    const parsed = JSON.parse(json)
     expect(parsed).toEqual(defaultRuleset)
   })
 
