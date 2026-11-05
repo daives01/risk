@@ -1,5 +1,4 @@
 import { NEUTRAL_PLAYER_COLOR, PLAYER_COLOR_PALETTE } from 'risk-engine'
-import type { GraphMap } from 'risk-engine'
 
 type PlayerRef = { displayName: string; enginePlayerId: string | null; color?: string | null }
 
@@ -23,7 +22,7 @@ export function getPlayerName(enginePlayerId: string, players: PlayerRef[]) {
 export function formatEvent(
   event: Record<string, unknown>,
   playerMap: PlayerRef[],
-  graphMap?: GraphMap,
+  graphMap?: { territories: Record<string, { name?: string }> } | null,
 ) {
   const playerName = (id: unknown) =>
     typeof id === 'string' ? getPlayerName(id, playerMap) : 'Unknown'

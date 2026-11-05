@@ -636,3 +636,23 @@ existing HighlightFilter template types replace four highlight assertions.
 Runtime property values, layout, null/undefined handling and toggling behavior
 remain unchanged. Root checks (605 tests), formatting and audit pass. Assertion
 findings fall 100 to 91; no policy scopes change.
+
+### Frontend query and replay contracts
+
+Generated API return types replace handwritten view, chat, home and replay
+facades. Player-view preference, private-hand defaults, auth query skips and
+replay cache/window logic remain intact. Historical event fields stay unknown;
+visibility checks guard their discriminator. Display formatting requires only
+the territory-name structure it reads. Replay IDs are string cache keys, not
+mutation arguments; generated branded IDs remain assignable without branding
+synthetic test keys.
+
+Map adaptation uses the existing structural graph reader and retains node-scale
+normalization. Malformed graphs now fail explicitly; dangling string references
+remain available for domain validation. Real query-backed adapter tests cover
+null defaults, player/private-hand preference, graph identity, normalization and
+malformed adjacency. Existing replay expectations are preserved.
+
+Root checks (608 tests), formatting verification and audit pass. Independent
+review approves. Assertion findings fall 91 to 78; deferred typeof is 73,
+unknown parameters 44, dictionary 8, widening 22. No policy scopes change.

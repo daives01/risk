@@ -134,7 +134,7 @@ export function buildHistoryEvents({
 
       flushReinforcements()
 
-      if (ignoredEventTypes.has(String(event.type ?? ''))) {
+      if (typeof event.type === 'string' && ignoredEventTypes.has(event.type)) {
         continue
       }
 
@@ -184,7 +184,7 @@ export function buildHistoryEvents({
       flushAttackStreak()
       events.push({
         key: `${action._id}-${eventIndex}`,
-        text: formatEvent(event, playerMap, graphMap as Parameters<typeof formatEvent>[2]),
+        text: formatEvent(event, playerMap, graphMap),
         index: action.index,
       })
     }

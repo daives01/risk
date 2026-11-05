@@ -2,6 +2,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   applyTimelineStatePatch,
+  isVisibleReplayAction,
   mergeHistoryWindowActions,
   reconstructHistoryWindows,
 } from './history-timeline'
@@ -290,4 +291,21 @@ describe('history timeline reconstruction', () => {
 
     expect(actions).toEqual([])
   })
+})
+
+test('historical event types remain open and only known string types are visible', () => {
+  const action = {
+    _id: 'historical-action',
+    index: 0,
+    events: [{ type: 42 }, {}, { type: { future: true } }, { type: 'FutureEvent' }],
+  }
+
+  expect(isVisibleReplayAction(action)).toBe(false)
+  expect(isVisibleReplayAction({ ...action, events: [{ type: 'TurnAdvanced' }] })).toBe(true)
+  expect(
+    isVisibleReplayAction({
+      ...action,
+      publicStatePatch: { territories: { alaska: { armies: 2 } } },
+    }),
+  ).toBe(true)
 })

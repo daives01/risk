@@ -30,7 +30,7 @@ export function useReplayWindows(typedGameId: Id<'games'> | undefined, replayEna
   const latestHistoryWindow = useQuery(
     api.gameplay.getHistoryWindow,
     typedGameId && replayEnabled ? { gameId: typedGameId } : 'skip',
-  ) as HistoryWindow | undefined
+  )
 
   const previousHistoryBeforeIndex =
     typeof latestHistoryWindow?.snapshotIndex === 'number' && latestHistoryWindow.snapshotIndex > -1
@@ -42,21 +42,21 @@ export function useReplayWindows(typedGameId: Id<'games'> | undefined, replayEna
     typedGameId && replayEnabled && previousHistoryBeforeIndex !== null
       ? { gameId: typedGameId, beforeIndex: previousHistoryBeforeIndex }
       : 'skip',
-  ) as HistoryWindow | undefined
+  )
 
   const olderHistoryWindow = useQuery(
     api.gameplay.getHistoryWindow,
     typedGameId && replayEnabled && olderHistoryBeforeIndex !== null
       ? { gameId: typedGameId, beforeIndex: olderHistoryBeforeIndex }
       : 'skip',
-  ) as HistoryWindow | undefined
+  )
 
   const targetHistoryWindow = useQuery(
     api.gameplay.getHistoryWindow,
     typedGameId && replayEnabled && targetHistoryBeforeIndex !== null
       ? { gameId: typedGameId, beforeIndex: targetHistoryBeforeIndex }
       : 'skip',
-  ) as HistoryWindow | undefined
+  )
 
   useEffect(() => {
     if (!replayEnabled) {
@@ -78,7 +78,7 @@ export function useReplayWindows(typedGameId: Id<'games'> | undefined, replayEna
       previousHistoryWindow,
       olderHistoryWindow,
       targetHistoryWindow,
-    ].filter((window): window is HistoryWindow => !!window?.snapshotPublicState)
+    ].filter((window): window is NonNullable<typeof window> => !!window?.snapshotPublicState)
 
     if (windows.length === 0) return
 
