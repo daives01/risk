@@ -426,3 +426,16 @@ component helper still requires Bun-unsupported `import.meta.glob`, so this does
 not claim an authenticated component integration test. Full root check passes
 with 566 tests, typechecking, lint and builds; formatting, audit and diff checks
 also pass.
+
+### Reinforcement input contract prerequisite
+
+`calculateReinforcements` accepts the `players`, `territories`, and `turnOrder`
+fields it actually reads. Its private team-recipient helper requires only players
+and territories. Full `GameState` callers remain compatible; a lobby can supply
+real reinforcement inputs without fabricating unrelated RNG, deck, or hand state.
+No calculation or tie-breaking logic changes. A minimal-input test covers the
+stored turn-order fallback, explicit override, team bonus recipient, and input
+immutability. Backend caller cleanup follows separately.
+
+Root checks (567 tests), formatting verification, and the full audit pass.
+Assertion findings remain 237 (engine zero); no policy scope changes here.
