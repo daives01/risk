@@ -90,6 +90,11 @@ export function AttackDiceControl({
     return () => window.clearInterval(interval)
   }, [rolling])
 
+  const sliderStyle = {
+    '--player-slider-color': attackerColor,
+    width: sliderLength,
+  } satisfies CSSProperties & { '--player-slider-color': string }
+
   return (
     <div className="mt-2 border-t border-border/70 pt-2">
       <div className="mx-auto grid w-fit grid-cols-[22px_36px_24px_36px] items-end gap-x-2 text-muted-foreground">
@@ -125,9 +130,7 @@ export function AttackDiceControl({
               disabled={disabled || sliderMin === sliderMax}
               aria-label="Number of attack dice"
               className="player-slider h-4 rotate-90 cursor-pointer transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-default disabled:opacity-50"
-              style={
-                { '--player-slider-color': attackerColor, width: sliderLength } as CSSProperties
-              }
+              style={sliderStyle}
             />
           </div>
         )}
@@ -290,6 +293,10 @@ function MoveSlider({
   color: string
   label?: string
 }) {
+  const sliderStyle: CSSProperties & { '--player-slider-color': string } = {
+    '--player-slider-color': color,
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
@@ -314,7 +321,7 @@ function MoveSlider({
         }}
         disabled={disabled || min === max}
         className="player-slider mt-2 h-4 w-full cursor-pointer transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-default disabled:opacity-50"
-        style={{ '--player-slider-color': color } as CSSProperties}
+        style={sliderStyle}
       />
       <div className="flex justify-between text-[9px] text-muted-foreground">
         <span>{min}</span>

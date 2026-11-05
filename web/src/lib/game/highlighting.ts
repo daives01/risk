@@ -21,13 +21,13 @@ function parseHighlightFilter(
 }
 
 export function togglePlayerHighlight(current: HighlightFilter, playerId: string): HighlightFilter {
-  const next = `player:${playerId}` as HighlightFilter
+  const next: HighlightFilter = `player:${playerId}`
 
   return current === next ? 'none' : next
 }
 
 export function toggleTeamHighlight(current: HighlightFilter, teamId: string): HighlightFilter {
-  const next = `team:${teamId}` as HighlightFilter
+  const next: HighlightFilter = `team:${teamId}`
 
   return current === next ? 'none' : next
 }

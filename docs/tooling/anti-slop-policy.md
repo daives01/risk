@@ -628,3 +628,11 @@ mouse, pen, empty and vendor values, immediate panning, drag thresholds and clic
 suppression. Globe handlers own typed canvas events and capture/release through
 currentTarget. Root checks (605 tests), formatting and audit pass. Assertion
 findings fall 107 to 100; other counts and policy scopes are unchanged.
+
+### UI style and highlight contracts
+
+Exact local CSS custom-property contracts replace five style assertions, and
+existing HighlightFilter template types replace four highlight assertions.
+Runtime property values, layout, null/undefined handling and toggling behavior
+remain unchanged. Root checks (605 tests), formatting and audit pass. Assertion
+findings fall 100 to 91; no policy scopes change.
