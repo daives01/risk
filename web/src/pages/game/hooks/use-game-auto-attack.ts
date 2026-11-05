@@ -1,6 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { TerritoryId } from 'risk-engine'
+import type { FunctionArgs } from 'convex/server'
+import type { api } from '@backend/_generated/api'
 
 interface TerritoryState {
   armies: number
@@ -22,7 +23,7 @@ interface UseGameAutoAttackOptions {
   submitting: boolean
   validToIds: Set<string>
   submitAction: (
-    action: { type: 'Attack'; from: TerritoryId; to: TerritoryId; attackerDice: number },
+    action: Extract<FunctionArgs<typeof api.gameplay.submitAction>['action'], { type: 'Attack' }>,
     options?: { preserveSelection?: boolean; preserveAttackDice?: boolean },
   ) => Promise<void> | void
 }
@@ -85,8 +86,8 @@ export function useGameAutoAttack({
       void submitAction(
         {
           type: 'Attack',
-          from: selectedFrom as TerritoryId,
-          to: selectedTo as TerritoryId,
+          from: selectedFrom,
+          to: selectedTo,
           attackerDice: 3,
         },
         { preserveSelection: true, preserveAttackDice: true },

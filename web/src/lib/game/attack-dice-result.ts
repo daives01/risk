@@ -22,19 +22,21 @@ export function buildAttackDiceResult(
     const candidate = events[index]
 
     if (!candidate || typeof candidate !== 'object') continue
-    const event = candidate as { type?: unknown; [key: string]: unknown }
 
-    if (event.type !== 'AttackResolved') continue
-    const from = typeof event.from === 'string' ? event.from : null
-    const to = typeof event.to === 'string' ? event.to : null
+    if (!('type' in candidate) || candidate.type !== 'AttackResolved') continue
+    const event = candidate
+    const from = 'from' in event && typeof event.from === 'string' ? event.from : null
+    const to = 'to' in event && typeof event.to === 'string' ? event.to : null
 
-    const attackRolls = Array.isArray(event.attackRolls)
-      ? event.attackRolls.filter((roll): roll is number => typeof roll === 'number')
-      : []
+    const attackRolls =
+      'attackRolls' in event && Array.isArray(event.attackRolls)
+        ? event.attackRolls.filter((roll): roll is number => typeof roll === 'number')
+        : []
 
-    const defendRolls = Array.isArray(event.defendRolls)
-      ? event.defendRolls.filter((roll): roll is number => typeof roll === 'number')
-      : []
+    const defendRolls =
+      'defendRolls' in event && Array.isArray(event.defendRolls)
+        ? event.defendRolls.filter((roll): roll is number => typeof roll === 'number')
+        : []
 
     if (!from || !to || attackRolls.length === 0 || defendRolls.length === 0) return null
 
@@ -46,8 +48,14 @@ export function buildAttackDiceResult(
       toLabel: territories[to]?.name ?? to,
       attackRolls,
       defendRolls,
-      attackerLosses: typeof event.attackerLosses === 'number' ? event.attackerLosses : 0,
-      defenderLosses: typeof event.defenderLosses === 'number' ? event.defenderLosses : 0,
+      attackerLosses:
+        'attackerLosses' in event && typeof event.attackerLosses === 'number'
+          ? event.attackerLosses
+          : 0,
+      defenderLosses:
+        'defenderLosses' in event && typeof event.defenderLosses === 'number'
+          ? event.defenderLosses
+          : 0,
       attackerColor: colors.attacker,
       defenderColor: colors.defender,
     }

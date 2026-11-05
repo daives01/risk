@@ -40,7 +40,7 @@ interface GameSidePanelsProps {
   onToggleChannel: () => void
   onStartEditMessage: (message: ChatMessage) => void
   onCancelEditMessage: () => void
-  onDeleteMessage: (messageId: string) => void
+  onDeleteMessage: (messageId: ChatMessage['_id']) => void
   onSendMessage: () => void
   onHoverChatTag: (tag: ChatHoverTag) => void
   onLeaveChatTag: () => void

@@ -27,7 +27,7 @@ interface GameChatCardProps {
   onToggleChannel: () => void
   onStartEditMessage: (message: ChatMessage) => void
   onCancelEditMessage: () => void
-  onDeleteMessage: (messageId: string) => void
+  onDeleteMessage: (messageId: ChatMessage['_id']) => void
   onSend: () => void
   onHoverTag: (tag: ChatHoverTag) => void
   onLeaveTag: () => void
