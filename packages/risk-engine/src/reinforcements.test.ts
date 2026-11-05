@@ -86,6 +86,34 @@ function makeMap(
 // ── Tests ──────────────────────────────────────────────────────────────
 
 describe('calculateReinforcements', () => {
+  test('accepts only reinforcement inputs and preserves team tie order', () => {
+    const state = {
+      players: {
+        p1: { status: 'alive', teamId: TEAM_A },
+        p2: { status: 'alive', teamId: TEAM_A },
+      },
+      territories: {
+        a: { ownerId: P1, armies: 1 },
+        b: { ownerId: P2, armies: 1 },
+      },
+      turnOrder: [P2, P1],
+    } satisfies Parameters<typeof calculateReinforcements>[0]
+
+    const before = structuredClone(state)
+    const map = makeMap(['a', 'b'], { home: { territoryIds: ['a', 'b'], bonus: 4 } })
+
+    expect(calculateReinforcements(state, P1, map, teamsEnabled).total).toBe(3)
+    expect(calculateReinforcements(state, P2, map, teamsEnabled)).toEqual({
+      total: 7,
+      sources: { territory: 3, home: 4 },
+    })
+    expect(calculateReinforcements(state, P1, map, teamsEnabled, [P1, P2])).toEqual({
+      total: 7,
+      sources: { territory: 3, home: 4 },
+    })
+    expect(state).toEqual(before)
+  })
+
   test('minimum 3 reinforcements even with few territories', () => {
     // 1 territory → floor(1/3)=0 → clamp to 3
     const state = makeState({ t1: P1, t2: P2 })

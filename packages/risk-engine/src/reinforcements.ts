@@ -15,7 +15,7 @@ export interface ReinforcementResult {
  * - Continent bonus: for each continent fully controlled by the player, add the continent's bonus
  */
 export function calculateReinforcements(
-  state: GameState,
+  state: Pick<GameState, 'players' | 'territories' | 'turnOrder'>,
   playerId: PlayerId,
   map: GraphMap,
   teamsConfig?: TeamsConfig,
@@ -73,7 +73,7 @@ export function calculateReinforcements(
 }
 
 function findTeamContinentBonusRecipient(
-  state: GameState,
+  state: Pick<GameState, 'players' | 'territories'>,
   territoryIds: readonly TerritoryId[],
   turnOrder: readonly PlayerId[],
 ): { teamId?: TeamId; playerId?: PlayerId } {
