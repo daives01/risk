@@ -565,3 +565,23 @@ preserved. Removing the two redundant territory casts also reduces deferred
 known-value-widening findings 24 to 22. Other counts and enforcement scopes are
 unchanged; no test helper is added to production exports. Remaining backend
 assertion findings are 18 production sites, with frontend 107.
+
+### Backend record owners outside replay
+
+Ordinary backend record cleanup reduces assertion findings 125 to 112. Current
+game views use validator-owned team names and plain stored player-ID keys;
+`projectHand` accepts the string key actually used by the engine hand dictionary.
+Authorization, hand visibility and all existing conditions remain unchanged.
+Admin map visual updates retain `Doc<'maps'>['visual']` and its storage-ID brand,
+avoiding conversion through the engine's plain-string visual contract and back.
+Palette membership uses direct equality, and inferred team anchor dictionaries
+need no assertion. A new test covers every palette member and invalid prototype,
+empty and whitespace-bearing strings.
+
+Three retained assertions state concrete evidence: Better Auth model-specific
+user identity fields from the installed component schema (whose general adapter
+returns `any`), and the validated in-repo map literal's JSON-only metadata/arrays
+cloned into mutable storage. No arbitrary external payload is trusted through
+these comments. Root checks (574 tests), formatting verification and full audit
+pass. Other counts and enforcement scopes are unchanged. Backend assertion
+findings now comprise only five replay/history sites; frontend remains 107.

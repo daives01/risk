@@ -4,7 +4,7 @@ import type { Doc } from './_generated/dataModel'
 import { authComponent } from './auth.js'
 import { components } from './_generated/api.js'
 import { validateAuthoredMap } from 'risk-engine'
-import type { GraphMap, MapVisual } from 'risk-engine'
+import type { GraphMap } from 'risk-engine'
 import { requireAdmin } from './adminAuth'
 import {
   defaultMapPlayerLimits,
@@ -119,7 +119,7 @@ export const isCurrentUserAdmin = query({
 
     const admin = await ctx.db
       .query('admins')
-      .withIndex('by_userId', (q: any) => q.eq('userId', String(user._id)))
+      .withIndex('by_userId', (q) => q.eq('userId', String(user._id)))
       .unique()
 
     return Boolean(admin)
@@ -261,8 +261,8 @@ export const saveAnchors = mutation({
 
     if (!map) throw new Error('Map not found')
 
-    const visual: MapVisual = {
-      imageStorageId: (imageStorageId ?? map.visual.imageStorageId) as string,
+    const visual: Doc<'maps'>['visual'] = {
+      imageStorageId: imageStorageId ?? map.visual.imageStorageId,
       imageWidth: imageWidth ?? map.visual.imageWidth,
       imageHeight: imageHeight ?? map.visual.imageHeight,
       nodeScale: normalizeNodeScale(nodeScale ?? map.visual.nodeScale),
@@ -271,7 +271,7 @@ export const saveAnchors = mutation({
 
     await ctx.db.patch(map._id, {
       visual: {
-        imageStorageId: visual.imageStorageId as any,
+        imageStorageId: visual.imageStorageId,
         imageWidth: visual.imageWidth,
         imageHeight: visual.imageHeight,
         nodeScale: visual.nodeScale,
@@ -393,6 +393,8 @@ export const makeAdmin = internalMutation({
         where: [{ field: 'name', operator: 'eq', value: lookup }],
       }))
 
+    // SAFETY: all three adapter lookups select the Better Auth user model; its schema owns
+    // these string/nullable identity fields. The installed findOne return is any.
     const user = byName as {
       _id?: string
       userId?: string
@@ -409,7 +411,7 @@ export const makeAdmin = internalMutation({
 
     const existing = await ctx.db
       .query('admins')
-      .withIndex('by_userId', (q: any) => q.eq('userId', userId))
+      .withIndex('by_userId', (q) => q.eq('userId', userId))
       .unique()
 
     if (existing) {

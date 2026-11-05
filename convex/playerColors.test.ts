@@ -2,12 +2,29 @@ import { describe, expect, test } from 'bun:test'
 import { PLAYER_COLOR_PALETTE } from 'risk-engine'
 import {
   canEditPlayerColor,
+  isPlayerColor,
   firstAvailablePlayerColor,
   resolvePlayerColors,
   resolveTeamAwarePlayerColors,
 } from './playerColors'
 
 describe('player colors', () => {
+  test('accepts exactly palette members without coercion or prototype keys', () => {
+    for (const color of PLAYER_COLOR_PALETTE) expect(isPlayerColor(color)).toBe(true)
+
+    for (const value of [
+      '',
+      'constructor',
+      '__proto__',
+      'toString',
+      '#not-in-palette',
+      ` ${PLAYER_COLOR_PALETTE[0]}`,
+      `${PLAYER_COLOR_PALETTE[0]} `,
+    ]) {
+      expect(isPlayerColor(value)).toBe(false)
+    }
+  })
+
   test('host can edit any player color and players can edit self only', () => {
     expect(canEditPlayerColor('host', 'host', 'p1')).toBe(true)
     expect(canEditPlayerColor('p1', 'host', 'p1')).toBe(true)
