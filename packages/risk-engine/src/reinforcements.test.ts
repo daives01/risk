@@ -1,16 +1,17 @@
+import { playerId, teamId, territoryId, continentId } from './testing/fixtures.js'
 import { describe, expect, test } from 'bun:test'
 import { calculateReinforcements } from './reinforcements.js'
-import type { GameState, PlayerId, TerritoryId, ContinentId, TeamId } from './types.js'
+import type { GameState, PlayerId, TerritoryId } from './types.js'
 import type { TeamsConfig } from './config.js'
 import type { GraphMap } from './map.js'
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-const P1 = 'p1' as PlayerId
-const P2 = 'p2' as PlayerId
-const P3 = 'p3' as PlayerId
-const TEAM_A = 'teamA' as TeamId
-const TEAM_B = 'teamB' as TeamId
+const P1 = playerId('p1')
+const P2 = playerId('p2')
+const P3 = playerId('p3')
+const TEAM_A = teamId('teamA')
+const TEAM_B = teamId('teamB')
 
 const teamsEnabled: TeamsConfig = {
   teamsEnabled: true,
@@ -27,13 +28,9 @@ const teamsEnabledIndividual: TeamsConfig = {
   continentBonusRecipient: 'individual',
 }
 
-function tid(id: string): TerritoryId {
-  return id as TerritoryId
-}
+const tid = territoryId
 
-function cid(id: string): ContinentId {
-  return id as ContinentId
-}
+const cid = continentId
 
 /** Build a minimal GameState with the given territory ownership. */
 function makeState(ownership: Record<string, PlayerId | 'neutral'>): GameState {

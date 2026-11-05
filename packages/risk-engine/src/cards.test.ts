@@ -1,17 +1,19 @@
+import type { DeckState } from './types.js'
+import { territoryId, cardId } from './testing/fixtures.js'
 import { describe, expect, test } from 'bun:test'
 import { createDeck, drawCard } from './cards.js'
 import { createRng } from './rng.js'
-import type { CardId, TerritoryId } from './types.js'
+import type { TerritoryId } from './types.js'
 import type { DeckDefinitionConfig } from './config.js'
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-const T1 = 't1' as TerritoryId
-const T2 = 't2' as TerritoryId
-const T3 = 't3' as TerritoryId
-const T4 = 't4' as TerritoryId
-const T5 = 't5' as TerritoryId
-const T6 = 't6' as TerritoryId
+const T1 = territoryId('t1')
+const T2 = territoryId('t2')
+const T3 = territoryId('t3')
+const T4 = territoryId('t4')
+const T5 = territoryId('t5')
+const T6 = territoryId('t6')
 
 const territories: TerritoryId[] = [T1, T2, T3, T4, T5, T6]
 
@@ -120,21 +122,21 @@ describe('createDeck', () => {
 
 describe('drawCard', () => {
   test('draws first card from draw pile', () => {
-    const draw = ['c1' as CardId, 'c2' as CardId, 'c3' as CardId]
-    const deck = { draw, discard: [] }
+    const draw = [cardId('c1'), cardId('c2'), cardId('c3')]
+    const deck: DeckState = { draw, discard: [] }
     const rng = createRng({ seed: 'test', index: 0 })
 
     const result = drawCard(deck, rng)
     expect(result).not.toBeNull()
-    expect(result!.cardId).toBe('c1')
+    expect(result!.cardId).toBe(cardId('c1'))
     expect(result!.deck.draw.length).toBe(2)
-    expect(result!.deck.draw[0]).toBe('c2')
-    expect(result!.deck.draw[1]).toBe('c3')
+    expect(result!.deck.draw[0]).toBe(cardId('c2'))
+    expect(result!.deck.draw[1]).toBe(cardId('c3'))
   })
 
   test('does not modify discard pile when drawing', () => {
-    const discard = ['d1' as CardId]
-    const deck = { draw: ['c1' as CardId], discard }
+    const discard = [cardId('d1')]
+    const deck: DeckState = { draw: [cardId('c1')], discard }
     const rng = createRng({ seed: 'test', index: 0 })
 
     const result = drawCard(deck, rng)
@@ -142,8 +144,8 @@ describe('drawCard', () => {
   })
 
   test('reshuffles discard into draw when draw pile is empty', () => {
-    const discard = ['d1' as CardId, 'd2' as CardId, 'd3' as CardId]
-    const deck = { draw: [] as CardId[], discard }
+    const discard = [cardId('d1'), cardId('d2'), cardId('d3')]
+    const deck: DeckState = { draw: [], discard }
     const rng = createRng({ seed: 'test', index: 0 })
 
     const result = drawCard(deck, rng)
@@ -156,8 +158,8 @@ describe('drawCard', () => {
   })
 
   test('reshuffle is deterministic', () => {
-    const discard = ['d1' as CardId, 'd2' as CardId, 'd3' as CardId, 'd4' as CardId]
-    const deck = { draw: [] as CardId[], discard }
+    const discard = [cardId('d1'), cardId('d2'), cardId('d3'), cardId('d4')]
+    const deck: DeckState = { draw: [], discard }
 
     const rng1 = createRng({ seed: 'reshuffle', index: 0 })
     const rng2 = createRng({ seed: 'reshuffle', index: 0 })
@@ -170,7 +172,7 @@ describe('drawCard', () => {
   })
 
   test('returns null when both draw and discard are empty', () => {
-    const deck = { draw: [] as CardId[], discard: [] as CardId[] }
+    const deck: DeckState = { draw: [], discard: [] }
     const rng = createRng({ seed: 'test', index: 0 })
 
     const result = drawCard(deck, rng)
@@ -178,9 +180,9 @@ describe('drawCard', () => {
   })
 
   test('card count is conserved across draw', () => {
-    const draw = ['c1' as CardId, 'c2' as CardId, 'c3' as CardId]
-    const discard = ['d1' as CardId]
-    const deck = { draw, discard }
+    const draw = [cardId('c1'), cardId('c2'), cardId('c3')]
+    const discard = [cardId('d1')]
+    const deck: DeckState = { draw, discard }
     const rng = createRng({ seed: 'test', index: 0 })
 
     const totalBefore = deck.draw.length + deck.discard.length
@@ -191,8 +193,8 @@ describe('drawCard', () => {
   })
 
   test('card count is conserved across reshuffle draw', () => {
-    const discard = ['d1' as CardId, 'd2' as CardId, 'd3' as CardId]
-    const deck = { draw: [] as CardId[], discard }
+    const discard = [cardId('d1'), cardId('d2'), cardId('d3')]
+    const deck: DeckState = { draw: [], discard }
     const rng = createRng({ seed: 'test', index: 0 })
 
     const totalBefore = deck.draw.length + deck.discard.length

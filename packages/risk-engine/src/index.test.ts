@@ -1,11 +1,7 @@
+import { playerId, territoryId, cardId, teamId, continentId } from './testing/fixtures.js'
 import { expect, test } from 'bun:test'
 import {
   ENGINE_VERSION,
-  type PlayerId,
-  type TerritoryId,
-  type ContinentId,
-  type CardId,
-  type TeamId,
   type Phase,
   type PlayerStatus,
   type Action,
@@ -20,11 +16,11 @@ test('workspace import resolves', () => {
 })
 
 test('branded IDs are assignable from string casts', () => {
-  const p = 'p1' as PlayerId
-  const t = 't1' as TerritoryId
-  const c = 'c1' as ContinentId
-  const card = 'card1' as CardId
-  const team = 'team1' as TeamId
+  const p = playerId('p1')
+  const t = territoryId('t1')
+  const c = continentId('c1')
+  const card = cardId('card1')
+  const team = teamId('team1')
 
   // They are still strings at runtime
   expect(typeof p).toBe('string')
@@ -40,8 +36,8 @@ test('Action union discriminates on type field', () => {
 
   const attack: Action = {
     type: 'Attack',
-    from: 't1' as TerritoryId,
-    to: 't2' as TerritoryId,
+    from: territoryId('t1'),
+    to: territoryId('t2'),
     attackerDice: 3,
   }
 
@@ -51,14 +47,14 @@ test('Action union discriminates on type field', () => {
 test('GameEvent union discriminates on type field', () => {
   const event: GameEvent = {
     type: 'TurnEnded',
-    playerId: 'p1' as PlayerId,
+    playerId: playerId('p1'),
   }
 
   expect(event.type).toBe('TurnEnded')
 
   const ended: GameEvent = {
     type: 'GameEnded',
-    winningPlayerId: 'p1' as PlayerId,
+    winningPlayerId: playerId('p1'),
   }
 
   expect(ended.type).toBe('GameEnded')
@@ -70,13 +66,13 @@ test('GameState is JSON-serializable', () => {
       p1: { status: 'alive' },
       p2: { status: 'alive' },
     },
-    turnOrder: ['p1' as PlayerId, 'p2' as PlayerId],
+    turnOrder: [playerId('p1'), playerId('p2')],
     territories: {
-      t1: { ownerId: 'p1' as PlayerId, armies: 3 },
+      t1: { ownerId: playerId('p1'), armies: 3 },
       t2: { ownerId: 'neutral', armies: 1 },
     },
     turn: {
-      currentPlayerId: 'p1' as PlayerId,
+      currentPlayerId: playerId('p1'),
       phase: 'Reinforcement',
       round: 1,
     },

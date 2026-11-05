@@ -1,7 +1,8 @@
+import { playerId, territoryId, cardId, teamId } from './testing/fixtures.js'
 import { describe, expect, test } from 'bun:test'
 import { getLegalActions } from './legal-actions.js'
 import type { LegalActionsConfig } from './legal-actions.js'
-import type { Action, CardId, GameState, PlayerId, TerritoryId, TeamId } from './types.js'
+import type { Action, GameState } from './types.js'
 import type { GraphMap } from './map.js'
 import type { CombatConfig, FortifyConfig, CardsConfig, TeamsConfig } from './config.js'
 import { defaultRuleset } from './config.js'
@@ -9,14 +10,14 @@ import { applyAction, ActionError } from './engine.js'
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-const P1 = 'p1' as PlayerId
-const P2 = 'p2' as PlayerId
-const P3 = 'p3' as PlayerId
-const T1 = 't1' as TerritoryId
-const T2 = 't2' as TerritoryId
-const T3 = 't3' as TerritoryId
-const T4 = 't4' as TerritoryId
-const T5 = 't5' as TerritoryId
+const P1 = playerId('p1')
+const P2 = playerId('p2')
+const P3 = playerId('p3')
+const T1 = territoryId('t1')
+const T2 = territoryId('t2')
+const T3 = territoryId('t3')
+const T4 = territoryId('t4')
+const T5 = territoryId('t5')
 
 const testMap: GraphMap = {
   territories: {
@@ -107,7 +108,7 @@ describe('getLegalActions - Reinforcement', () => {
     const actions = getLegalActions(state, makeConfig())
     const placeActions = actions.filter((a) => a.type === 'PlaceReinforcements')
     expect(placeActions).toHaveLength(2) // T1 and T2 owned by P1
-    const territories = placeActions.map((a) => (a as any).territoryId)
+    const territories = placeActions.map((a) => a.territoryId)
     expect(territories).toContain(T1)
     expect(territories).toContain(T2)
   })
@@ -118,7 +119,7 @@ describe('getLegalActions - Reinforcement', () => {
     const placeActions = actions.filter((a) => a.type === 'PlaceReinforcements')
 
     for (const a of placeActions) {
-      expect((a as any).count).toBe(3)
+      expect(a.count).toBe(3)
     }
   })
 
@@ -137,9 +138,9 @@ describe('getLegalActions - Reinforcement', () => {
   })
 
   test('returns TradeCards for valid 3-card sets', () => {
-    const C1 = 'c1' as CardId
-    const C2 = 'c2' as CardId
-    const C3 = 'c3' as CardId
+    const C1 = cardId('c1')
+    const C2 = cardId('c2')
+    const C3 = cardId('c3')
 
     const state = makeState({
       hands: { [P1]: [C1, C2, C3] },
@@ -153,15 +154,15 @@ describe('getLegalActions - Reinforcement', () => {
     const actions = getLegalActions(state, makeConfig())
     const tradeActions = actions.filter((a) => a.type === 'TradeCards')
     expect(tradeActions).toHaveLength(1)
-    expect((tradeActions[0] as any).cardIds).toEqual([C1, C2, C3])
+    expect(tradeActions[0]!.cardIds).toEqual([C1, C2, C3])
   })
 
   test('forced trade: only TradeCards returned when hand >= forcedTradeHandSize', () => {
-    const C1 = 'c1' as CardId
-    const C2 = 'c2' as CardId
-    const C3 = 'c3' as CardId
-    const C4 = 'c4' as CardId
-    const C5 = 'c5' as CardId
+    const C1 = cardId('c1')
+    const C2 = cardId('c2')
+    const C3 = cardId('c3')
+    const C4 = cardId('c4')
+    const C5 = cardId('c5')
 
     const state = makeState({
       hands: { [P1]: [C1, C2, C3, C4, C5] },
@@ -184,10 +185,10 @@ describe('getLegalActions - Reinforcement', () => {
   })
 
   test('returns multiple TradeCards when multiple valid sets exist', () => {
-    const C1 = 'c1' as CardId
-    const C2 = 'c2' as CardId
-    const C3 = 'c3' as CardId
-    const C4 = 'c4' as CardId
+    const C1 = cardId('c1')
+    const C2 = cardId('c2')
+    const C3 = cardId('c3')
+    const C4 = cardId('c4')
 
     const state = makeState({
       hands: { [P1]: [C1, C2, C3, C4] },
@@ -206,9 +207,9 @@ describe('getLegalActions - Reinforcement', () => {
   })
 
   test('wild cards form valid sets', () => {
-    const C1 = 'c1' as CardId
-    const C2 = 'c2' as CardId
-    const C3 = 'c3' as CardId
+    const C1 = cardId('c1')
+    const C2 = cardId('c2')
+    const C3 = cardId('c3')
 
     const state = makeState({
       hands: { [P1]: [C1, C2, C3] },
@@ -253,8 +254,8 @@ describe('getLegalActions - Attack', () => {
     // T2 (2 armies) -> T3 (adjacent, enemy): dice 1
     // T1 -> T2 not valid (same owner)
     // T3, T4 not owned by P1
-    const fromT1 = attackActions.filter((a) => (a as any).from === T1)
-    const fromT2 = attackActions.filter((a) => (a as any).from === T2)
+    const fromT1 = attackActions.filter((a) => a.from === T1)
+    const fromT2 = attackActions.filter((a) => a.from === T2)
     expect(fromT1).toHaveLength(2) // 1 and 2 dice choices for T1->T3
     expect(fromT2).toHaveLength(1) // 1 dice choice for T2->T3
   })
@@ -275,7 +276,7 @@ describe('getLegalActions - Attack', () => {
     expect(attackActions).toHaveLength(2)
 
     for (const a of attackActions) {
-      expect((a as any).attackerDice).toBeUndefined()
+      expect(a.attackerDice).toBeUndefined()
     }
   })
 
@@ -307,11 +308,11 @@ describe('getLegalActions - Attack', () => {
   })
 
   test('forced elimination trade: only TradeCards returned when hand >= forcedTradeHandSize', () => {
-    const C1 = 'c1' as CardId
-    const C2 = 'c2' as CardId
-    const C3 = 'c3' as CardId
-    const C4 = 'c4' as CardId
-    const C5 = 'c5' as CardId
+    const C1 = cardId('c1')
+    const C2 = cardId('c2')
+    const C3 = cardId('c3')
+    const C4 = cardId('c4')
+    const C5 = cardId('c5')
 
     const state = makeState({
       turn: { currentPlayerId: P1, phase: 'Attack', round: 1 },
@@ -445,12 +446,12 @@ describe('getLegalActions - Fortify', () => {
     // T1 and T2 are connected (adjacent and both owned by P1)
     expect(fortifyActions).toHaveLength(2)
 
-    const t1ToT2 = fortifyActions.find((a) => (a as any).from === T1 && (a as any).to === T2)
-    const t2ToT1 = fortifyActions.find((a) => (a as any).from === T2 && (a as any).to === T1)
+    const t1ToT2 = fortifyActions.find((a) => a.from === T1 && a.to === T2)
+    const t2ToT1 = fortifyActions.find((a) => a.from === T2 && a.to === T1)
     expect(t1ToT2).toBeDefined()
-    expect((t1ToT2 as any).count).toBe(2) // 3 - 1
+    expect(t1ToT2!.count).toBe(2) // 3 - 1
     expect(t2ToT1).toBeDefined()
-    expect((t2ToT1 as any).count).toBe(1) // 2 - 1
+    expect(t2ToT1!.count).toBe(1) // 2 - 1
   })
 
   test('territory with 1 army cannot fortify from', () => {
@@ -511,7 +512,7 @@ describe('getLegalActions - Fortify', () => {
     const actions = getLegalActions(state, makeConfig())
     const fortifyActions = actions.filter((a) => a.type === 'Fortify')
     // T1->T3, T1->T4, T3->T1, T3->T4, T4->T3, T4->T1
-    const fromTo = fortifyActions.map((a) => `${(a as any).from}->${(a as any).to}`)
+    const fromTo = fortifyActions.map((a) => `${a.from}->${a.to}`)
     expect(fromTo).toContain(`${T1}->${T3}`)
     expect(fromTo).toContain(`${T1}->${T4}`)
     expect(fromTo).toContain(`${T3}->${T1}`)
@@ -538,7 +539,7 @@ describe('getLegalActions - Fortify', () => {
     const actions = getLegalActions(state, makeConfig())
     const fortifyActions = actions.filter((a) => a.type === 'Fortify')
     // T1<->T2 connected (adjacent, both P1). T4 isolated from T1/T2.
-    const fromTo = fortifyActions.map((a) => `${(a as any).from}->${(a as any).to}`)
+    const fromTo = fortifyActions.map((a) => `${a.from}->${a.to}`)
     expect(fromTo).toContain(`${T1}->${T2}`)
     expect(fromTo).toContain(`${T2}->${T1}`)
     expect(fromTo).not.toContain(`${T1}->${T4}`)
@@ -550,9 +551,9 @@ describe('getLegalActions - Fortify', () => {
 
 describe('getLegalActions correctness', () => {
   test('every Reinforcement legal action can be applied', () => {
-    const C1 = 'c1' as CardId
-    const C2 = 'c2' as CardId
-    const C3 = 'c3' as CardId
+    const C1 = cardId('c1')
+    const C2 = cardId('c2')
+    const C3 = cardId('c3')
 
     const state = makeState({
       hands: { [P1]: [C1, C2, C3] },
@@ -690,7 +691,7 @@ describe('getLegalActions correctness', () => {
 // ── Teams support ───────────────────────────────────────────────────
 
 describe('getLegalActions - Teams', () => {
-  const TEAM1 = 'team1' as TeamId
+  const TEAM1 = teamId('team1')
 
   test('team placement on teammate territory', () => {
     const teamsConfig: TeamsConfig = {
@@ -714,7 +715,7 @@ describe('getLegalActions - Teams', () => {
     const actions = getLegalActions(state, config)
     const placeActions = actions.filter((a) => a.type === 'PlaceReinforcements')
     // P1 can place on T1, T2 (own) and T3, T4 (teammate P2)
-    const territories = placeActions.map((a) => (a as any).territoryId)
+    const territories = placeActions.map((a) => a.territoryId)
     expect(territories).toContain(T1)
     expect(territories).toContain(T2)
     expect(territories).toContain(T3)

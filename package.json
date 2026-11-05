@@ -12,7 +12,7 @@
     "seed:maps": "bun scripts/seed-maps.ts",
     "lint": "bun run lint:ox && bun --filter web lint",
     "build": "bun --filter risk-engine build && bun --filter web build",
-    "typecheck": "tsc --build && tsc -p convex/tsconfig.json && tsc -p e2e/tsconfig.json",
+    "typecheck": "tsc --build && tsc -p convex/tsconfig.json && tsc -p e2e/tsconfig.json && bun run typecheck:engine-tests",
     "test": "bun test",
     "test:e2e": "bun e2e/run.ts",
     "test:e2e:ui": "bun e2e/run.ts --ui",
@@ -21,7 +21,8 @@
     "format": "oxfmt --write && bun run format:spacing && oxfmt --write && oxlint -c .oxlintrc.spacing.json --deny-warnings .",
     "format:check": "oxfmt --check",
     "audit:anti-slop": "oxlint -c .oxlintrc.audit.json --format json .",
-    "format:spacing": "oxlint -c .oxlintrc.spacing.json --fix ."
+    "format:spacing": "oxlint -c .oxlintrc.spacing.json --fix .",
+    "typecheck:engine-tests": "tsc -p packages/risk-engine/tsconfig.test.json"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.13.0",
