@@ -27,6 +27,13 @@ describe('classicMap', () => {
     }
   })
 
+  test('each declared continent includes the territory that names it', () => {
+    for (const [territoryId, info] of Object.entries(classicMap.territories)) {
+      const declaredContinent = classicMap.continents?.[info.continentId ?? '']
+      expect(declaredContinent?.territoryIds.some((member) => member === territoryId)).toBe(true)
+    }
+  })
+
   test('continent territory counts match standard Risk', () => {
     const counts: Record<string, number> = {}
 
