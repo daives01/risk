@@ -1,21 +1,14 @@
+import { playerId, teamId, cardId } from '../packages/risk-engine/src/testing/fixtures'
 import { describe, expect, test } from 'bun:test'
 import { applyAction, defaultRuleset } from 'risk-engine'
-import type {
-  CardId,
-  GameState,
-  GraphMap,
-  PlayerId,
-  RulesetConfig,
-  TeamId,
-  TerritoryId,
-} from 'risk-engine'
+import type { GameState, GraphMap, RulesetConfig } from 'risk-engine'
 
-const P1 = 'p1' as PlayerId
-const P2 = 'p2' as PlayerId
-const P3 = 'p3' as PlayerId
-const P4 = 'p4' as PlayerId
-const TEAM_1 = 'team-1' as TeamId
-const TEAM_2 = 'team-2' as TeamId
+const P1 = playerId('p1')
+const P2 = playerId('p2')
+const P3 = playerId('p3')
+const P4 = playerId('p4')
+const TEAM_1 = teamId('team-1')
+const TEAM_2 = teamId('team-2')
 
 const teamRuleset: RulesetConfig = {
   ...defaultRuleset,
@@ -63,13 +56,13 @@ function makeState(overrides?: Partial<GameState>): GameState {
       t3: { ownerId: P2, armies: 2 },
       t4: { ownerId: P3, armies: 2 },
       t5: { ownerId: P4, armies: 2 },
-    } as Record<string, { ownerId: PlayerId | 'neutral'; armies: number }>,
+    },
     turn: { currentPlayerId: P1, phase: 'Reinforcement', round: 1 },
     reinforcements: { remaining: 4, sources: { territory: 4 } },
     deck: { draw: [], discard: [] },
     cardsById: {},
     hands: {
-      [P1]: ['c1' as CardId],
+      [P1]: [cardId('c1')],
       [P2]: [],
       [P3]: [],
       [P4]: [],
@@ -118,7 +111,7 @@ describe('team endgame resign behavior', () => {
       territories: {
         t1: { ownerId: P1, armies: 3 },
         t4: { ownerId: P3, armies: 2 },
-      } as Record<string, { ownerId: PlayerId | 'neutral'; armies: number }>,
+      },
       hands: {
         [P1]: [],
         [P3]: [],

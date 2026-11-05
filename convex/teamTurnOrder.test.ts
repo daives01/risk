@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import { createRng } from 'risk-engine'
-import type { PlayerId } from 'risk-engine'
+import { playerId } from '../packages/risk-engine/src/testing/fixtures'
 import { createTeamAwareTurnOrder } from './teamTurnOrder'
 
 describe('createTeamAwareTurnOrder', () => {
   test('interleaves players from two evenly sized teams', () => {
-    const playerIds = ['p0', 'p1', 'p2', 'p3'] as PlayerId[]
+    const playerIds = ['p0', 'p1', 'p2', 'p3'].map(playerId)
 
     const playerTeamIds: Record<string, string> = {
       p0: 'team-1',
@@ -24,7 +24,7 @@ describe('createTeamAwareTurnOrder', () => {
   })
 
   test('falls back to a plain shuffle when everyone is on one team', () => {
-    const playerIds = ['p0', 'p1', 'p2', 'p3'] as PlayerId[]
+    const playerIds = ['p0', 'p1', 'p2', 'p3'].map(playerId)
 
     const playerTeamIds: Record<string, string> = {
       p0: 'team-1',

@@ -1,10 +1,11 @@
+import { playerId, teamId } from '../../packages/risk-engine/src/testing/fixtures'
 import { convexTest } from 'convex-test'
-import type { GameState, PlayerId, TeamId } from 'risk-engine'
+import type { GameState } from 'risk-engine'
 import schema from '../schema'
 import { publicGameStateProjection } from '../gameState'
 
-const CURRENT_PLAYER_ID = 'player-alpha' as PlayerId
-const OTHER_PLAYER_ID = 'player-bravo' as PlayerId
+const CURRENT_PLAYER_ID = playerId('player-alpha')
+const OTHER_PLAYER_ID = playerId('player-bravo')
 
 function preRefactorIndividualState(): GameState {
   return {
@@ -161,11 +162,11 @@ export async function seedPreRefactorAsyncGame() {
 
 export async function seedPreRefactorTeamGame() {
   const t = createCompatibilityTest()
-  const currentPlayerId = 'team-player-alpha' as PlayerId
-  const teammatePlayerId = 'team-player-bravo' as PlayerId
-  const enemyPlayerId = 'team-player-charlie' as PlayerId
-  const teamOne = 'team-1' as TeamId
-  const teamTwo = 'team-2' as TeamId
+  const currentPlayerId = playerId('team-player-alpha')
+  const teammatePlayerId = playerId('team-player-bravo')
+  const enemyPlayerId = playerId('team-player-charlie')
+  const teamOne = teamId('team-1')
+  const teamTwo = teamId('team-2')
   const territoryId = 'north'
   const delegatedUserId = 'smoke-user-bravo'
 

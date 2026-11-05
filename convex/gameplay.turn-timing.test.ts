@@ -1,9 +1,10 @@
+import { playerId } from '../packages/risk-engine/src/testing/fixtures'
 import { describe, expect, test } from 'bun:test'
-import type { GameState, PlayerId } from 'risk-engine'
+import type { GameState } from 'risk-engine'
 import { resolveTurnTimingPatch } from './gameplay'
 
-const P1 = 'p1' as PlayerId
-const P2 = 'p2' as PlayerId
+const P1 = playerId('p1')
+const P2 = playerId('p2')
 
 function makeState(overrides?: Partial<GameState>): GameState {
   return {

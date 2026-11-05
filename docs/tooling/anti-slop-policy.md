@@ -548,3 +548,20 @@ Root checks (573 tests), formatting verification and audit pass. Assertion
 findings fall 188 to 149. The three cleaned test files have zero findings; the
 two remaining gameplay findings concern historical action/event records and
 remain separate work. Other audit counts and enforcement scopes are unchanged.
+
+### Remaining backend fixture evidence
+
+Backend test assertion findings fall from 24 to zero (global 149 to 125).
+Team endgame, turn timing/order, and pre-refactor compatibility fixtures use the
+existing private engine ID constructors with unchanged literal values. Redundant
+territory-record casts are removed under their actual `GameState` owner contract;
+compatibility tests pass real mutation contexts instead of asserting `never`.
+The malformed overflow test retains its intentional bad-value cast with explicit
+negative-test evidence; its runtime rejection expectation is unchanged.
+
+Root checks (573 tests), formatting verification and full audit pass. Fixture
+values, deterministic ordering, compatibility payloads and all expectations are
+preserved. Removing the two redundant territory casts also reduces deferred
+known-value-widening findings 24 to 22. Other counts and enforcement scopes are
+unchanged; no test helper is added to production exports. Remaining backend
+assertion findings are 18 production sites, with frontend 107.
