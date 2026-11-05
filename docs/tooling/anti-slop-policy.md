@@ -388,3 +388,41 @@ transition fixtures continue to pass. A single historical timeline fixture now
 uses its `TimelinePublicState` owner annotation to retain its literal phase.
 The full root check passes: 563 tests, typechecking, lint and production builds;
 formatting and the fresh audit also pass.
+
+## Assertion evidence: auth email contracts
+
+Auth's four assertions and the email action's one environment assertion are
+removed. Assertion-comment findings are 242 → 237 globally (backend 135 → 130;
+frontend 107; engine/maps zero). Both touched modules and the new auth email
+handler/test modules have zero assertion findings. The rule remains audit-only
+outside the existing engine override; no global enforcement is added. Other
+audit counts remain unchanged: runtime typeof 62, unknown parameters 37,
+known-value widening 24 and unsafe dictionaries 13.
+
+The installed BetterAuth SDK accepts the real generated component API and
+exposes a query/mutation/action context union. Auth construction still accepts
+all three contexts: only action contexts supply the selected email capability,
+and absence rejects lazily when an email callback runs. Ordinary authenticated
+reads do not fail during auth construction. The handler invokes the generated
+internal email action reference through the original sender method receiver,
+awaits its null result, and preserves action rejection. The stale offline-stub
+comment and raw action-name strings are removed. Both environment reads retain
+`globalThis.process?.env ?? {}` and the missing-process fallback.
+
+Password reset handling retains URL parsing, the last pathname segment, the
+primary web origin, and conditional token query insertion, including existing
+percent-encoding and trailing-slash behavior. Verification retains the supplied
+URL. Recipients, subjects, HTML builders, origin selection, plugins, credentials
+and delivery retries are unchanged. A context without email capability now gets
+an explicit error on email invocation; malformed reset URLs still fail first.
+
+Three Bun-safe tests exercise the real auth-owned handlers with a typed selected
+action sink: lazy capability failure, generated action identity, exact payloads,
+receiver preservation, encoded/missing reset tokens, malformed URLs, deferred
+action completion and original rejection propagation. They send no messages and
+use no module mocks or fabricated whole Convex contexts. Auth callback wiring
+and the query/mutation construction path were inspected directly; BetterAuth's
+component helper still requires Bun-unsupported `import.meta.glob`, so this does
+not claim an authenticated component integration test. Full root check passes
+with 566 tests, typechecking, lint and builds; formatting, audit and diff checks
+also pass.
