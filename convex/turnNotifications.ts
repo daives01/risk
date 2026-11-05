@@ -2,7 +2,7 @@ import { internalAction } from './_generated/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 
-export const sendTurnNotifications: any = internalAction({
+export const sendTurnNotifications = internalAction({
   args: {
     gameId: v.id('games'),
     expectedPlayerId: v.string(),

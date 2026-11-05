@@ -439,3 +439,23 @@ immutability. Backend caller cleanup follows separately.
 
 Root checks (567 tests), formatting verification, and the full audit pass.
 Assertion findings remain 237 (engine zero); no policy scope changes here.
+
+### Lobby construction and validator contracts
+
+Lobby assertion findings fell from 18 to zero (global 237 to 219). Ruleset,
+timing, and team-name values already carry their contracts from Convex argument
+and storage validators; redundant assertions are removed. Slack workspace
+lookups use the selected database capability and inferred index callbacks.
+The reinforcement call supplies real players, territories, and turn order under
+the narrowed engine contract instead of fabricating a complete `GameState`.
+
+Three nominal engine ID conversions retain concrete evidence: territory keys
+come from the checked graph defining this game's territory namespace; indexed
+player strings establish unique engine seats; team assignments are checked
+against the generated team set before construction. The notification action's
+explicit `any` export annotation is removed so the generated internal reference
+retains its actual argument/return contract. Its implementation is unchanged;
+remaining notification-body assertions are tracked separately.
+
+Root checks (567 tests), formatting verification, and audit pass. Other audit
+counts remain unchanged. No new enforcement scope or runtime validation is added.

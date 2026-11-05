@@ -1,4 +1,4 @@
-import { mutation, query } from './_generated/server'
+import { mutation, query, type QueryCtx } from './_generated/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import { authComponent } from './auth.js'
@@ -26,7 +26,6 @@ import {
   resolveRulesetFromOverrides,
   rulesetOverridesValidator,
   sanitizeRulesetOverrides,
-  type RulesetOverrides,
 } from './rulesets'
 import {
   canEditPlayerColor,
@@ -36,7 +35,7 @@ import {
   resolveTeamAwarePlayerColors,
 } from './playerColors'
 import { distributeInitialArmiesCappedRandom } from './initialPlacement'
-import { computeTurnDeadlineAt, isAsyncTimingMode, type GameTimingMode } from './gameTiming'
+import { computeTurnDeadlineAt, isAsyncTimingMode } from './gameTiming'
 import { scheduleTurnTimeout } from './turnTimeoutScheduling'
 import { readGraphMap } from './typeAdapters'
 import { generateUniqueInviteCode } from './inviteCodes'
@@ -65,12 +64,16 @@ function resolveLobbyTeamCount(
   return Number.isInteger(bounded) ? bounded : defaultCount
 }
 
-async function assertUserCanUseSlackWorkspace(ctx: any, userId: string, teamId: string) {
+async function assertUserCanUseSlackWorkspace(
+  ctx: Pick<QueryCtx, 'db'>,
+  userId: string,
+  teamId: string,
+) {
   const normalizedTeamId = normalizeTeamId(teamId)
 
   const workspace = await ctx.db
     .query('slackWorkspaces')
-    .withIndex('by_teamId', (q: any) => q.eq('teamId', normalizedTeamId))
+    .withIndex('by_teamId', (q) => q.eq('teamId', normalizedTeamId))
     .unique()
 
   if (!workspace || workspace.status !== 'active') {
@@ -79,9 +82,7 @@ async function assertUserCanUseSlackWorkspace(ctx: any, userId: string, teamId: 
 
   const identity = await ctx.db
     .query('userSlackIdentities')
-    .withIndex('by_userId_teamId', (q: any) =>
-      q.eq('userId', userId).eq('teamId', normalizedTeamId),
-    )
+    .withIndex('by_userId_teamId', (q) => q.eq('userId', userId).eq('teamId', normalizedTeamId))
     .unique()
 
   if (!identity || identity.status !== 'active') {
@@ -142,12 +143,10 @@ export const createGame = mutation({
       throw new Error(`maxPlayers cannot exceed ${PLAYER_COLOR_PALETTE.length} due to color limits`)
     }
 
-    const rulesetOverrides = sanitizeRulesetOverrides(
-      args.rulesetOverrides as RulesetOverrides | undefined,
-    )
+    const rulesetOverrides = sanitizeRulesetOverrides(args.rulesetOverrides)
 
     resolveRulesetFromOverrides(args.teamModeEnabled ?? false, rulesetOverrides)
-    const timingMode = (args.timingMode ?? 'realtime') as GameTimingMode
+    const timingMode = args.timingMode ?? 'realtime'
     const excludeWeekends = isAsyncTimingMode(timingMode) ? (args.excludeWeekends ?? false) : false
     const slackNotificationsEnabled = args.slackNotificationsEnabled ?? false
 
@@ -405,10 +404,7 @@ export const getLobby = query({
     const teamCount = resolveLobbyTeamCount(game, players.length)
     const teamIds = teamCount > 0 ? getTeamIds(teamCount) : []
 
-    const teamNames = resolveTeamNames(
-      teamIds,
-      game.teamNames as Record<string, string> | undefined,
-    )
+    const teamNames = resolveTeamNames(teamIds, game.teamNames)
 
     return {
       game: {
@@ -666,10 +662,7 @@ export const setTeamCount = mutation({
 
     const teamIds = getTeamIds(teamCount)
 
-    const teamNames = resolveTeamNames(
-      teamIds,
-      game.teamNames as Record<string, string> | undefined,
-    )
+    const teamNames = resolveTeamNames(teamIds, game.teamNames)
 
     await ctx.db.patch(gameId, {
       teamCount,
@@ -721,10 +714,7 @@ export const setTeamName = mutation({
       throw new Error('Invalid team id')
     }
 
-    const teamNames = resolveTeamNames(
-      teamIds,
-      game.teamNames as Record<string, string> | undefined,
-    )
+    const teamNames = resolveTeamNames(teamIds, game.teamNames)
 
     validateTeamNameUniqueness(teamId, name, teamNames)
     teamNames[teamId] = name.trim()
@@ -757,9 +747,9 @@ export const setRulesetOverrides = mutation({
       throw new Error('Only the host can update game rules')
     }
 
-    const sanitized = sanitizeRulesetOverrides(rulesetOverrides as RulesetOverrides | undefined)
+    const sanitized = sanitizeRulesetOverrides(rulesetOverrides)
     const effectiveRuleset = resolveRulesetFromOverrides(game.teamModeEnabled ?? false, sanitized)
-    const nextTimingMode = (timingMode ?? game.timingMode ?? 'realtime') as GameTimingMode
+    const nextTimingMode = timingMode ?? game.timingMode ?? 'realtime'
 
     const nextExcludeWeekends = isAsyncTimingMode(nextTimingMode)
       ? (excludeWeekends ?? game.excludeWeekends ?? false)
@@ -873,12 +863,14 @@ export const startGame = mutation({
       throw new Error(`This map allows at most ${playerLimits.maxPlayers} players`)
     }
 
+    // SAFETY: these keys come from the structurally checked graph map; engine territory IDs
+    // are string brands, and this list defines the territory namespace for the new game.
     const territoryIds = Object.keys(graphMap.territories) as TerritoryId[]
 
     const effectiveRuleset = resolveEffectiveRuleset({
       teamModeEnabled: game.teamModeEnabled,
-      rulesetOverrides: game.rulesetOverrides as RulesetOverrides | undefined,
-      effectiveRuleset: game.effectiveRuleset as RulesetConfig | undefined,
+      rulesetOverrides: game.rulesetOverrides,
+      effectiveRuleset: game.effectiveRuleset,
     })
 
     const setup = effectiveRuleset.setup
@@ -886,6 +878,8 @@ export const startGame = mutation({
     const teamsConfig = effectiveRuleset.teams
 
     // Build engine player IDs (use index-based IDs for determinism)
+    // SAFETY: this constructor assigns a unique index-based string to every lobby seat;
+    // these IDs define the new engine state rather than referring to existing players.
     const playerIds: PlayerId[] = playerDocs.map((_, i) => `p${i}` as PlayerId)
     const playerColors = resolvePlayerColors(playerDocs)
 
@@ -963,7 +957,7 @@ export const startGame = mutation({
     // Place neutrals
     for (const tid of neutralTerritories) {
       territories[tid] = {
-        ownerId: 'neutral' as PlayerId | 'neutral',
+        ownerId: 'neutral',
         armies: setup.neutralInitialArmies,
       }
     }
@@ -997,7 +991,11 @@ export const startGame = mutation({
       const teamId = teamMode.enabled ? teamAssignmentsByUserId[playerDoc.userId] : undefined
       const player: { status: 'alive'; teamId?: TeamId } = { status: 'alive' }
 
-      if (teamId) player.teamId = teamId as TeamId
+      if (teamId) {
+        // SAFETY: validateTeamAssignments above restricts this string to this game’s generated team IDs; the engine adds only a nominal brand.
+        player.teamId = teamId as TeamId
+      }
+
       players[pid] = player
     }
 
@@ -1015,7 +1013,7 @@ export const startGame = mutation({
     const firstPlayer = turnOrder[0]!
 
     const reinforcementResult = calculateReinforcements(
-      { territories, players } as GameState,
+      { territories, players, turnOrder },
       firstPlayer,
       graphMap,
       teamsConfig,
@@ -1064,7 +1062,7 @@ export const startGame = mutation({
 
     const turnDeadlineAt = computeTurnDeadlineAt(
       turnStartedAt,
-      (game.timingMode ?? 'realtime') as GameTimingMode,
+      game.timingMode ?? 'realtime',
       game.excludeWeekends ?? false,
     )
 
@@ -1073,7 +1071,7 @@ export const startGame = mutation({
       gameId,
       turnDeadlineAt: turnDeadlineAt ?? undefined,
       turnStartedAt,
-      expectedPlayerId: isAsyncTimingMode((game.timingMode ?? 'realtime') as GameTimingMode)
+      expectedPlayerId: isAsyncTimingMode(game.timingMode ?? 'realtime')
         ? engineState.turn.currentPlayerId
         : undefined,
     })
@@ -1104,8 +1102,8 @@ export const startGame = mutation({
       turnTimeoutJobId,
     })
 
-    if (isAsyncTimingMode((game.timingMode ?? 'realtime') as GameTimingMode)) {
-      await ctx.scheduler.runAfter(0, (internal as any).turnNotifications.sendTurnNotifications, {
+    if (isAsyncTimingMode(game.timingMode ?? 'realtime')) {
+      await ctx.scheduler.runAfter(0, internal.turnNotifications.sendTurnNotifications, {
         gameId,
         expectedPlayerId: engineState.turn.currentPlayerId,
         turnStartedAt,
