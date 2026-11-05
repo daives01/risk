@@ -378,6 +378,55 @@ describe('Game Transition transaction', () => {
     )
   })
 
+  test('an unknown wire territory rejects a reinforcement batch without writes', async () => {
+    const { t, gameId } = await seed('Reinforcement')
+    const before = await t.run((ctx) => ctx.db.query('gameStates').unique())
+    let rejection: unknown
+
+    try {
+      await t.mutation((ctx) =>
+        executeGameTransition(ctx, {
+          gameId,
+          source: { type: 'user', playerId: P1, actingUserId: 'user-1', wasDelegated: false },
+          intent: {
+            type: 'reinforcement_batch',
+            placements: [{ territoryId: 'not-on-map', count: 1 }],
+            expectedVersion: 7,
+          },
+        }),
+      )
+    } catch (error) {
+      rejection = error
+    }
+
+    if (!(rejection instanceof GameTransitionRejected))
+      throw new Error('Expected transition rejection')
+    expect(rejection.reason).toBe('invalid_action')
+    expect(await t.run((ctx) => ctx.db.query('gameActions').collect())).toEqual([])
+    expect(await t.run((ctx) => ctx.db.query('gameStates').unique())).toEqual(before)
+  })
+
+  test('a mismatched scheduled wire player rejects before changing state', async () => {
+    const { t, gameId } = await seed('Reinforcement')
+    await t.run((ctx) =>
+      ctx.db.patch(gameId, {
+        timingMode: 'async_1d',
+        turnStartedAt: 100,
+        turnDeadlineAt: 200,
+      }),
+    )
+    const before = await t.run((ctx) => ctx.db.query('gameStates').unique())
+    expect(
+      await t.mutation(internal.asyncTurns.processExpiredTurn, {
+        gameId,
+        expectedPlayerId: 'not-current',
+        expectedTurnStartedAt: 100,
+      }),
+    ).toEqual({ processed: false, reason: 'player_changed' })
+    expect(await t.run((ctx) => ctx.db.query('gameActions').collect())).toEqual([])
+    expect(await t.run((ctx) => ctx.db.query('gameStates').unique())).toEqual(before)
+  })
+
   test('a stale timeout rejects without writes', async () => {
     const { t, gameId } = await seed('Reinforcement')
     await t.run((ctx) =>
