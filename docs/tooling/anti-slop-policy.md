@@ -459,3 +459,22 @@ remaining notification-body assertions are tracked separately.
 
 Root checks (567 tests), formatting verification, and audit pass. Other audit
 counts remain unchanged. No new enforcement scope or runtime validation is added.
+
+### Notification orchestration contracts
+
+Notification cleanup reduces global assertion findings from 219 to 208. Internal
+queries/actions use their generated references; the Slack action export, context
+result, and parallel channel result tuple retain inferred types instead of `any`.
+Timing values already satisfy the storage validator contract. Runtime environment
+access uses the installed platform types directly.
+
+Two narrow email assertions remain with evidence: both Better Auth adapter
+lookups select the user model, whose installed schema requires a string email.
+The SDK's `findOne` return is `any`, so inference alone cannot prove that field;
+the assertions describe only the consumed optional email and nullable row. This
+is a trusted component model contract, not validation of arbitrary JSON.
+
+Root checks (567 tests), formatting verification and full audit pass. No delivery,
+retry, recipient, URL, catch, or concurrency behavior changes. Slack HTTP response
+parsing and timeout player-ID assertions remain separate tracked boundaries.
+Other audit counts and enforcement scopes are unchanged.

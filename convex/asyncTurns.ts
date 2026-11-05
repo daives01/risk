@@ -3,7 +3,7 @@ import { v } from 'convex/values'
 import type { GameState, GraphMap, PlayerId, RulesetConfig } from 'risk-engine'
 import { internal, components } from './_generated/api'
 import type { Id } from './_generated/dataModel'
-import { isAsyncTimingMode, type GameTimingMode } from './gameTiming'
+import { isAsyncTimingMode } from './gameTiming'
 import { yourTurnEmailHtml } from './emails'
 import { readGameStateNullable } from './typeAdapters'
 import { getGameStateDoc } from './gameState'
@@ -95,7 +95,7 @@ export const sendYourTurnEmail = internalAction({
 
     if (game.status !== 'active') return { sent: false, reason: 'not_active' }
 
-    if (!isAsyncTimingMode((game.timingMode ?? 'realtime') as GameTimingMode)) {
+    if (!isAsyncTimingMode(game.timingMode ?? 'realtime')) {
       return { sent: false, reason: 'not_async' }
     }
 
@@ -133,12 +133,13 @@ export const sendYourTurnEmail = internalAction({
         where: [{ field: '_id', operator: 'eq', value: targetPlayer.userId }],
       }))
 
+    // SAFETY: both adapter lookups select the Better Auth user model, whose schema requires
+    // a string email. The SDK returns any; narrow only the consumed field and nullable row.
     const email = (user as { email?: string | null } | null)?.email?.trim()
 
     if (!email) return { sent: false, reason: 'email_missing' }
 
-    const env =
-      (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
+    const env = globalThis.process?.env ?? {}
 
     const siteUrl = env.SITE_URL ?? 'http://localhost:5173'
     const gameUrl = `${siteUrl}/play/${game._id}`

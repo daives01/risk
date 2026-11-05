@@ -17,9 +17,7 @@ type SlackPostMessageResponse = {
 type SlackErrorCategory = 'disable_workspace' | 'skip' | 'retry' | 'unknown'
 
 function envRecord(): Record<string, string | undefined> {
-  return (
-    (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
-  )
+  return globalThis.process?.env ?? {}
 }
 
 function classifySlackError(errorCode: string | undefined): SlackErrorCategory {
@@ -155,7 +153,7 @@ function buildGameUrl(gameId: string) {
   return `${siteUrl}/play/${gameId}`
 }
 
-export const sendYourTurnSlack: any = internalAction({
+export const sendYourTurnSlack = internalAction({
   args: {
     gameId: v.id('games'),
     expectedPlayerId: v.string(),
@@ -180,8 +178,8 @@ export const sendYourTurnSlack: any = internalAction({
       }),
     )
 
-    const context: any = await ctx.runQuery(
-      (internal as any).slackNotificationData.getSlackNotificationContext,
+    const context = await ctx.runQuery(
+      internal.slackNotificationData.getSlackNotificationContext,
       args,
     )
 
