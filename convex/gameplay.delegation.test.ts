@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'bun:test'
-import type { CardId, GameState, PlayerId, TeamId } from 'risk-engine'
+import type { GameState } from 'risk-engine'
+import { playerId, teamId } from '../packages/risk-engine/src/testing/fixtures'
 import { resolveActingPlayerFromDocs } from './gameplay'
 
-const P1 = 'p1' as PlayerId
-const P2 = 'p2' as PlayerId
-const P3 = 'p3' as PlayerId
-const TEAM_1 = 'team-1' as TeamId
-const TEAM_2 = 'team-2' as TeamId
+const P1 = playerId('p1')
+const P2 = playerId('p2')
+const P3 = playerId('p3')
+const TEAM_1 = teamId('team-1')
+const TEAM_2 = teamId('team-2')
 
 function makeState(overrides?: Partial<GameState>): GameState {
   return {
@@ -25,7 +26,7 @@ function makeState(overrides?: Partial<GameState>): GameState {
     reinforcements: { remaining: 3, sources: { territory: 3 } },
     deck: { draw: [], discard: [] },
     cardsById: {},
-    hands: { [P1]: [], [P2]: [], [P3]: [] } as Record<PlayerId, CardId[]>,
+    hands: { [P1]: [], [P2]: [], [P3]: [] },
     tradesCompleted: 0,
     capturedThisTurn: false,
     fortifiesUsedThisTurn: 0,

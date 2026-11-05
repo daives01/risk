@@ -525,3 +525,26 @@ Root checks (573 tests), formatting verification and audit pass. Global assertio
 findings fall 202 to 188; transition and timeout source findings are zero.
 Deferred runtime-typeof findings fall 68 to 63 through honest producer typing;
 other audit counts and enforcement scopes are unchanged.
+
+### Gameplay input evidence and transition test fixtures
+
+The four remaining gameplay input assertions retain explicit evidence. Acting IDs
+come from game-scoped rows populated at game start; delegation checks and engine
+legality remain authoritative. The action validator checks the seven submitted
+variant shapes and fields; its plain wire IDs acquire only engine nominal brands,
+with card/territory existence and legality checked by `applyAction`. No new auth,
+membership, error-order or action behavior is introduced.
+
+Transition, delegation and team-timeout tests use the existing private test-only
+engine ID constructors rather than ad hoc brands, and real mutation contexts
+rather than `any` assertions. Stored private states pass the real checked reader;
+rejections narrow through `instanceof`. The combat persistence test now first
+compares stored events against the returned engine events, then selects the same
+AttackResolved event through its discriminator. Fixture values, event ordering,
+expected dice counts, and engine behavior remain unchanged. No test helper is
+added to the production engine exports.
+
+Root checks (573 tests), formatting verification and audit pass. Assertion
+findings fall 188 to 149. The three cleaned test files have zero findings; the
+two remaining gameplay findings concern historical action/event records and
+remain separate work. Other audit counts and enforcement scopes are unchanged.

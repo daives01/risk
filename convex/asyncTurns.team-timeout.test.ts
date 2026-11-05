@@ -1,26 +1,19 @@
 import { describe, expect, test } from 'bun:test'
 import { defaultRuleset } from 'risk-engine'
-import type {
-  CardId,
-  GameState,
-  GraphMap,
-  PlayerId,
-  RulesetConfig,
-  TeamId,
-  TerritoryId,
-} from 'risk-engine'
+import type { GameState, GraphMap, RulesetConfig } from 'risk-engine'
+import { playerId, teamId, cardId, territoryId } from '../packages/risk-engine/src/testing/fixtures'
 import { applyTimeoutTurnResolution } from './asyncTurns'
 
-const P1 = 'p1' as PlayerId
-const P2 = 'p2' as PlayerId
-const P3 = 'p3' as PlayerId
-const TEAM_1 = 'team-1' as TeamId
-const TEAM_2 = 'team-2' as TeamId
-const C1 = 'c1' as CardId
-const C2 = 'c2' as CardId
-const C3 = 'c3' as CardId
-const C4 = 'c4' as CardId
-const C5 = 'c5' as CardId
+const P1 = playerId('p1')
+const P2 = playerId('p2')
+const P3 = playerId('p3')
+const TEAM_1 = teamId('team-1')
+const TEAM_2 = teamId('team-2')
+const C1 = cardId('c1')
+const C2 = cardId('c2')
+const C3 = cardId('c3')
+const C4 = cardId('c4')
+const C5 = cardId('c5')
 
 const teamRuleset: RulesetConfig = {
   ...defaultRuleset,
@@ -159,8 +152,8 @@ describe('team timeout behavior', () => {
         reinforcements: undefined,
         pending: {
           type: 'Occupy',
-          from: 't1' as TerritoryId,
-          to: 't2' as TerritoryId,
+          from: territoryId('t1'),
+          to: territoryId('t2'),
           minMove: 1,
           maxMove: 1,
         },
