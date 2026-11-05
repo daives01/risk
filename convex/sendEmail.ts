@@ -92,8 +92,7 @@ export const sendEmail = internalAction({
   },
   returns: v.null(),
   handler: async (_ctx, args) => {
-    const env =
-      (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
+    const env = globalThis.process?.env ?? {}
 
     const resendApiKey = env.RESEND_API_KEY
     const fromEmail = env.EMAIL_FROM
