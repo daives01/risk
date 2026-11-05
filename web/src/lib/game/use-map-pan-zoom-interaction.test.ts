@@ -4,6 +4,30 @@ import { MapPanZoomInteractionController } from './use-map-pan-zoom-interaction'
 const rect = { left: 0, top: 0, width: 1000, height: 750 }
 
 describe('MapPanZoomInteractionController', () => {
+  test.each(['mouse', 'pen', '', 'vendor-pointer'])(
+    'non-touch pointer %j pans immediately and suppresses clicks only after a drag',
+    (pointerType) => {
+      const controller = new MapPanZoomInteractionController()
+      const pointer = { pointerId: 1, pointerType, clientX: 100, clientY: 100, rect }
+
+      expect(controller.onPointerDown({ ...pointer, nowMs: 0 })).toBe(true)
+      expect(controller.isGestureActive()).toBe(true)
+      controller.onPointerMove({ ...pointer, clientX: 103, nowMs: 10 })
+      expect(controller.getPan()).toEqual({ x: 3, y: 0 })
+      controller.onPointerUp({ ...pointer, clientX: 103, nowMs: 20 })
+      expect(controller.isGestureActive()).toBe(false)
+      expect(controller.shouldSuppressClick(21)).toBe(false)
+
+      controller.onPointerDown({ ...pointer, nowMs: 30 })
+      controller.onPointerMove({ ...pointer, clientX: 120, clientY: 130, nowMs: 40 })
+      expect(controller.getPan()).toEqual({ x: 23, y: 30 })
+      controller.onPointerUp({ ...pointer, clientX: 120, clientY: 130, nowMs: 50 })
+      expect(controller.isGestureActive()).toBe(false)
+      expect(controller.shouldSuppressClick(51)).toBe(true)
+      expect(controller.shouldSuppressClick(210)).toBe(false)
+    },
+  )
+
   test('tap without movement does not suppress click', () => {
     const controller = new MapPanZoomInteractionController()
 

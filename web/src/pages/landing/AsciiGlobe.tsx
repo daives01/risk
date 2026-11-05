@@ -256,15 +256,15 @@ export function AsciiGlobe() {
     }
   }, [])
 
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const s = stateRef.current
     s.isDragging = true
     s.lastX = e.clientX
     s.spinVelocity = 0
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    e.currentTarget.setPointerCapture(e.pointerId)
   }, [])
 
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const s = stateRef.current
 
     if (!s.isDragging) return
@@ -275,9 +275,9 @@ export function AsciiGlobe() {
     s.lastX = e.clientX
   }, [])
 
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     stateRef.current.isDragging = false
-    ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
+    e.currentTarget.releasePointerCapture(e.pointerId)
   }, [])
 
   return (

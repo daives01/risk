@@ -11,11 +11,9 @@ type Point = { x: number; y: number }
 
 type Rect = { left: number; top: number; width: number; height: number }
 
-type PointerType = 'mouse' | 'touch' | 'pen'
-
 interface PointerSnapshot {
   pointerId: number
-  pointerType: PointerType
+  pointerType: string
   clientX: number
   clientY: number
   rect: Rect
@@ -39,7 +37,7 @@ interface MapPanZoomInteractionControllerOptions {
 }
 
 interface PointerData {
-  pointerType: PointerType
+  pointerType: string
   clientX: number
   clientY: number
 }
@@ -509,7 +507,7 @@ export function useMapPanZoomInteraction({
 
         const shouldCapture = controller.onPointerDown({
           pointerId: event.pointerId,
-          pointerType: event.pointerType as PointerType,
+          pointerType: event.pointerType,
           clientX: event.clientX,
           clientY: event.clientY,
           rect,
@@ -529,7 +527,7 @@ export function useMapPanZoomInteraction({
         if (!rect || !controller) return
         controller.onPointerMove({
           pointerId: event.pointerId,
-          pointerType: event.pointerType as PointerType,
+          pointerType: event.pointerType,
           clientX: event.clientX,
           clientY: event.clientY,
           rect,
@@ -544,7 +542,7 @@ export function useMapPanZoomInteraction({
         if (!rect || !controller) return
         controller.onPointerUp({
           pointerId: event.pointerId,
-          pointerType: event.pointerType as PointerType,
+          pointerType: event.pointerType,
           clientX: event.clientX,
           clientY: event.clientY,
           rect,
@@ -559,7 +557,7 @@ export function useMapPanZoomInteraction({
         if (!rect || !controller) return
         controller.onPointerUp({
           pointerId: event.pointerId,
-          pointerType: event.pointerType as PointerType,
+          pointerType: event.pointerType,
           clientX: event.clientX,
           clientY: event.clientY,
           rect,
@@ -575,7 +573,7 @@ export function useMapPanZoomInteraction({
         if (!rect || !controller) return
         controller.onPointerUp({
           pointerId: event.pointerId,
-          pointerType: event.pointerType as PointerType,
+          pointerType: event.pointerType,
           clientX: event.clientX,
           clientY: event.clientY,
           rect,
