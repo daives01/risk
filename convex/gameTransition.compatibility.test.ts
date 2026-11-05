@@ -12,7 +12,7 @@ describe('pre-refactor Game compatibility', () => {
     const { t, gameId, currentPlayerId, stateVersion } = await seedPreRefactorIndividualGame()
 
     const result = await t.mutation((ctx) =>
-      executeGameTransition(ctx as never, {
+      executeGameTransition(ctx, {
         gameId,
         source: {
           type: 'user',
@@ -49,7 +49,7 @@ describe('pre-refactor Game compatibility', () => {
       await seedPreRefactorTeamGame()
 
     const result = await t.mutation((ctx) =>
-      executeGameTransition(ctx as never, {
+      executeGameTransition(ctx, {
         gameId,
         source: {
           type: 'user',
@@ -89,7 +89,7 @@ describe('pre-refactor Game compatibility', () => {
       await seedPreRefactorAsyncGame()
 
     const result = await t.mutation((ctx) =>
-      executeGameTransition(ctx as never, {
+      executeGameTransition(ctx, {
         gameId,
         source: { type: 'system_timeout', playerId: currentPlayerId },
         intent: {

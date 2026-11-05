@@ -94,6 +94,7 @@ describe('rulesets', () => {
       /tradeValues/,
     )
     expect(() =>
+      // SAFETY: deliberately inject an unsupported overflow string to exercise the runtime rejection below.
       validateRulesetOverrides({ cards: { tradeValueOverflow: 'bad' as 'repeatLast' } }),
     ).toThrow(/tradeValueOverflow/)
   })
