@@ -11,7 +11,9 @@ Review: generic rules use AST/scope visitors through eslintCompatPlugin; no
 application imports or runtime integration. Readable spacing delegates to the
 included attributed eslint-stylistic implementation. Unknown/typeof rules are
 opinionated boundary policies, not proof of unsafe code. Module mocking recognizes
-Jest/Vitest only. All 18 generic rules are opt-in warnings.
+Jest/Vitest only. All 18 generic rules remain available in the opt-in audit. Selected rules now run
+as errors in normal checks; see docs/tooling/anti-slop-inventory.md for final
+scopes and explicit deferrals.
 
 Update by fetching an explicit upstream SHA, reviewing changes to index, rules,
 shared and vendor, copying those directories and LICENSE again (excluding tests),
