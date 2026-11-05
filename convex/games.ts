@@ -6,7 +6,7 @@ import { authComponent } from './auth.js'
 import { getTeamIds, resolveTeamNames } from './gameTeams'
 import { resolvePlayerColors } from './playerColors'
 import { readGameStateNullable } from './typeAdapters'
-import { getGameStateDoc, publicGameStateProjection } from './gameState'
+import { getGameStateDoc, selectCurrentGameState } from './gameState'
 
 type VisibleHandCard = {
   cardId: string
@@ -22,9 +22,9 @@ function projectHand(
     const card = state.cardsById[cardId]
 
     return {
-      cardId: cardId as string,
+      cardId,
       kind: card?.kind ?? 'W',
-      territoryId: card?.territoryId as string | undefined,
+      territoryId: card?.territoryId,
     }
   })
 }
@@ -36,8 +36,8 @@ export const engineVersion = query({
 })
 
 /**
- * Public game view — safe for spectators. Never exposes RNG seed,
- * card hands, or deck order.
+ * Public game view for spectators. Normal writer projections omit RNG seed,
+ * card hands and deck order; structural cache validation preserves extra fields.
  */
 export const getGameView = query({
   args: { gameId: v.id('games') },
@@ -104,7 +104,7 @@ export const getGameView = query({
     }
 
     const gameState = await getGameStateDoc(ctx, gameId)
-    const state = readGameStateNullable(gameState?.privateState)
+    const { publicState } = selectCurrentGameState(gameState)
 
     return {
       _id: game._id,
@@ -129,7 +129,7 @@ export const getGameView = query({
       startedAt: game.startedAt ?? null,
       finishedAt: game.finishedAt ?? null,
       players: playerMap,
-      state: gameState?.publicState ?? (state ? publicGameStateProjection(state) : null),
+      state: publicState,
     }
   },
 })
@@ -215,7 +215,7 @@ export const getGameViewAsPlayer = query({
     }
 
     const gameState = await getGameStateDoc(ctx, gameId)
-    const state = readGameStateNullable(gameState?.privateState)
+    const { privateState: state, publicState } = selectCurrentGameState(gameState)
     const enginePlayerId = callerPlayer?.enginePlayerId as PlayerId | undefined
 
     // Extract this player's hand (card IDs + card details)
@@ -289,7 +289,7 @@ export const getGameViewAsPlayer = query({
       startedAt: game.startedAt ?? null,
       finishedAt: game.finishedAt ?? null,
       players: playerMap,
-      state: gameState?.publicState ?? (state ? publicGameStateProjection(state) : null),
+      state: publicState,
       myHand,
       teammateHands,
       delegatableTurnHand,

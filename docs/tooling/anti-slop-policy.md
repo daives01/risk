@@ -340,3 +340,51 @@ invariants, not a generic trust-string API. The map data and helper behavior are
 unchanged. Map assertion-comment findings are 2 → 0; global findings are
 247 → 245. Maps remain audit-only until global assertion enforcement follows the
 remaining backend/frontend cleanup; no temporary map override is added.
+
+## Current Game public-state boundary prerequisite
+
+Current Game views now return a checked `TimelinePublicState`, whose turn phase
+uses the engine `Phase` owner type. Public player statuses remain arbitrary
+strings, as do public IDs and visible hand card kinds. Database helpers use the
+generated query/mutation database contexts. Removing the redundant player
+projection and hand string assertions reduces assertion-comment findings from
+245 to 242 globally (backend 138 to 135; frontend remains 107; engine/maps zero).
+No safety-rule severity changes are included.
+
+The public reader checks every required field, nested dictionary value and array
+element, plus optional pending occupation and reinforcement fields. It preserves
+the original object, extras, and absent versus own-undefined optional fields.
+Number validation remains `typeof number`, without new range, finiteness,
+consistency or ID-membership restrictions. The parser adds three
+`no-unknown-parameters` findings (34 to 37 globally) and one `no-runtime-typeof`
+finding (61 to 62); `no-known-value-widening` remains 24 and
+`no-unsafe-dictionary-type` remains 13. These boundary diagnostics remain visible
+in the audit rather than being hidden by assertions.
+
+Both views parse private state first and select public cache before private
+projection using the existing nullish preference. Missing/null cache falls back;
+missing state returns null; Lobby views bypass parsing. Compatibility deliberately
+tightens for malformed non-null public caches: they throw `Invalid public game
+state` instead of being served unchecked or silently repaired. Invalid private
+state still throws first even with a valid cache.
+
+Current and snapshot writers continue to use `publicGameStateProjection`, which
+omits the standard root hands, RNG, deck order and card catalog fields and emits
+card counts. The reader is structural validation, not sanitization: arbitrary
+extra fields, including secret-looking extras in a corrupted cache, are
+preserved. This change does not claim that malicious cache extras are redacted.
+Historical event/action/snapshot/patch unchecked boundaries remain separate and
+deferred; they are not private GameState contracts.
+
+Coverage includes public parser identity/immutability, legacy statuses, all six
+phases, unknown IDs, optional presence, empty dictionaries, zero/false, malformed
+nested data and sparse arrays, shared cache selection and private-first errors,
+projection redaction/counts, and an actual convex-test spectator query including
+Lobby bypass. Authenticated view hand/team/delegation logic is unchanged and uses
+the same checked selection helper. BetterAuth's component test helper requires
+`import.meta.glob`, unsupported by Bun, so this change adds no authenticated
+component query test or module mocks. Existing individual/team/async persisted
+transition fixtures continue to pass. A single historical timeline fixture now
+uses its `TimelinePublicState` owner annotation to retain its literal phase.
+The full root check passes: 563 tests, typechecking, lint and production builds;
+formatting and the fresh audit also pass.

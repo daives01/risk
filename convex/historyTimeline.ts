@@ -1,10 +1,10 @@
-import type { GameEvent, GameState } from 'risk-engine'
+import type { GameEvent, GameState, Phase } from 'risk-engine'
 
 export type TimelinePublicState = {
   players: Record<string, { status: string; teamId?: string }>
   turnOrder: string[]
   territories: Record<string, { ownerId: string; armies: number }>
-  turn: { currentPlayerId: string; phase: string; round: number }
+  turn: { currentPlayerId: string; phase: Phase; round: number }
   pending?: {
     type: 'Occupy'
     from: string
