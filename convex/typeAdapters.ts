@@ -1,4 +1,5 @@
 import type { GameState, GraphMap } from 'risk-engine'
+import type { TimelinePublicState } from './historyTimeline'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -152,4 +153,39 @@ export function readGameStateNullable(value: unknown): GameState | null {
   if (value == null) return null
 
   return readGameState(value)
+}
+
+function isPublicPlayerState(value: unknown): boolean {
+  return isRecord(value) && isString(value.status) && isOptional(value.teamId, isString)
+}
+
+function isPublicGameState(value: unknown): value is TimelinePublicState {
+  return (
+    isRecord(value) &&
+    isDictionary(value.players, isPublicPlayerState) &&
+    isList(value.turnOrder, isString) &&
+    isDictionary(value.territories, isTerritoryState) &&
+    isTurnState(value.turn) &&
+    isOptional(value.pending, isPendingOccupy) &&
+    isOptional(value.reinforcements, isReinforcements) &&
+    typeof value.capturedThisTurn === 'boolean' &&
+    isNumber(value.tradesCompleted) &&
+    isOptional(value.fortifiesUsedThisTurn, isNumber) &&
+    isNumber(value.deckCount) &&
+    isNumber(value.discardCount) &&
+    isDictionary(value.handSizes, isNumber) &&
+    isNumber(value.stateVersion)
+  )
+}
+
+export function readPublicGameState(value: unknown): TimelinePublicState {
+  if (!isPublicGameState(value)) throw new Error('Invalid public game state')
+
+  return value
+}
+
+export function readPublicGameStateNullable(value: unknown): TimelinePublicState | null {
+  if (value == null) return null
+
+  return readPublicGameState(value)
 }

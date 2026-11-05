@@ -155,7 +155,7 @@ describe('history timeline compact states', () => {
   })
 
   test('builds sparse patches and reconstructs the next public state', () => {
-    const next = {
+    const next: TimelinePublicState = {
       ...previous,
       territories: {
         ...previous.territories,
