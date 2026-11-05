@@ -22,7 +22,10 @@ function CombatOutcomeTrack({
     left: `${actualLeft}%`,
     '--combat-expected-left': `${expectedLeft}%`,
     '--combat-actual-left': `${actualLeft}%`,
-  } as React.CSSProperties
+  } satisfies React.CSSProperties & {
+    '--combat-expected-left': string
+    '--combat-actual-left': string
+  }
 
   return (
     <div>

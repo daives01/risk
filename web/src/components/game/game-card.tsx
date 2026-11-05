@@ -40,7 +40,7 @@ export function GameCard({
     boxShadow: selected
       ? `0 12px 32px color-mix(in srgb, ${meta.color} 28%, transparent)`
       : undefined,
-  } as CSSProperties
+  } satisfies CSSProperties & { '--unit-color': string }
 
   const content = (
     <>

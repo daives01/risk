@@ -125,8 +125,8 @@ export function GamePlayersCard({
                   const isWinner = isGameOver && player.status === 'alive'
                   const isDefeated = player.status === 'defeated'
                   const teamId = player.teamId
-                  const playerHighlightKey = `player:${player.playerId}` as HighlightFilter
-                  const teamHighlightKey = teamId ? (`team:${teamId}` as HighlightFilter) : null
+                  const playerHighlightKey: HighlightFilter = `player:${player.playerId}`
+                  const teamHighlightKey: HighlightFilter | null = teamId ? `team:${teamId}` : null
                   const isPlayerHighlighted = activeHighlight === playerHighlightKey
 
                   const isTeamHighlighted = teamHighlightKey
