@@ -1,7 +1,6 @@
 import { mutation, query } from './_generated/server'
 import { v } from 'convex/values'
 import { ENGINE_VERSION } from 'risk-engine'
-import type { PlayerId } from 'risk-engine'
 import { authComponent } from './auth.js'
 import { getTeamIds, resolveTeamNames } from './gameTeams'
 import { resolvePlayerColors } from './playerColors'
@@ -16,7 +15,7 @@ type VisibleHandCard = {
 
 function projectHand(
   state: NonNullable<ReturnType<typeof readGameStateNullable>>,
-  playerId: PlayerId,
+  playerId: string,
 ): VisibleHandCard[] {
   return (state.hands[playerId] ?? []).map((cardId) => {
     const card = state.cardsById[cardId]
@@ -71,9 +70,7 @@ export const getGameView = query({
 
     const teamIds = teamCount ? getTeamIds(teamCount) : []
 
-    const teamNames = teamCount
-      ? resolveTeamNames(teamIds, game.teamNames as Record<string, string> | undefined)
-      : null
+    const teamNames = teamCount ? resolveTeamNames(teamIds, game.teamNames) : null
 
     if (game.status !== 'active' && game.status !== 'finished') {
       return {
@@ -174,9 +171,7 @@ export const getGameViewAsPlayer = query({
 
     const teamIds = teamCount ? getTeamIds(teamCount) : []
 
-    const teamNames = teamCount
-      ? resolveTeamNames(teamIds, game.teamNames as Record<string, string> | undefined)
-      : null
+    const teamNames = teamCount ? resolveTeamNames(teamIds, game.teamNames) : null
 
     // Find the caller's enginePlayerId
     const callerId = String(user._id)
@@ -216,7 +211,7 @@ export const getGameViewAsPlayer = query({
 
     const gameState = await getGameStateDoc(ctx, gameId)
     const { privateState: state, publicState } = selectCurrentGameState(gameState)
-    const enginePlayerId = callerPlayer?.enginePlayerId as PlayerId | undefined
+    const enginePlayerId = callerPlayer?.enginePlayerId
 
     // Extract this player's hand (card IDs + card details)
     let myHand: VisibleHandCard[] | null = null
@@ -229,7 +224,7 @@ export const getGameViewAsPlayer = query({
 
     if (state && game.teamModeEnabled && enginePlayerId && callerPlayer?.teamId) {
       for (const player of players) {
-        const teammateId = player.enginePlayerId as PlayerId | undefined
+        const teammateId = player.enginePlayerId
 
         if (
           teammateId &&
@@ -261,9 +256,9 @@ export const getGameViewAsPlayer = query({
       state.players[currentTurnPlayerId]?.status === 'alive' &&
       currentTurnPlayer.teamId &&
       callerPlayer?.teamId === currentTurnPlayer.teamId &&
-      state.hands[currentTurnPlayerId as PlayerId]
+      state.hands[currentTurnPlayerId]
     ) {
-      delegatableTurnHand = projectHand(state, currentTurnPlayerId as PlayerId)
+      delegatableTurnHand = projectHand(state, currentTurnPlayerId)
     }
 
     return {

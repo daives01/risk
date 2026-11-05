@@ -53,7 +53,7 @@ function comparePlayers(a: PlayerColorInfo, b: PlayerColorInfo) {
 }
 
 export function isPlayerColor(value: string): value is PlayerColor {
-  return PLAYER_COLOR_PALETTE.includes(value as PlayerColor)
+  return PLAYER_COLOR_PALETTE.some((color) => color === value)
 }
 
 export function canEditPlayerColor(callerUserId: string, hostUserId: string, targetUserId: string) {
@@ -215,7 +215,7 @@ export function resolveTeamAwarePlayerColors(
 
   const anchorsByTeamId = Object.fromEntries(
     sizedTeamIds.map((teamId, index) => [teamId, anchors[index]!]),
-  ) as Record<string, PlayerColor>
+  )
 
   const unassigned = new Set<PlayerColor>(PLAYER_COLOR_PALETTE)
   const teamColorsById: Record<string, PlayerColor[]> = {}

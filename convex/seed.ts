@@ -98,6 +98,8 @@ export const seedMap = mutation({
 
     const now = Date.now()
 
+    // SAFETY: the in-repo map literal was validated above and contains only JSON metadata
+    // and ID arrays; this roundtrip clones readonly arrays into the mutable storage shape.
     const graphMapForDb = JSON.parse(JSON.stringify(mapDef.graphMap)) as {
       territories: Record<string, { name?: string; continentId?: string; tags?: string[] }>
       adjacency: Record<string, string[]>

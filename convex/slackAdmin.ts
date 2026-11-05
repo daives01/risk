@@ -199,6 +199,8 @@ export const searchUsersForMapping = query({
       }),
     ])
 
+    // SAFETY: both adapter searches select Better Auth user rows; its schema defines these
+    // identity fields. The installed findMany page type is any, so narrow only consumed fields.
     const merged = [...usernameMatches.page, ...emailMatches.page] as Array<{
       _id?: string
       userId?: string
