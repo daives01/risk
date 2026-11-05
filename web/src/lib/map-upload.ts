@@ -1,5 +1,11 @@
-export async function uploadImage(uploadUrl: string, file: File) {
-  const response = await fetch(uploadUrl, {
+import type { Id } from '@backend/_generated/dataModel'
+
+export async function uploadImage(
+  uploadUrl: string,
+  file: File,
+  uploadFetch: (url: string, options: RequestInit) => Promise<Response> = fetch,
+): Promise<Id<'_storage'>> {
+  const response = await uploadFetch(uploadUrl, {
     method: 'POST',
     headers: { 'Content-Type': file.type || 'application/octet-stream' },
     body: file,
@@ -9,9 +15,23 @@ export async function uploadImage(uploadUrl: string, file: File) {
     throw new Error('Image upload failed')
   }
 
-  const body = (await response.json()) as { storageId: string }
+  const body: unknown = await response.json()
 
-  return body.storageId
+  if (
+    typeof body !== 'object' ||
+    body === null ||
+    Array.isArray(body) ||
+    !Object.hasOwn(body, 'storageId') ||
+    !('storageId' in body) ||
+    typeof body.storageId !== 'string' ||
+    body.storageId.length === 0
+  ) {
+    throw new Error('Invalid image upload response')
+  }
+
+  // SAFETY: Convex upload responses encode storage IDs as strings. Only the SDK's nominal
+  // wire type is added here; server v.id validation, existence and authorization remain authoritative.
+  return body.storageId as Id<'_storage'>
 }
 
 export async function readImageDimensions(file: File) {

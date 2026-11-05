@@ -687,3 +687,22 @@ than searching older ones. Tests cover legacy/unknown event fields, malformed
 latest events and pending message IDs. Root checks (614 tests), formatting and
 audit pass; independent review approves. Assertion findings fall 49 to 24;
 dictionary findings fall 8 to 7. Other counts/scopes remain unchanged.
+
+### Final frontend boundary cleanup
+
+Upload responses validate an own nonempty storage-ID string before adding only
+the SDK wire brand; HTTP/JSON errors retain priority. Editor storage IDs keep
+their owner type, integer parsing narrows numbers directly, and connectivity
+results need no empty-array cast. Bundled emoji, session and generated mutation
+contracts replace facades. Finite selects resolve actual option values; blur
+checks callable capability and preserves its receiver, including non-HTML
+focused elements. User-agent platform data is checked before fallback.
+Team luck constructors preserve template IDs; arbitrary selections require the
+team prefix before decoding, preventing accidental team matches from invalid IDs.
+
+Tests cover upload malformed/own/optional/error cases, numeric imports, browser
+capabilities/receiver, finite values and invalid luck selections. Root checks
+(634 tests), formatting and audit pass; independent review approves. Assertion
+findings fall 24 to zero repository-wide. Deferred counts are runtime-typeof80,
+unknown parameters45, widening24, dictionary7. No new enforcement scope here;
+global assertion enforcement and closing inventory follow in the next PR.

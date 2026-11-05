@@ -31,7 +31,7 @@ type EditorMap = {
   name: string
   graphMap: EditorGraphMap
   visual: {
-    imageStorageId: string
+    imageStorageId: Id<'_storage'>
     imageWidth: number
     imageHeight: number
     nodeScale?: number | null
@@ -73,6 +73,8 @@ export default function AdminMapEditorPage() {
   const params = useParams<{ mapId: string }>()
   const mapId = params.mapId ?? ''
 
+  // SAFETY: getDraft returns the stored editor graph and storage ID; this local view
+  // preserves its field types while omitting backend metadata the editor does not use.
   const getDraft = useQuery(api.adminMaps.getDraft, mapId ? { mapId } : 'skip') as
     | EditorMap
     | null
@@ -141,7 +143,7 @@ export default function AdminMapEditorPage() {
       ),
     )
     setAnchors(getDraft.visual.territoryAnchors)
-    setImageStorageId(getDraft.visual.imageStorageId as Id<'_storage'>)
+    setImageStorageId(getDraft.visual.imageStorageId)
     setImageWidth(getDraft.visual.imageWidth)
     setImageHeight(getDraft.visual.imageHeight)
     setNodeScale(
@@ -474,14 +476,14 @@ export default function AdminMapEditorPage() {
 
       await saveAnchors({
         mapId,
-        imageStorageId: storageId as Id<'_storage'>,
+        imageStorageId: storageId,
         imageWidth: dimensions.width,
         imageHeight: dimensions.height,
         nodeScale,
         territoryAnchors: anchors,
       })
 
-      setImageStorageId(storageId as Id<'_storage'>)
+      setImageStorageId(storageId)
       setImageWidth(dimensions.width)
       setImageHeight(dimensions.height)
       toast.success('Map image replaced')

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { cn } from '@/lib/utils'
+import { browserPlatform } from '@/lib/keyboard-shortcuts'
 
 const TOUCH_MEDIA_QUERY = '(hover: none), (pointer: coarse)'
 
@@ -13,9 +14,7 @@ function detectTouchscreen() {
 function detectMacOS() {
   if (typeof navigator === 'undefined') return false
 
-  const platform =
-    (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform ??
-    navigator.platform
+  const platform = browserPlatform(navigator)
 
   return /mac/i.test(platform)
 }

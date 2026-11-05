@@ -6,6 +6,10 @@ export function toTeamLuckSubjectId(teamId: string): TeamLuckSubjectId {
   return `team:${teamId}`
 }
 
+export function isTeamLuckSubjectId(value: string): value is TeamLuckSubjectId {
+  return value.startsWith('team:')
+}
+
 export function fromTeamLuckSubjectId(subjectId: TeamLuckSubjectId): string {
   return subjectId.slice('team:'.length)
 }
@@ -39,7 +43,9 @@ export function resolveLuckComparisonPresentation({
     }
   }
 
-  const teamId = fromTeamLuckSubjectId(selectedId as TeamLuckSubjectId)
+  if (!isTeamLuckSubjectId(selectedId)) return { mode: transitionTarget, selectedId }
+
+  const teamId = fromTeamLuckSubjectId(selectedId)
   const member = players.find((subject) => subject.teamId === teamId)
 
   return {

@@ -1,14 +1,6 @@
 import emojiData from 'emojibase-data/en/compact.json'
 import slackShortcodes from 'emojibase-data/en/shortcodes/iamcal.json'
 
-interface EmojibaseEmoji {
-  hexcode: string
-  label: string
-  unicode: string
-  order?: number
-  tags?: string[]
-}
-
 export interface ChatEmojiOption {
   key: string
   shortcode: string
@@ -25,8 +17,6 @@ export interface ActiveChatEmojiQuery {
   cursor: number
 }
 
-type SlackShortcodeDataset = Record<string, string | string[]>
-
 const EMOJI_QUERY_PATTERN = /(^|\s):([A-Za-z0-9_+-]{1,80})$/
 const MAX_EMOJI_MATCHES = 12
 
@@ -39,16 +29,12 @@ function toShortcodeList(value: string | string[]) {
 }
 
 function buildChatEmojiOptions(): ChatEmojiOption[] {
-  const emojiByHexcode = new Map(
-    (emojiData as EmojibaseEmoji[]).map((emoji) => [emoji.hexcode, emoji]),
-  )
+  const emojiByHexcode = new Map(emojiData.map((emoji) => [emoji.hexcode, emoji]))
 
   const options: ChatEmojiOption[] = []
   const optionKeys = new Set<string>()
 
-  for (const [hexcode, shortcodeValue] of Object.entries(
-    slackShortcodes as SlackShortcodeDataset,
-  )) {
+  for (const [hexcode, shortcodeValue] of Object.entries(slackShortcodes)) {
     const emoji = emojiByHexcode.get(hexcode)
 
     if (!emoji) continue

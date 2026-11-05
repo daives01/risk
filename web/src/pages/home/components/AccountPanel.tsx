@@ -8,12 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 
 type AccountPanelProps = {
-  session: {
-    user: {
-      email: string
-      name: string
-    }
-  }
+  session: typeof authClient.$Infer.Session
   isAdmin: boolean | undefined
 }
 
@@ -22,7 +17,7 @@ export function AccountPanel({ session, isAdmin }: AccountPanelProps) {
   const settings = useQuery(api.userSettings.getMySettings, {})
   const setTurnEmailSetting = useMutation(api.userSettings.setEmailTurnNotificationsEnabled)
 
-  const sessionUsername = (session.user as { username?: string | null }).username ?? ''
+  const sessionUsername = session.user.username ?? ''
 
   const [profileUsername, setProfileUsername] = useState('')
   const [profileSaving, setProfileSaving] = useState(false)

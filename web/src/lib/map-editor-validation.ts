@@ -15,7 +15,9 @@ export type EditorGraphMap = {
 }
 
 function toTerritoryId(value: string): TerritoryId {
-  // SAFETY: Editor IDs are strings; this adds only the nominal category. validateMap checks membership below.
+  // SAFETY: TerritoryId is a string with a compile-time-only brand. This conversion
+  // preserves every editor reference verbatim, including dangling references, so
+  // validateMap below can report unknown neighbors and continent members.
   return value as TerritoryId
 }
 
@@ -82,10 +84,10 @@ export function normalizeAdjacency(graph: EditorGraphMap): Record<string, string
   return normalized
 }
 
-function graphConnectedTerritories(graph: EditorGraphMap) {
+function graphConnectedTerritories(graph: EditorGraphMap): { disconnected: string[] } {
   const territoryIds = Object.keys(graph.territories)
 
-  if (territoryIds.length <= 1) return { disconnected: [] as string[] }
+  if (territoryIds.length <= 1) return { disconnected: [] }
 
   const visited = new Set<string>()
   const queue: string[] = [territoryIds[0]!]

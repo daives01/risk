@@ -148,3 +148,19 @@ describe('buildMapExportJson', () => {
     expect(result.territories).toEqual([{ id: 'a', name: '   ' }, { id: 'b' }])
   })
 })
+
+test.each(['2', null, true, 2.5])('import rejects non-integer numeric fields: %j', (value) => {
+  const result = parseMapImportJson(
+    JSON.stringify({
+      territories: [{ id: 'a' }],
+      adjacency: { a: [] },
+      continents: [{ id: 'north', bonus: value, territoryIds: ['a'] }],
+      playerLimits: { minPlayers: value, maxPlayers: value },
+    }),
+  )
+
+  expect(result.value).toBeNull()
+  expect(result.errors).toContain('continents.0.bonus must be an integer')
+  expect(result.errors).toContain('playerLimits.minPlayers must be an integer')
+  expect(result.errors).toContain('playerLimits.maxPlayers must be an integer')
+})
