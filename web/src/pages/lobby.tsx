@@ -4,7 +4,6 @@ import { useMutation, useQuery } from 'convex/react'
 import type { OptimisticLocalStore } from 'convex/browser'
 import type { FunctionArgs, FunctionReturnType } from 'convex/server'
 import { ArrowLeft, Copy, Play, Shuffle, Trash2, UserRoundPlus, X } from 'lucide-react'
-import { PLAYER_COLOR_NAME_BY_HEX } from 'risk-engine'
 import { api } from '@backend/_generated/api'
 import type { Id } from '@backend/_generated/dataModel'
 import { authClient } from '@/lib/auth-client'
@@ -20,7 +19,18 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
-import { canEditLobbyPlayerColor, getLobbyColorOptions } from '@/lib/lobby-player-colors'
+import {
+  getLobbyPlayerColorLabel,
+  canEditLobbyPlayerColor,
+  getLobbyColorOptions,
+} from '@/lib/lobby-player-colors'
+import {
+  FORTIFY_MODE_OPTIONS,
+  MAX_FORTIFY_OPTIONS,
+  TIMING_MODE_OPTIONS,
+  findLobbyOption,
+  type GameTimingMode,
+} from '@/lib/lobby-rule-options'
 import {
   CARD_INCREMENT_PRESET_ENTRIES,
   CARD_INCREMENT_PRESETS,
@@ -28,42 +38,11 @@ import {
   type CardIncrementPresetKey,
 } from '@/lib/game/ruleset-summary'
 
-type RulesetOverridesInput = {
-  fortify: { fortifyMode: 'adjacent' | 'connected'; maxFortifiesPerTurn?: number }
-  cards: {
-    forcedTradeHandSize: number
-    tradeValues: number[]
-    tradeValueOverflow: 'repeatLast' | 'continueByFive'
-  }
-  teams: {
-    allowPlaceOnTeammate: boolean
-    allowFortifyWithTeammate: boolean
-    allowFortifyThroughTeammates: boolean
-  }
-}
-
-const FORTIFY_MODE_OPTIONS = [
-  { value: 'connected', label: 'Connected' },
-  { value: 'adjacent', label: 'Adjacent' },
-] as const
-
-const MAX_FORTIFY_OPTIONS = [
-  { value: 'unlimited', label: 'Unlimited' },
-  { value: '0', label: '0' },
-  { value: '1', label: '1' },
-  { value: '2', label: '2' },
-  { value: '3', label: '3' },
-] as const
+type RulesetOverridesInput = NonNullable<
+  FunctionArgs<typeof api.lobby.setRulesetOverrides>['rulesetOverrides']
+>
 
 const TEAM_NAME_MAX_LENGTH = 24
-
-const TIMING_MODE_OPTIONS = [
-  { value: 'realtime', label: 'Realtime (no turn timer)' },
-  { value: 'async_1d', label: 'Async (1 day / turn)' },
-  { value: 'async_3d', label: 'Async (3 days / turn)' },
-] as const
-
-type GameTimingMode = (typeof TIMING_MODE_OPTIONS)[number]['value']
 
 type LobbyQuery = FunctionReturnType<typeof api.lobby.getLobby>
 
@@ -80,8 +59,8 @@ function updateLobbyQuery(
   gameId: Id<'games'>,
   updater: (lobby: LobbyData) => LobbyData,
 ) {
-  const queryArgs = { gameId } as const
-  const lobby = localStore.getQuery(api.lobby.getLobby, queryArgs) as LobbyQuery | undefined
+  const queryArgs = { gameId }
+  const lobby = localStore.getQuery(api.lobby.getLobby, queryArgs)
 
   if (!lobby) return
   localStore.setQuery(api.lobby.getLobby, queryArgs, updater(lobby))
@@ -178,12 +157,15 @@ function PlayerColorPicker({
 }
 
 export default function LobbyPage() {
-  const { gameId } = useParams<{ gameId: string }>()
+  const { gameId: routeGameId } = useParams<{ gameId: string }>()
+  // SAFETY: Route text crosses the SDK's nominal ID boundary here. Convex's v.id validator,
+  // document lookup, and authorization remain authoritative on the server.
+  const gameId = routeGameId as Id<'games'> | undefined
   const navigate = useNavigate()
   const location = useLocation()
   const { data: session, isPending: sessionPending } = authClient.useSession()
 
-  const lobby = useQuery(api.lobby.getLobby, gameId ? { gameId: gameId as Id<'games'> } : 'skip')
+  const lobby = useQuery(api.lobby.getLobby, gameId ? { gameId } : 'skip')
 
   const slackWorkspaceOptions = useQuery(
     api.slackAdmin.listMyWorkspaceOptions,
@@ -211,7 +193,7 @@ export default function LobbyPage() {
     (localStore, args) => {
       updateLobbyQuery(localStore, args.gameId, (lobbyData) => {
         const teamIds = Array.from({ length: args.teamCount }, (_, index) => `team-${index + 1}`)
-        const previousTeamNames = (lobbyData.game.teamNames as Record<string, string> | null) ?? {}
+        const previousTeamNames = lobbyData.game.teamNames ?? {}
 
         const nextTeamNames = Object.fromEntries(
           teamIds.map((teamId, index) => [
@@ -244,7 +226,7 @@ export default function LobbyPage() {
         game: {
           ...lobbyData.game,
           teamNames: {
-            ...((lobbyData.game.teamNames as Record<string, string> | null) ?? {}),
+            ...(lobbyData.game.teamNames ?? {}),
             [args.teamId]: args.name.trim(),
           },
         },
@@ -284,7 +266,7 @@ export default function LobbyPage() {
 
   useEffect(() => {
     if (!lobby) return
-    const overrides = lobby.game.rulesetOverrides as Partial<RulesetOverridesInput> | null
+    const overrides = lobby.game.rulesetOverrides
     const nextFortifyMode = overrides?.fortify?.fortifyMode ?? 'connected'
     setFortifyMode(nextFortifyMode)
     setMaxFortifiesPerTurn(
@@ -304,16 +286,12 @@ export default function LobbyPage() {
     setAllowFortifyThroughTeammates(
       nextFortifyMode === 'connected' && (overrides?.teams?.allowFortifyThroughTeammates ?? true),
     )
-    setTimingModeDraft(
-      ((lobby.game as { timingMode?: GameTimingMode }).timingMode ?? 'realtime') as GameTimingMode,
-    )
-    setExcludeWeekendsDraft((lobby.game as { excludeWeekends?: boolean }).excludeWeekends ?? false)
+    setTimingModeDraft(lobby.game.timingMode ?? 'realtime')
+    setExcludeWeekendsDraft(lobby.game.excludeWeekends ?? false)
     setTeamCountDraft(lobby.game.teamCount ?? 2)
-    setSlackNotificationsEnabledDraft(
-      (lobby.game as { slackNotificationsEnabled?: boolean }).slackNotificationsEnabled ?? false,
-    )
-    setSlackTeamIdDraft((lobby.game as { slackTeamId?: string | null }).slackTeamId ?? null)
-    setTeamNameDrafts((lobby.game.teamNames as Record<string, string> | null) ?? {})
+    setSlackNotificationsEnabledDraft(lobby.game.slackNotificationsEnabled ?? false)
+    setSlackTeamIdDraft(lobby.game.slackTeamId ?? null)
+    setTeamNameDrafts(lobby.game.teamNames ?? {})
   }, [lobby])
 
   if (sessionPending) {
@@ -353,15 +331,20 @@ export default function LobbyPage() {
   const isInGame = lobby.players.some((player: LobbyPlayer) => player.userId === userId)
   const isHost = lobby.game.createdBy === userId
   const teamModeEnabled = lobby.game.teamModeEnabled
-  const turnDeadlineAt = (lobby.game as { turnDeadlineAt?: number | null }).turnDeadlineAt ?? null
+  const turnDeadlineAt = lobby.game.turnDeadlineAt ?? null
   const inviteUrl = lobby.inviteCode ? `${window.location.origin}/join/${lobby.inviteCode}` : null
   const teamCount = lobby.game.teamCount ?? 2
+
+  const teamCountOptions = Array.from(
+    { length: Math.max(1, lobby.players.length - 1) },
+    (_, index) => index + 2,
+  )
 
   const teamIds = teamModeEnabled
     ? Array.from({ length: teamCount }, (_, index) => `team-${index + 1}`)
     : []
 
-  const teamNames = (lobby.game.teamNames as Record<string, string> | null) ?? {}
+  const teamNames = lobby.game.teamNames ?? {}
 
   const defaultTeamLabelById = Object.fromEntries(
     teamIds.map((teamId, index) => [teamId, `Team ${index + 1}`]),
@@ -414,7 +397,7 @@ export default function LobbyPage() {
     setStarting(true)
 
     try {
-      await startGame({ gameId: gameId as Id<'games'> })
+      await startGame({ gameId })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start game')
     } finally {
@@ -426,7 +409,7 @@ export default function LobbyPage() {
     if (!gameId) return
 
     try {
-      await kickPlayer({ gameId: gameId as Id<'games'>, userId: targetUserId })
+      await kickPlayer({ gameId, userId: targetUserId })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to kick player')
     }
@@ -458,7 +441,7 @@ export default function LobbyPage() {
     setDeletingGame(true)
 
     try {
-      await deleteGame({ gameId: gameId as Id<'games'> })
+      await deleteGame({ gameId })
       navigate('/', { replace: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete game')
@@ -468,10 +451,10 @@ export default function LobbyPage() {
   }
 
   async function handleTeamChange(targetUserId: string, teamId: string) {
-    if (!gameId) return
+    if (!gameId || !teamIds.includes(teamId)) return
 
     try {
-      await setPlayerTeam({ gameId: gameId as Id<'games'>, userId: targetUserId, teamId })
+      await setPlayerTeam({ gameId, userId: targetUserId, teamId })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to set team')
     }
@@ -484,7 +467,7 @@ export default function LobbyPage() {
 
     try {
       await setTeamCountMutation({
-        gameId: gameId as Id<'games'>,
+        gameId,
         teamCount: nextTeamCount,
       })
     } catch (err) {
@@ -508,7 +491,7 @@ export default function LobbyPage() {
 
     try {
       await setTeamNameMutation({
-        gameId: gameId as Id<'games'>,
+        gameId,
         teamId,
         name: draft,
       })
@@ -523,7 +506,7 @@ export default function LobbyPage() {
     setRebalancing(true)
 
     try {
-      await rebalanceTeams({ gameId: gameId as Id<'games'> })
+      await rebalanceTeams({ gameId })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to rebalance teams')
     } finally {
@@ -537,7 +520,7 @@ export default function LobbyPage() {
     setReassigningColors(true)
 
     try {
-      await reassignPlayerColors({ gameId: gameId as Id<'games'> })
+      await reassignPlayerColors({ gameId })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reassign colors')
     } finally {
@@ -554,7 +537,7 @@ export default function LobbyPage() {
 
     try {
       await setPlayerColor({
-        gameId: gameId as Id<'games'>,
+        gameId,
         userId: targetUserId,
         color,
       })
@@ -611,14 +594,14 @@ export default function LobbyPage() {
       }
 
       await setRulesetOverrides({
-        gameId: gameId as Id<'games'>,
+        gameId,
         rulesetOverrides,
         timingMode: timingModeDraft,
         excludeWeekends: excludeWeekendsDraft,
       })
 
       const slackArgs: FunctionArgs<typeof api.lobby.setSlackNotifications> = {
-        gameId: gameId as Id<'games'>,
+        gameId,
         enabled: slackNotificationsEnabledDraft,
       }
 
@@ -706,9 +689,7 @@ export default function LobbyPage() {
                               style={{ backgroundColor: player.color }}
                             />
                             <span className="truncate">
-                              {PLAYER_COLOR_NAME_BY_HEX[
-                                player.color as keyof typeof PLAYER_COLOR_NAME_BY_HEX
-                              ] ?? player.color}
+                              {getLobbyPlayerColorLabel(player.color)}
                             </span>
                           </span>
                         )}
@@ -774,17 +755,16 @@ export default function LobbyPage() {
                         value={String(teamCountDraft)}
                         disabled={!isHost}
                         onValueChange={(value) => {
-                          void handleTeamCountChange(Number(value))
+                          const count = teamCountOptions.find((count) => String(count) === value)
+
+                          if (count !== undefined) void handleTeamCountChange(count)
                         }}
                       >
                         <SelectTrigger className="h-8 w-[64px] text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {Array.from(
-                            { length: Math.max(1, lobby.players.length - 1) },
-                            (_, index) => index + 2,
-                          ).map((count) => (
+                          {teamCountOptions.map((count) => (
                             <SelectItem key={count} value={String(count)}>
                               {count}
                             </SelectItem>
@@ -874,9 +854,13 @@ export default function LobbyPage() {
                         <span className="text-muted-foreground">Card reward increment</span>
                         <Select
                           value={cardIncrementPreset}
-                          onValueChange={(value) =>
-                            setCardIncrementPreset(value as CardIncrementPresetKey)
-                          }
+                          onValueChange={(value) => {
+                            const preset = CARD_INCREMENT_PRESET_ENTRIES.find(
+                              ([key]) => key === value,
+                            )
+
+                            if (preset) setCardIncrementPreset(preset[0])
+                          }}
                         >
                           <SelectTrigger className="h-8 w-[220px] text-xs sm:w-[360px]">
                             <SelectValue />
@@ -895,7 +879,9 @@ export default function LobbyPage() {
                         <Select
                           value={timingModeDraft}
                           onValueChange={(value) => {
-                            const nextMode = value as GameTimingMode
+                            const nextMode = findLobbyOption(TIMING_MODE_OPTIONS, value)
+
+                            if (!nextMode) return
                             setTimingModeDraft(nextMode)
 
                             if (nextMode === 'realtime') {
@@ -949,7 +935,9 @@ export default function LobbyPage() {
                         <Select
                           value={fortifyMode}
                           onValueChange={(value) => {
-                            const nextMode = value as 'adjacent' | 'connected'
+                            const nextMode = findLobbyOption(FORTIFY_MODE_OPTIONS, value)
+
+                            if (!nextMode) return
                             setFortifyMode(nextMode)
 
                             if (nextMode === 'adjacent') {
@@ -973,11 +961,14 @@ export default function LobbyPage() {
                         <span className="text-muted-foreground">Fortifies per turn</span>
                         <Select
                           value={String(maxFortifiesPerTurn)}
-                          onValueChange={(value) =>
-                            setMaxFortifiesPerTurn(
-                              value === 'unlimited' ? 'unlimited' : Number(value),
-                            )
-                          }
+                          onValueChange={(value) => {
+                            const option = findLobbyOption(MAX_FORTIFY_OPTIONS, value)
+
+                            if (option)
+                              setMaxFortifiesPerTurn(
+                                option === 'unlimited' ? 'unlimited' : Number(option),
+                              )
+                          }}
                         >
                           <SelectTrigger className="h-8 w-[220px] text-xs sm:w-[360px]">
                             <SelectValue />
@@ -1044,7 +1035,14 @@ export default function LobbyPage() {
                             <span className="text-muted-foreground">Workspace</span>
                             <Select
                               value={slackTeamIdDraft ?? undefined}
-                              onValueChange={(value) => setSlackTeamIdDraft(value)}
+                              onValueChange={(value) => {
+                                if (
+                                  slackWorkspaceOptions?.some(
+                                    (workspace) => workspace.teamId === value,
+                                  )
+                                )
+                                  setSlackTeamIdDraft(value)
+                              }}
                             >
                               <SelectTrigger className="h-8 w-[220px] text-xs sm:w-[360px]">
                                 <SelectValue placeholder="Select workspace" />

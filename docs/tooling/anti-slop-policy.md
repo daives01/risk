@@ -656,3 +656,18 @@ malformed adjacency. Existing replay expectations are preserved.
 Root checks (608 tests), formatting verification and audit pass. Independent
 review approves. Assertion findings fall 91 to 78; deferred typeof is 73,
 unknown parameters 44, dictionary 8, widening 22. No policy scopes change.
+
+### Lobby UI query, mutation and option contracts
+
+Generated lobby data and optimistic query results retain their actual contracts;
+mutation overrides derive from FunctionArgs. Repeated route ID casts consolidate
+into one documented SDK nominal boundary, leaving server ID validation, lookup
+and authorization authoritative. Missing-ID skips and existing defaults remain.
+Select values resolve through rendered options before state changes; palette
+labels use own entries rather than inherited keys. Shared preset entries use an
+explicit ordered owner key tuple, preserving schedules and display order.
+
+Tests cover invalid/prototype-like options, palette labels and preset schedules.
+Root checks (611 tests), formatting and audit pass; independent review approves
+with no findings. Assertion findings fall 78 to 49; other counts and enforcement
+scopes are unchanged. No lobby findings remain unexplained.
