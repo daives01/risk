@@ -585,3 +585,37 @@ cloned into mutable storage. No arbitrary external payload is trusted through
 these comments. Root checks (574 tests), formatting verification and full audit
 pass. Other counts and enforcement scopes are unchanged. Backend assertion
 findings now comprise only five replay/history sites; frontend remains 107.
+
+### Historical public payload boundary
+
+All three History Window snapshot branches now read checked public state without
+parsing private state. Patches validate the actual partial contract (partial
+territory entries, complete supplied turn, nullable deletion fields), retaining
+identity, extras, zero/false values, and missing versus explicit null/undefined.
+No range, membership, or cross-field consistency constraints are added.
+Historical actions/events remain open records with unknown fields; missing or
+nonstring discriminators and future variants remain accepted. Redaction preserves
+the existing shapes, private-card omission, and eliminated-card count fallback
+(including zero for already-redacted records without a transfer array).
+
+Malformed snapshot/patch fields, primitive/array records, or sparse event lists
+now fail explicitly instead of being cast into trusted types. Game-luck replay
+checks its actual consumed combat fields using plain wire territory strings;
+malformed AttackResolved events throw. Existing missing-snapshot/falsy-patch
+messages and event-before-patch error order remain intact. Private engine event
+unions are not assigned to untrusted historical records.
+
+Real Convex query/backfill tests cover every snapshot branch, public-only replay
+with invalid current private state, optional patches, redaction, malformed data,
+and compatibility/error precedence. Compiler inspection confirms the generated
+History Window result has `TimelinePublicState | null` snapshots,
+`TimelineStatePatch | null | undefined` patches, and open action/event records
+with unknown fields, rather than `any` payloads.
+
+Root checks (601 tests), formatting verification and audit pass; independent
+review also passes all 27 new tests. Assertion findings fall 112 to 107, all in
+the frontend; backend findings are zero. Honest validation changes deferred
+runtime-typeof 63 to 71 and unknown parameters 39 to 47; dictionary findings fall
+13 to 10 as unchecked record assertions disappear. Widening remains 22. No new
+policy enforcement scope is added; global assertion enforcement follows the
+remaining frontend cleanup.

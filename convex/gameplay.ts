@@ -1,6 +1,8 @@
 import { mutation, query, type MutationCtx } from './_generated/server'
 import type { Id } from './_generated/dataModel'
 import { v } from 'convex/values'
+import { readPublicGameStateNullable, readTimelineStatePatchOptional } from './typeAdapters'
+import { redactHistoryAction, redactHistoryEvents } from './historyPayloads'
 import { authComponent } from './auth.js'
 import type { Action, GameState, PlayerId } from 'risk-engine'
 import { GAME_STATE_SNAPSHOT_INTERVAL, readCurrentPrivateGameState } from './gameState'
@@ -261,42 +263,7 @@ export const resign = mutation({
   },
 })
 
-type RawEvent = Record<string, unknown>
-
 const MAX_HISTORY_WINDOW_ACTIONS = 100
-
-function redactEvents(events: RawEvent[]): RawEvent[] {
-  return events.map((e) => {
-    switch (e.type) {
-      case 'CardDrawn':
-        return { type: e.type, playerId: e.playerId }
-      case 'CardsTraded':
-        return {
-          type: e.type,
-          playerId: e.playerId,
-          value: e.value,
-          tradesCompletedAfter: e.tradesCompletedAfter,
-        }
-      case 'PlayerEliminated':
-        return {
-          type: e.type,
-          eliminatedId: e.eliminatedId,
-          byId: e.byId,
-          cardsTransferredCount: Array.isArray(e.cardsTransferred) ? e.cardsTransferred.length : 0,
-        }
-      default:
-        return e
-    }
-  })
-}
-
-function redactAction(action: Record<string, unknown>): Record<string, unknown> {
-  if (action.type === 'TradeCards') {
-    return { type: action.type }
-  }
-
-  return action
-}
 
 export const getHistorySummary = query({
   args: {
@@ -336,7 +303,7 @@ export const getHistoryWindow = query({
       return {
         latestIndex: latestAction?.index ?? -1,
         snapshotIndex: startSnapshot?.index ?? null,
-        snapshotPublicState: startSnapshot?.publicState ?? null,
+        snapshotPublicState: readPublicGameStateNullable(startSnapshot?.publicState),
         actions: [],
         hasPrevious: false,
       }
@@ -359,7 +326,7 @@ export const getHistoryWindow = query({
       return {
         latestIndex,
         snapshotIndex: startSnapshot?.index ?? null,
-        snapshotPublicState: startSnapshot?.publicState ?? null,
+        snapshotPublicState: readPublicGameStateNullable(startSnapshot?.publicState),
         actions: [],
         hasPrevious: false,
       }
@@ -399,16 +366,16 @@ export const getHistoryWindow = query({
     return {
       latestIndex,
       snapshotIndex,
-      snapshotPublicState: snapshot?.publicState ?? null,
+      snapshotPublicState: readPublicGameStateNullable(snapshot?.publicState),
       actions: actions.map((a) => ({
         _id: a._id,
         _creationTime: a._creationTime,
         gameId: a.gameId,
         index: a.index,
         playerId: a.playerId,
-        action: redactAction(a.action as Record<string, unknown>),
-        events: redactEvents(a.events as RawEvent[]),
-        publicStatePatch: a.publicStatePatch,
+        action: redactHistoryAction(a.action),
+        events: redactHistoryEvents(a.events),
+        publicStatePatch: readTimelineStatePatchOptional(a.publicStatePatch),
         createdAt: a.createdAt,
       })),
       hasPrevious: snapshotIndex > -1,

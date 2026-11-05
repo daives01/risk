@@ -4,7 +4,6 @@ import {
   createEmptyCombatLuckStats,
   createEmptyDiceRollCounts,
   expectedCombatOutcome,
-  type AttackResolved,
   type CombatLuckStats,
   type DiceRollCounts,
   type GameState,
@@ -12,16 +11,55 @@ import {
 import { v } from 'convex/values'
 import type { Id } from './_generated/dataModel'
 import { internalMutation, type MutationCtx } from './_generated/server'
-import {
-  applyTimelineStatePatch,
-  type TimelinePublicState,
-  type TimelineStatePatch,
-} from './historyTimeline'
+import { applyTimelineStatePatch, type TimelinePublicState } from './historyTimeline'
+import { readPublicGameState, readTimelineStatePatch } from './typeAdapters'
 
-function isAttackResolved(event: unknown): event is AttackResolved {
-  return (
-    !!event && typeof event === 'object' && (event as { type?: unknown }).type === 'AttackResolved'
+interface CombatRollEvent {
+  type: 'AttackResolved'
+  to: string
+  attackRolls: number[]
+  defendRolls: number[]
+  attackDice: number
+  defendDice: number
+  attackerLosses: number
+  defenderLosses: number
+}
+
+function isNumberList(value: unknown): value is number[] {
+  if (!Array.isArray(value)) return false
+
+  for (const item of value) {
+    if (typeof item !== 'number') return false
+  }
+
+  return true
+}
+
+function isAttackResolved(event: unknown): event is CombatRollEvent {
+  if (!event || typeof event !== 'object' || !('type' in event) || event.type !== 'AttackResolved')
+    return false
+
+  if (
+    !('to' in event) ||
+    typeof event.to !== 'string' ||
+    !('attackRolls' in event) ||
+    !isNumberList(event.attackRolls) ||
+    !('defendRolls' in event) ||
+    !isNumberList(event.defendRolls) ||
+    !('attackDice' in event) ||
+    typeof event.attackDice !== 'number' ||
+    !('defendDice' in event) ||
+    typeof event.defendDice !== 'number' ||
+    !('attackerLosses' in event) ||
+    typeof event.attackerLosses !== 'number' ||
+    !('defenderLosses' in event) ||
+    typeof event.defenderLosses !== 'number'
   )
+    throw new Error(
+      'Invalid AttackResolved event: expected territory, numeric rolls, dice counts and losses',
+    )
+
+  return true
 }
 
 function addCombatRolls(
@@ -182,7 +220,7 @@ export const backfillGame = internalMutation({
       .order('asc')
       .collect()
 
-    let state = initialSnapshot.publicState as TimelinePublicState
+    let state = readPublicGameState(initialSnapshot.publicState)
 
     for (const action of actions) {
       accumulateFrameGameLuck({
@@ -200,7 +238,7 @@ export const backfillGame = internalMutation({
         )
       }
 
-      state = applyTimelineStatePatch(state, action.publicStatePatch as TimelineStatePatch)
+      state = applyTimelineStatePatch(state, readTimelineStatePatch(action.publicStatePatch))
     }
 
     let attackDice = 0
