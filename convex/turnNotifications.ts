@@ -26,17 +26,15 @@ export const sendTurnNotifications = internalAction({
     email: { sent: boolean; reason?: string }
     slack: { sent: boolean; reason?: string; providerTs?: string | null }
   }> => {
-    const [emailResult, slackResult]: any = await Promise.all([
-      ctx.runAction((internal as any).asyncTurns.sendYourTurnEmail, args).catch((error) => ({
+    const [emailResult, slackResult] = await Promise.all([
+      ctx.runAction(internal.asyncTurns.sendYourTurnEmail, args).catch((error) => ({
         sent: false,
         reason: error instanceof Error ? error.message : String(error),
       })),
-      ctx
-        .runAction((internal as any).slackNotifications.sendYourTurnSlack, args)
-        .catch((error) => ({
-          sent: false,
-          reason: error instanceof Error ? error.message : String(error),
-        })),
+      ctx.runAction(internal.slackNotifications.sendYourTurnSlack, args).catch((error) => ({
+        sent: false,
+        reason: error instanceof Error ? error.message : String(error),
+      })),
     ])
 
     return {

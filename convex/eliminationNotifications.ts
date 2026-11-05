@@ -19,7 +19,7 @@ export const sendEliminationNotifications = internalAction({
     ),
   }),
   handler: async (ctx, args) => {
-    const game = await ctx.runQuery((internal as any).asyncTurns.getGameForNotification, {
+    const game = await ctx.runQuery(internal.asyncTurns.getGameForNotification, {
       gameId: args.gameId,
     })
 
@@ -33,8 +33,7 @@ export const sendEliminationNotifications = internalAction({
       }
     }
 
-    const env =
-      (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
+    const env = globalThis.process?.env ?? {}
 
     const siteUrl = env.SITE_URL ?? 'http://localhost:5173'
     const gameUrl = `${siteUrl}/play/${game._id}`
@@ -55,7 +54,7 @@ export const sendEliminationNotifications = internalAction({
 
         if (!targetPlayer) return { playerId, sent: false, reason: 'target_missing' }
 
-        const settings = await ctx.runQuery((internal as any).asyncTurns.getUserTurnEmailSetting, {
+        const settings = await ctx.runQuery(internal.asyncTurns.getUserTurnEmailSetting, {
           userId: targetPlayer.userId,
         })
 
@@ -73,6 +72,8 @@ export const sendEliminationNotifications = internalAction({
             where: [{ field: '_id', operator: 'eq', value: targetPlayer.userId }],
           }))
 
+        // SAFETY: both adapter lookups select the Better Auth user model, whose schema requires
+        // a string email. The SDK returns any; narrow only the consumed field and nullable row.
         const email = (user as { email?: string | null } | null)?.email?.trim()
 
         if (!email) return { playerId, sent: false, reason: 'email_missing' }
