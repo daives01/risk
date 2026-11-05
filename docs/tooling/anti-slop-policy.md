@@ -619,3 +619,12 @@ runtime-typeof 63 to 71 and unknown parameters 39 to 47; dictionary findings fal
 13 to 10 as unchecked record assertions disappear. Widening remains 22. No new
 policy enforcement scope is added; global assertion enforcement follows the
 remaining frontend cleanup.
+
+### Native pointer contracts
+
+Pointer snapshots retain the browser's string pointer type instead of asserting
+only mouse/touch/pen. Existing controller behavior is unchanged; tests cover
+mouse, pen, empty and vendor values, immediate panning, drag thresholds and click
+suppression. Globe handlers own typed canvas events and capture/release through
+currentTarget. Root checks (605 tests), formatting and audit pass. Assertion
+findings fall 107 to 100; other counts and policy scopes are unchanged.
