@@ -65,6 +65,7 @@ export function resolveActingPlayerFromDocs(args: {
 
   if (requestedPlayerId === args.callerPlayer.enginePlayerId) {
     return {
+      // SAFETY: startGame persists the engine-assigned ID on the caller’s player row; engine action validation handles current legality.
       playerId: args.callerPlayer.enginePlayerId as PlayerId,
       actingUserId: args.callerId,
       wasDelegated: false,
@@ -96,6 +97,7 @@ export function resolveActingPlayerFromDocs(args: {
   }
 
   return {
+    // SAFETY: the target row comes from the game-scoped enginePlayerId lookup; delegation and living turn-owner checks precede this nominal conversion.
     playerId: args.targetPlayer.enginePlayerId as PlayerId,
     actingUserId: args.callerId,
     wasDelegated: true,
@@ -170,6 +172,7 @@ export const submitAction = mutation({
       source: { type: 'user', ...acting },
       intent: {
         type: 'action',
+        // SAFETY: actionValidator checks these seven action shapes and fields; IDs are wire strings whose existence/legality applyAction checks.
         action: args.action as Action,
         expectedVersion: args.expectedVersion,
       },
@@ -246,6 +249,7 @@ export const resign = mutation({
       gameId,
       source: {
         type: 'user',
+        // SAFETY: this game-scoped player row stores the startGame engine ID; the checked state above confirms that player is alive.
         playerId: player.enginePlayerId as PlayerId,
         actingUserId: String(user._id),
         wasDelegated: false,

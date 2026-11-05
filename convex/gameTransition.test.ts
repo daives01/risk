@@ -1,12 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import { convexTest } from 'convex-test'
-import type { GameState, PlayerId, TerritoryId } from 'risk-engine'
+import type { GameState } from 'risk-engine'
+import { playerId, territoryId, eventOfType } from '../packages/risk-engine/src/testing/fixtures'
+import { readGameState } from './typeAdapters'
 import schema from './schema'
 import { internal } from './_generated/api'
 import { executeGameTransition, GameTransitionRejected } from './gameTransition'
 
-const P1 = 'p1' as PlayerId
-const P2 = 'p2' as PlayerId
+const P1 = playerId('p1')
+const P2 = playerId('p2')
 
 function state(phase: 'Reinforcement' | 'Attack' = 'Attack'): GameState {
   const initial: GameState = {
@@ -100,16 +102,17 @@ async function seed(phase: 'Reinforcement' | 'Attack' = 'Attack') {
 describe('Game Transition transaction', () => {
   test('attributes attack and defense dice to Engine Players, including delegated actions', async () => {
     const { t, gameId } = await seed()
-    await t.mutation((ctx) =>
-      executeGameTransition(ctx as any, {
+
+    const transition = await t.mutation((ctx) =>
+      executeGameTransition(ctx, {
         gameId,
         source: { type: 'user', playerId: P1, actingUserId: 'teammate-user', wasDelegated: true },
         intent: {
           type: 'action',
           action: {
             type: 'Attack',
-            from: 't1' as TerritoryId,
-            to: 't2' as TerritoryId,
+            from: territoryId('t1'),
+            to: territoryId('t2'),
             attackerDice: 2,
           },
           expectedVersion: 7,
@@ -125,9 +128,12 @@ describe('Game Transition transaction', () => {
       return { frame, players }
     })
 
-    const event = (
-      result.frame?.events as Array<{ type: string; attackRolls: number[]; defendRolls: number[] }>
-    ).find((candidate) => candidate.type === 'AttackResolved')!
+    expect(result.frame?.events).toEqual(transition.events)
+
+    const event = eventOfType(
+      transition.events.find((candidate) => candidate.type === 'AttackResolved'),
+      'AttackResolved',
+    )
 
     const attacker = result.players.find((player) => player.enginePlayerId === P1)!
     const defender = result.players.find((player) => player.enginePlayerId === P2)!
@@ -167,7 +173,7 @@ describe('Game Transition transaction', () => {
     const { t, gameId } = await seed()
 
     const result = await t.mutation((ctx) =>
-      executeGameTransition(ctx as any, {
+      executeGameTransition(ctx, {
         gameId,
         source: { type: 'user', playerId: P1, actingUserId: 'user-1', wasDelegated: false },
         intent: { type: 'action', action: { type: 'EndAttackPhase' }, expectedVersion: 7 },
@@ -195,7 +201,7 @@ describe('Game Transition transaction', () => {
       stateVersion: 8,
       turn: { phase: 'Fortify' },
     })
-    expect((persisted.current?.privateState as GameState).turn.phase).toBe('Fortify')
+    expect(readGameState(persisted.current?.privateState).turn.phase).toBe('Fortify')
   })
 
   test('User transitions cancel the owned timeout job without adding completion fields', async () => {
@@ -244,7 +250,7 @@ describe('Game Transition transaction', () => {
   test('keeps a reinforcement batch as one delegated History Frame', async () => {
     const { t, gameId } = await seed('Reinforcement')
     await t.mutation((ctx) =>
-      executeGameTransition(ctx as any, {
+      executeGameTransition(ctx, {
         gameId,
         source: { type: 'user', playerId: P1, actingUserId: 'teammate-user', wasDelegated: true },
         intent: {
@@ -299,7 +305,7 @@ describe('Game Transition transaction', () => {
     )
 
     const result = await t.mutation((ctx) =>
-      executeGameTransition(ctx as any, {
+      executeGameTransition(ctx, {
         gameId,
         source: { type: 'system_timeout', playerId: P1 },
         intent: {
@@ -345,7 +351,7 @@ describe('Game Transition transaction', () => {
     ).toBe(true)
     expect(persisted.frames[0]?.events).toContainEqual({ type: 'TurnTimedOut', playerId: P1 })
     expect(persisted.snapshots).toHaveLength(1)
-    expect((persisted.current?.privateState as GameState).rng.index).toBe(3)
+    expect(readGameState(persisted.current?.privateState).rng.index).toBe(3)
     expect(persisted.scheduled.map((job) => job.name)).toContain('asyncTurns:processExpiredTurn')
     expect(persisted.scheduled.map((job) => job.name)).toContain(
       'turnNotifications:sendTurnNotifications',
@@ -355,7 +361,7 @@ describe('Game Transition transaction', () => {
   test('a non-current Engine Player can resign and persist completion and winner fields', async () => {
     const { t, gameId } = await seed()
     await t.mutation((ctx) =>
-      executeGameTransition(ctx as any, {
+      executeGameTransition(ctx, {
         gameId,
         source: { type: 'user', playerId: P2, actingUserId: 'user-2', wasDelegated: false },
         intent: { type: 'resign' },
@@ -440,7 +446,7 @@ describe('Game Transition transaction', () => {
 
     try {
       await t.mutation((ctx) =>
-        executeGameTransition(ctx as any, {
+        executeGameTransition(ctx, {
           gameId,
           source: { type: 'system_timeout', playerId: P1 },
           intent: { type: 'timeout', expectedPlayerId: P1, expectedTurnStartedAt: 99 },
@@ -451,7 +457,10 @@ describe('Game Transition transaction', () => {
       rejection = error
     }
 
-    expect((rejection as GameTransitionRejected).reason).toBe('stale_timeout')
+    if (!(rejection instanceof GameTransitionRejected))
+      throw new Error('Expected transition rejection')
+
+    expect(rejection.reason).toBe('stale_timeout')
     expect(await t.run((ctx) => ctx.db.query('gameActions').collect())).toEqual([])
   })
 
@@ -470,7 +479,7 @@ describe('Game Transition transaction', () => {
       }),
     )
     await t.mutation((ctx) =>
-      executeGameTransition(ctx as any, {
+      executeGameTransition(ctx, {
         gameId,
         source: { type: 'user', playerId: P1, actingUserId: 'user-1', wasDelegated: false },
         intent: { type: 'action', action: { type: 'EndAttackPhase' }, expectedVersion: 7 },
@@ -496,7 +505,7 @@ describe('Game Transition transaction', () => {
 
     try {
       await t.mutation((ctx) =>
-        executeGameTransition(ctx as any, {
+        executeGameTransition(ctx, {
           gameId,
           source: { type: 'user', playerId: P1, actingUserId: 'user-1', wasDelegated: false },
           intent: { type: 'action', action: { type: 'EndAttackPhase' }, expectedVersion: 6 },
@@ -508,7 +517,11 @@ describe('Game Transition transaction', () => {
     }
 
     expect(rejection).toBeInstanceOf(GameTransitionRejected)
-    expect((rejection as GameTransitionRejected).reason).toBe('stale_version')
+
+    if (!(rejection instanceof GameTransitionRejected))
+      throw new Error('Expected transition rejection')
+
+    expect(rejection.reason).toBe('stale_version')
 
     const persisted = await t.run(async (ctx) => ({
       frames: await ctx.db.query('gameActions').collect(),
