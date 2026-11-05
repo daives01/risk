@@ -4,12 +4,7 @@ import { useConvexAuth, useQuery } from 'convex/react'
 import { api } from '@backend/_generated/api'
 import { authClient } from '@/lib/auth-client'
 import { useHomeKeyboardShortcuts } from '@/pages/home/useHomeKeyboardShortcuts'
-import type {
-  HomeTab,
-  GamesFilter,
-  MyGame as MyGameType,
-  PublicGame as PublicGameType,
-} from '@/pages/home/types'
+import type { HomeTab, GamesFilter, MyGame as MyGameType } from '@/pages/home/types'
 import { gameRecency, isMyTurn, PAGE_SIZE } from '@/pages/home/types'
 
 export function useHomePageState() {
@@ -19,14 +14,9 @@ export function useHomePageState() {
   const { isLoading: isConvexAuthLoading, isAuthenticated: isConvexAuthenticated } = useConvexAuth()
   const isAuthenticated = Boolean(session) && isConvexAuthenticated
 
-  const games = useQuery(api.games.listMyGames, isAuthenticated ? {} : 'skip') as
-    | MyGameType[]
-    | undefined
+  const games = useQuery(api.games.listMyGames, isAuthenticated ? {} : 'skip')
 
-  const publicGames = useQuery(
-    api.games.listPublicGames,
-    isAuthenticated ? { limit: 24 } : 'skip',
-  ) as PublicGameType[] | undefined
+  const publicGames = useQuery(api.games.listPublicGames, isAuthenticated ? { limit: 24 } : 'skip')
 
   const isAdmin = useQuery(api.adminMaps.isCurrentUserAdmin, isAuthenticated ? {} : 'skip')
 

@@ -69,8 +69,10 @@ function hasBoardPatch(patch: TimelineStatePatch) {
   return Object.keys(patch.territories ?? {}).length > 0
 }
 
-function hasVisibleReplayEvent(events: Array<{ type: string; [key: string]: unknown }>) {
-  return events.some((event) => VISIBLE_REPLAY_EVENT_TYPES.has(event.type))
+function hasVisibleReplayEvent(events: Record<string, unknown>[]) {
+  return events.some(
+    (event) => typeof event.type === 'string' && VISIBLE_REPLAY_EVENT_TYPES.has(event.type),
+  )
 }
 
 export function isVisibleReplayAction(action: HistoryWindow['actions'][number]) {

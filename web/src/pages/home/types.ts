@@ -1,27 +1,15 @@
+import type { FunctionReturnType } from 'convex/server'
+import type { api } from '@backend/_generated/api'
+
 export const PAGE_SIZE = 5
 
 export type HomeTab = 'home' | 'archive' | 'account'
 
 export type GamesFilter = 'active' | 'lobby' | 'public'
 
-export type MyGame = {
-  _id: string
-  name: string
-  status: 'lobby' | 'active' | 'finished'
-  result: 'won' | 'lost' | null
-  createdAt: number
-  startedAt: number | null
-  finishedAt: number | null
-  myEnginePlayerId: string | null
-  currentTurnPlayerId: string | null
-}
+export type MyGame = FunctionReturnType<typeof api.games.listMyGames>[number]
 
-export type PublicGame = {
-  _id: string
-  name: string
-  status: 'lobby' | 'active' | 'finished'
-  createdAt: number
-}
+export type PublicGame = FunctionReturnType<typeof api.games.listPublicGames>[number]
 
 export type FilteredGame = {
   _id: string

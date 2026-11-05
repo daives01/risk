@@ -1,7 +1,6 @@
 import { useQuery } from 'convex/react'
 import { api } from '@backend/_generated/api'
 import type { Id } from '@backend/_generated/dataModel'
-import type { ChatMessage } from '@/lib/game/types'
 
 export function useGameViewQueries(
   hasSession: boolean,
@@ -39,7 +38,7 @@ export function useGameRuntimeQueries(
           limit: 60,
         }
       : 'skip',
-  ) as ChatMessage[] | undefined
+  )
 
   return {
     mapDoc,
