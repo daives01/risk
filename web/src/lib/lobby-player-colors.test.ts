@@ -1,7 +1,11 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test'
 import { PLAYER_COLOR_PALETTE } from 'risk-engine'
-import { canEditLobbyPlayerColor, getLobbyColorOptions } from './lobby-player-colors'
+import {
+  getLobbyPlayerColorLabel,
+  canEditLobbyPlayerColor,
+  getLobbyColorOptions,
+} from './lobby-player-colors'
 
 describe('lobby player color UI helpers', () => {
   test('orders options from cool to warm for lobby scanning', () => {
@@ -60,4 +64,12 @@ describe('lobby player color UI helpers', () => {
     expect(pendingTaken?.disabled).toBe(true)
     expect(previouslyTaken?.disabled).toBe(false)
   })
+})
+
+test('color labels preserve unknown colors without inherited object properties', () => {
+  expect(getLobbyPlayerColorLabel('#08008a')).toBe('Navy')
+
+  for (const color of ['#unknown', 'constructor', '__proto__', 'toString']) {
+    expect(getLobbyPlayerColorLabel(color)).toBe(color)
+  }
 })

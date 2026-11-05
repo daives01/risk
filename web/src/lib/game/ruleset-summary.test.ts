@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { formatCardIncrementLabel, resolveCardIncrementPresetKey } from './ruleset-summary'
+import {
+  CARD_INCREMENT_PRESET_ENTRIES,
+  CARD_INCREMENT_PRESETS,
+  formatCardIncrementLabel,
+  resolveCardIncrementPresetKey,
+} from './ruleset-summary'
 
 describe('ruleset summary', () => {
   test('recognizes the capped card increment preset', () => {
@@ -16,4 +21,18 @@ describe('ruleset summary', () => {
       '4, 6, 8, 10, 12, 20 then +5',
     )
   })
+})
+
+test('card increment choices preserve their display order and matching schedules', () => {
+  expect(CARD_INCREMENT_PRESET_ENTRIES.map(([key]) => key)).toEqual([
+    'classic',
+    'flat',
+    'fast',
+    'capped',
+  ])
+
+  for (const [key, preset] of CARD_INCREMENT_PRESET_ENTRIES) {
+    expect(preset).toBe(CARD_INCREMENT_PRESETS[key])
+    expect(resolveCardIncrementPresetKey(preset.tradeValues, preset.tradeValueOverflow)).toBe(key)
+  }
 })

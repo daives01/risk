@@ -70,3 +70,7 @@ export function getLobbyColorOptions(
     disabled: takenByOthers.has(color),
   }))
 }
+
+export function getLobbyPlayerColorLabel(color: string): string {
+  return Object.entries(PLAYER_COLOR_NAME_BY_HEX).find(([hex]) => hex === color)?.[1] ?? color
+}

@@ -25,9 +25,11 @@ export type CardIncrementPresetKey = keyof typeof CARD_INCREMENT_PRESETS
 
 export type CardIncrementPreset = (typeof CARD_INCREMENT_PRESETS)[CardIncrementPresetKey]
 
-export const CARD_INCREMENT_PRESET_ENTRIES = Object.entries(CARD_INCREMENT_PRESETS) as Array<
-  [CardIncrementPresetKey, CardIncrementPreset]
->
+const CARD_INCREMENT_PRESET_KEYS = ['classic', 'flat', 'fast', 'capped'] as const
+
+export const CARD_INCREMENT_PRESET_ENTRIES = CARD_INCREMENT_PRESET_KEYS.map(
+  (key): [CardIncrementPresetKey, CardIncrementPreset] => [key, CARD_INCREMENT_PRESETS[key]],
+)
 
 function findMatchingCardIncrementPreset(
   tradeValues: readonly number[],
