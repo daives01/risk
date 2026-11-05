@@ -73,7 +73,7 @@ export function validateMap(map: GraphMap): MapValidationResult {
       // Symmetry: if A->B then B->A
       const reverseNeighbors = map.adjacency[neighbor]
 
-      if (!reverseNeighbors || !reverseNeighbors.includes(id as TerritoryId)) {
+      if (!reverseNeighbors || !reverseNeighbors.some((reverseId) => reverseId === id)) {
         errors.push(
           `Adjacency is not symmetric: "${id}" -> "${neighbor}" but not "${neighbor}" -> "${id}"`,
         )

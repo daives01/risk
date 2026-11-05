@@ -268,3 +268,32 @@ role. There is no current symbol to rename, and introducing mechanical aliases
 or banning valid geometry vocabulary would add no evidence. No disable or
 customized vendor implementation hides the rule. Reconsider only a policy that
 distinguishes vague catch-all names from meaningful geometric terminology.
+
+## Assertion evidence: engine production
+
+Step 11 begins with production engine code only. Its assertion-comment findings
+are 11 → 0; global findings are 491 → 480. The rule remains audit-only while
+engine test fixtures, map assets, backend and frontend assertions are reviewed
+in separate bounded changes. No normal severity or scope override is added.
+
+Two legal-action trade-set casts were redundant because `findValidTradeSets`
+already returns branded card arrays. The resignation empty hand now uses the
+owning `GameState["hands"]` contract. Reinforcement counting stores territory
+keys as strings because its only consumers are counting and string-set
+membership; it no longer fabricates a brand that those consumers do not need.
+
+Three non-const assertions remain in the touched production files, each with a
+specific invariant. A private legal-action helper brands only existing own keys
+from the same state's territory dictionary and preserves `Object.keys` order;
+it is not a public trust-string API or a claim of validation of external data.
+The two deck-creation casts brand generated IDs registered under their exact
+keys in `cardsById`: non-negative territory indices use `card_<number>`, and
+unique wild indices use the disjoint `card_w<number>` namespace.
+
+Map symmetry validation now compares an existing reverse-neighbor string with
+the candidate key directly. An invalid adjacency key can still participate in
+a symmetry check; it must not be branded on a false claim that membership was
+already established. Regression coverage checks exact unknown-key/asymmetry
+errors and confirms that a reverse edge does not erase invalid membership
+errors. Existing deterministic engine, action-order, card and resignation
+suites continue to pass; no gameplay rule or external contract is changed.

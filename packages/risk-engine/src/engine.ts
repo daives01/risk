@@ -1010,7 +1010,7 @@ function handleResign(
   )
 
   const cards = state.hands[playerId] ?? []
-  const hands = { ...state.hands, [playerId]: [] as readonly CardId[] }
+  const hands: GameState['hands'] = { ...state.hands, [playerId]: [] }
   const deck = { ...state.deck, discard: [...state.deck.discard, ...cards] }
   const winner = resolveWinner(players, state.turnOrder, teamsConfig)
 
