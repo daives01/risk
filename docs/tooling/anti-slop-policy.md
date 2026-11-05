@@ -328,3 +328,15 @@ production project excluded tests. The full root check passes, including 557
 tests and production builds; formatting and the fresh audit pass as well. No
 unchecked event assertions, action any casts, or undocumented engine assertions
 remain.
+
+## Assertion evidence: authored map
+
+The authored classic map's two private nominal helpers now document their
+actual inputs: literals maintained inside that map module. Neither helper is
+exported or parses external strings. Existing validation checks adjacency and
+continent territory references; an added integrity test also checks that each
+territory's declared continent exists and includes it. These are concrete data
+invariants, not a generic trust-string API. The map data and helper behavior are
+unchanged. Map assertion-comment findings are 2 → 0; global findings are
+247 → 245. Maps remain audit-only until global assertion enforcement follows the
+remaining backend/frontend cleanup; no temporary map override is added.

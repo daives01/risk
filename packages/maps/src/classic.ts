@@ -1,6 +1,11 @@
 import type { ContinentId, GraphMap, TerritoryId } from 'risk-engine'
 
+// SAFETY: This private helper labels only authored territory literals below; map tests
+// validate adjacency and continent references against this map's territory keys.
 const t = (id: string) => id as TerritoryId
+
+// SAFETY: This private helper labels authored continent keys below; map tests check
+// each territory's declared continent exists and includes that territory.
 const c = (id: string) => id as ContinentId
 
 /**
