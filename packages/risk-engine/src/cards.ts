@@ -26,6 +26,8 @@ export function createDeck(
   // Generate one card per territory, cycling through kinds
   for (let i = 0; i < territories.length; i++) {
     const kind = config.kinds[i % config.kinds.length]!
+    // SAFETY: i is this deck's unique non-negative territory index. The generated
+    // card_<index> ID is registered under the same key in cardsById below.
     const id = `card_${i}` as CardId
     cardIds.push(id)
     cardsById[id] = config.territoryLinked ? { kind, territoryId: territories[i] } : { kind }
@@ -33,6 +35,8 @@ export function createDeck(
 
   // Append wild cards
   for (let i = 0; i < config.wildCount; i++) {
+    // SAFETY: Wild-card indices are unique within this deck and use the card_w
+    // namespace, disjoint from card_<number>; each generated ID is registered below.
     const id = `card_w${i}` as CardId
     cardIds.push(id)
     cardsById[id] = { kind: 'W' }

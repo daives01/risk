@@ -3,6 +3,12 @@ import type { GraphMap } from './map.js'
 import type { CombatConfig, CardsConfig, FortifyConfig, TeamsConfig } from './config.js'
 import { canPlace, canAttack, canFortifyFrom, canFortifyTo, canTraverse } from './permissions.js'
 
+function stateTerritoryIds(state: GameState): TerritoryId[] {
+  // SAFETY: Each result is an own key of this engine state's territory dictionary, so
+  // generated action IDs refer to that same state. Object.keys enumeration order is retained.
+  return Object.keys(state.territories) as TerritoryId[]
+}
+
 // ── Trade set helpers (duplicated from engine.ts to avoid circular deps) ──
 
 function isValidTradeSet(
@@ -151,13 +157,13 @@ function getReinforcementActions(
     const validSets = findValidTradeSets(hand, state.cardsById, config.cards.tradeSets)
 
     for (const cardIds of validSets) {
-      actions.push({ type: 'TradeCards', cardIds: cardIds as CardId[] })
+      actions.push({ type: 'TradeCards', cardIds })
     }
   }
 
   // PlaceReinforcements: one per valid territory (if not forced to trade first)
   if (!mustTrade && remaining > 0) {
-    const territoryIds = Object.keys(state.territories) as TerritoryId[]
+    const territoryIds = stateTerritoryIds(state)
 
     for (const tid of territoryIds) {
       const territory = state.territories[tid]!
@@ -193,7 +199,7 @@ function getAttackActions(
       const validSets = findValidTradeSets(hand, state.cardsById, config.cards.tradeSets)
 
       for (const cardIds of validSets) {
-        actions.push({ type: 'TradeCards', cardIds: cardIds as CardId[] })
+        actions.push({ type: 'TradeCards', cardIds })
       }
     }
 
@@ -202,7 +208,7 @@ function getAttackActions(
 
   // If attack-phase trade armies are pending placement, only placement actions are legal.
   if (remaining > 0) {
-    const territoryIds = Object.keys(state.territories) as TerritoryId[]
+    const territoryIds = stateTerritoryIds(state)
 
     for (const tid of territoryIds) {
       const territory = state.territories[tid]!
@@ -220,7 +226,7 @@ function getAttackActions(
 
   // Attack: for each owned territory with >= 2 armies, for each adjacent attackable target
   const { map, combat, teams } = config
-  const territoryIds = Object.keys(state.territories) as TerritoryId[]
+  const territoryIds = stateTerritoryIds(state)
 
   for (const fromId of territoryIds) {
     const from = state.territories[fromId]!
@@ -287,7 +293,7 @@ function getFortifyActions(
     return actions
   }
 
-  const territoryIds = Object.keys(state.territories) as TerritoryId[]
+  const territoryIds = stateTerritoryIds(state)
 
   // Collect valid "from" territories (owned/team, >= 2 armies)
   const validFromIds: TerritoryId[] = []

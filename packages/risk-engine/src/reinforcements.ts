@@ -22,11 +22,11 @@ export function calculateReinforcements(
   turnOrder?: readonly PlayerId[],
 ): ReinforcementResult {
   // Count territories owned by this player
-  const ownedTerritories: TerritoryId[] = []
+  const ownedTerritories: string[] = []
 
   for (const [tid, ts] of Object.entries(state.territories)) {
     if (ts.ownerId === playerId) {
-      ownedTerritories.push(tid as TerritoryId)
+      ownedTerritories.push(tid)
     }
   }
 

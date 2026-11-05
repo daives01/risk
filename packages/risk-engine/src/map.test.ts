@@ -66,7 +66,24 @@ describe('validateMap', () => {
 
     const result = validateMap(map)
     expect(result.valid).toBe(false)
-    expect(result.errors.some((e) => e.includes('"Z"'))).toBe(true)
+    expect(result.errors).toEqual([
+      'Adjacency references unknown territory "Z"',
+      'Adjacency is not symmetric: "Z" -> "A" but not "A" -> "Z"',
+    ])
+  })
+
+  test('reports invalid adjacency membership independently of reverse-edge symmetry', () => {
+    const map: GraphMap = {
+      territories: { A: {} },
+      adjacency: { A: [t('Z')], Z: [t('A')] },
+    }
+
+    const result = validateMap(map)
+    expect(result.valid).toBe(false)
+    expect(result.errors).toEqual([
+      'Adjacency references unknown territory "Z"',
+      'Territory "A" is adjacent to unknown territory "Z"',
+    ])
   })
 
   test('rejects adjacency target that does not exist', () => {
