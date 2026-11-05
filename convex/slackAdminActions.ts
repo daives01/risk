@@ -3,19 +3,13 @@
 import { action } from './_generated/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
+import { readSlackAuthTestResponse, type SlackAuthTestResponse } from './slackResponses'
 import { requireAdminAction } from './adminAuth'
 import { encryptSlackBotToken, readEncryptionKeyFromEnv } from './slackCrypto'
 import { normalizeChannelId, normalizeTeamId } from './slackValidation'
 
 const SLACK_AUTH_TEST_URL = 'https://slack.com/api/auth.test'
 const CURRENT_KEY_VERSION = 1
-
-type SlackAuthTestResponse = {
-  ok: boolean
-  error?: string
-  team?: string
-  team_id?: string
-}
 
 async function verifySlackBotToken(token: string): Promise<SlackAuthTestResponse> {
   const response = await fetch(SLACK_AUTH_TEST_URL, {
@@ -27,11 +21,13 @@ async function verifySlackBotToken(token: string): Promise<SlackAuthTestResponse
     body: '',
   })
 
-  const data = (await response.json()) as SlackAuthTestResponse
+  const body: unknown = await response.json()
 
   if (!response.ok) {
     throw new Error(`Slack auth.test failed with HTTP ${response.status}`)
   }
+
+  const data = readSlackAuthTestResponse(body)
 
   if (!data.ok) {
     throw new Error(`Slack token validation failed: ${data.error ?? 'unknown_error'}`)
@@ -41,9 +37,7 @@ async function verifySlackBotToken(token: string): Promise<SlackAuthTestResponse
 }
 
 function envRecord(): Record<string, string | undefined> {
-  return (
-    (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}
-  )
+  return globalThis.process?.env ?? {}
 }
 
 export const createWorkspace = action({
@@ -53,7 +47,7 @@ export const createWorkspace = action({
     botToken: v.string(),
   },
   handler: async (ctx, args) => {
-    const installedByUserId = await requireAdminAction(ctx as any)
+    const installedByUserId = await requireAdminAction(ctx)
     const normalizedChannelId = normalizeChannelId(args.defaultChannelId)
     const token = args.botToken.trim()
 
@@ -89,7 +83,7 @@ export const rotateWorkspaceToken = action({
     botToken: v.string(),
   },
   handler: async (ctx, args) => {
-    const installedByUserId = await requireAdminAction(ctx as any)
+    const installedByUserId = await requireAdminAction(ctx)
     const normalizedTeamId = normalizeTeamId(args.teamId)
     const token = args.botToken.trim()
 

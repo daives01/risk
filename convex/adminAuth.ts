@@ -1,4 +1,4 @@
-import { internalQuery } from './_generated/server'
+import { internalQuery, type ActionCtx } from './_generated/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
 import { authComponent } from './auth.js'
@@ -32,14 +32,14 @@ export const isUserAdminById = internalQuery({
   },
 })
 
-export async function requireAdminAction(ctx: any) {
+export async function requireAdminAction(ctx: ActionCtx) {
   const user = await authComponent.safeGetAuthUser(ctx)
 
   if (!user) throw new Error('Not authenticated')
 
   const userId = String(user._id)
 
-  const isAdmin = await ctx.runQuery((internal as any).adminAuth.isUserAdminById, {
+  const isAdmin = await ctx.runQuery(internal.adminAuth.isUserAdminById, {
     userId,
   })
 
