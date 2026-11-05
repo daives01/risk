@@ -3,16 +3,11 @@
 import { internalAction } from './_generated/server'
 import { v } from 'convex/values'
 import { internal } from './_generated/api'
+import { readSlackPostMessageResponse } from './slackResponses'
 import { buildSlackTurnMessage } from './slackMessage'
 import { decryptSlackBotToken, readEncryptionKeyFromEnv } from './slackCrypto'
 
 const MAX_SLACK_ATTEMPTS = 3
-
-type SlackPostMessageResponse = {
-  ok: boolean
-  error?: string
-  ts?: string
-}
 
 type SlackErrorCategory = 'disable_workspace' | 'skip' | 'retry' | 'unknown'
 
@@ -93,7 +88,7 @@ async function postSlackMessageWithRetry(args: {
       continue
     }
 
-    const payload = (await response.json()) as SlackPostMessageResponse
+    const payload = readSlackPostMessageResponse(await response.json())
 
     if (response.ok && payload.ok) {
       console.info(

@@ -478,3 +478,26 @@ Root checks (567 tests), formatting verification and full audit pass. No deliver
 retry, recipient, URL, catch, or concurrency behavior changes. Slack HTTP response
 parsing and timeout player-ID assertions remain separate tracked boundaries.
 Other audit counts and enforcement scopes are unchanged.
+
+### Slack HTTP response and admin-action boundaries
+
+Slack auth.test and chat.postMessage response bodies now pass checked readers
+instead of unchecked assertions. Readers require a boolean `ok` and validate
+only consumed optional string fields (`error`, `team`, `team_id`, `ts`). They
+preserve identity, extra fields, absent versus explicit undefined properties,
+and empty strings; they impose no timestamp formatting or workspace membership
+claim. Malformed envelopes or consumed fields now throw an explicit response
+error rather than flowing into delivery or credential decisions.
+
+Auth JSON decoding still precedes the HTTP check, and HTTP errors retain priority
+over shape validation. The existing chat HTTP 429 branch precedes decoding;
+retry/error classification and valid-response behavior are unchanged. Tests cover
+success/failure envelopes, malformed primitive/array/null bodies and fields,
+optional presence, identity, extras, and immutability without network requests.
+Admin actions use the real action context and generated admin-query reference;
+environment casts are removed without changing authorization or token handling.
+
+Root checks (571 tests), formatting verification, and full audit pass. Assertion
+findings fall 208 to 202. Honest boundary checks raise deferred runtime-typeof
+findings 62 to 68 and unknown-parameter findings 37 to 39. Other counts and
+policy enforcement scopes are unchanged.
