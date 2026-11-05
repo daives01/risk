@@ -8,11 +8,12 @@ import {
   createRng,
   type Action,
   type GameState,
+  type GameEvent,
   type PlayerId,
   type RulesetConfig,
   type TerritoryId,
 } from 'risk-engine'
-import { resolveEffectiveRuleset, type RulesetOverrides } from './rulesets'
+import { resolveEffectiveRuleset } from './rulesets'
 import { readGraphMap } from './typeAdapters'
 import {
   insertGameStateSnapshotIfMissing,
@@ -22,7 +23,7 @@ import {
 } from './gameState'
 import { buildTimelineStatePatch } from './historyTimeline'
 import { resolveTurnTimingPatch } from './gameplayTiming'
-import { isAsyncTimingMode, type GameTimingMode } from './gameTiming'
+import { isAsyncTimingMode } from './gameTiming'
 import { scheduleTurnTimeout } from './turnTimeoutScheduling'
 import { persistFrameGameLuck } from './gameLuck'
 
@@ -70,7 +71,7 @@ type GameTransitionHistoryFrame = {
         type: 'PlaceReinforcementsBatch'
         placements: readonly { territoryId: string; count: number }[]
       }
-  events: readonly unknown[]
+  events: readonly GameEvent[]
   beforeState: GameState
   afterState: GameState
 }
@@ -128,6 +129,7 @@ export function applyTimeoutPolicy(args: {
     const allocations = new Map<TerritoryId, number>()
 
     for (let count = 0; count < remaining; count += 1) {
+      // SAFETY: owned contains keys from this checked state; nonempty allocation uses the RNG’s bounded index.
       const id = owned[rng.nextInt(0, owned.length - 1)] as TerritoryId
       allocations.set(id, (allocations.get(id) ?? 0) + 1)
     }
@@ -152,17 +154,14 @@ export function applyTimeoutPolicy(args: {
   return historyFrames.length > 0 ? historyFrames : null
 }
 
-function winnerFrom(events: readonly unknown[]) {
-  const event = events.find(
-    (value) =>
-      value && typeof value === 'object' && (value as { type?: string }).type === 'GameEnded',
-  ) as { winningPlayerId?: unknown; winningTeamId?: unknown } | undefined
+function winnerFrom(events: readonly GameEvent[]) {
+  const event = events.find((value) => value.type === 'GameEnded')
 
   const winner: Partial<Pick<Doc<'games'>, 'winningPlayerId' | 'winningTeamId'>> = {}
 
-  if (typeof event?.winningPlayerId === 'string') winner.winningPlayerId = event.winningPlayerId
+  if (event?.winningPlayerId !== undefined) winner.winningPlayerId = event.winningPlayerId
 
-  if (typeof event?.winningTeamId === 'string') winner.winningTeamId = event.winningTeamId
+  if (event?.winningTeamId !== undefined) winner.winningTeamId = event.winningTeamId
 
   return winner
 }
@@ -193,7 +192,7 @@ export async function executeGameTransition(
 
     if (
       args.source.type !== 'system_timeout' ||
-      !isAsyncTimingMode((game.timingMode ?? 'realtime') as GameTimingMode) ||
+      !isAsyncTimingMode(game.timingMode ?? 'realtime') ||
       !game.turnDeadlineAt ||
       game.turnDeadlineAt > now ||
       game.turnStartedAt !== args.intent.expectedTurnStartedAt
@@ -207,7 +206,7 @@ export async function executeGameTransition(
   } else {
     if (
       args.intent.type !== 'resign' &&
-      isAsyncTimingMode((game.timingMode ?? 'realtime') as GameTimingMode) &&
+      isAsyncTimingMode(game.timingMode ?? 'realtime') &&
       game.turnDeadlineAt &&
       now > game.turnDeadlineAt
     ) {
@@ -235,8 +234,8 @@ export async function executeGameTransition(
 
   const ruleset = resolveEffectiveRuleset({
     teamModeEnabled: game.teamModeEnabled,
-    rulesetOverrides: game.rulesetOverrides as RulesetOverrides | undefined,
-    effectiveRuleset: game.effectiveRuleset as RulesetConfig | undefined,
+    rulesetOverrides: game.rulesetOverrides,
+    effectiveRuleset: game.effectiveRuleset,
   })
 
   let historyFrames: GameTransitionHistoryFrame[] | null = null
@@ -252,7 +251,7 @@ export async function executeGameTransition(
     } else if (args.intent.type === 'reinforcement_batch') {
       if (args.intent.placements.length === 0) throw new ActionError('No placements to submit')
       let working = state
-      const events: unknown[] = []
+      const events: GameEvent[] = []
 
       for (const placement of args.intent.placements) {
         const count = Math.trunc(placement.count)
@@ -265,6 +264,7 @@ export async function executeGameTransition(
           args.source.playerId,
           {
             type: 'PlaceReinforcements',
+            // SAFETY: wire territory IDs are strings; applyAction checks existence and placement legality.
             territoryId: placement.territoryId as TerritoryId,
             count,
           },
@@ -325,7 +325,7 @@ export async function executeGameTransition(
   for (let offset = 0; offset < historyFrames.length; offset += 1) {
     const frame = historyFrames[offset]!
 
-    const events =
+    const events: readonly (GameEvent | { type: 'TurnTimedOut'; playerId: PlayerId })[] =
       args.intent.type === 'timeout' && offset === 0
         ? [{ type: 'TurnTimedOut', playerId: args.source.playerId }, ...frame.events]
         : frame.events
@@ -370,7 +370,7 @@ export async function executeGameTransition(
   const allEvents = historyFrames.flatMap((frame) => [...frame.events])
 
   const timing = resolveTurnTimingPatch({
-    timingMode: (game.timingMode ?? 'realtime') as GameTimingMode,
+    timingMode: game.timingMode ?? 'realtime',
     excludeWeekends: game.excludeWeekends ?? false,
     previousState: state,
     nextState,
@@ -418,20 +418,14 @@ export async function executeGameTransition(
   await ctx.db.patch(args.gameId, gamePatch)
 
   if (timing.shouldNotify && timing.turnStartedAt) {
-    await ctx.scheduler.runAfter(0, (internal as any).turnNotifications.sendTurnNotifications, {
+    await ctx.scheduler.runAfter(0, internal.turnNotifications.sendTurnNotifications, {
       gameId: args.gameId,
       expectedPlayerId: nextState.turn.currentPlayerId,
       turnStartedAt: timing.turnStartedAt,
     })
   }
 
-  const eliminated = allEvents.filter(
-    (event): event is { eliminatedId: string; byId?: string } =>
-      !!event &&
-      typeof event === 'object' &&
-      (event as { type?: string }).type === 'PlayerEliminated' &&
-      typeof (event as { eliminatedId?: unknown }).eliminatedId === 'string',
-  )
+  const eliminated = allEvents.filter((event) => event.type === 'PlayerEliminated')
 
   if (eliminated.length > 0) {
     const notificationArgs: FunctionArgs<

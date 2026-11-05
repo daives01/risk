@@ -501,3 +501,27 @@ Root checks (571 tests), formatting verification, and full audit pass. Assertion
 findings fall 208 to 202. Honest boundary checks raise deferred runtime-typeof
 findings 62 to 68 and unknown-parameter findings 37 to 39. Other counts and
 policy enforcement scopes are unchanged.
+
+### Current transition event ownership and timeout inputs
+
+Current transition History Frame events retain the engine's `GameEvent` union:
+all producers are `applyAction` results, including timeout and reinforcement
+batch accumulation. Winner and elimination selection now discriminate that union
+instead of widening to unknown and recovering it through assertions. The stored
+first-timeout marker has its own local `TurnTimedOut` variant; it remains excluded
+from returned engine events as before. No persisted or redacted historical input
+is relabeled as an engine event.
+
+Schema-proven timing/ruleset and generated scheduler-reference casts are removed.
+Remaining nominal territory assertions explain their actual boundaries: owned
+checked-state keys selected by a bounded RNG, or wire strings whose existence and
+placement legality the engine checks. The timeout mutation uses the actual context
+and one nominal player conversion; current-player/staleness checks precede engine
+actions. Two new tests verify unknown wire territory and mismatched scheduled
+player rejection without History Frame or state writes. Existing transition tests
+cover delegated provenance, timeout scheduling, winner fields and omission.
+
+Root checks (573 tests), formatting verification and audit pass. Global assertion
+findings fall 202 to 188; transition and timeout source findings are zero.
+Deferred runtime-typeof findings fall 68 to 63 through honest producer typing;
+other audit counts and enforcement scopes are unchanged.

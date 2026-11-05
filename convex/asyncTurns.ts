@@ -1,4 +1,9 @@
-import { internalAction, internalMutation, internalQuery } from './_generated/server'
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+} from './_generated/server'
 import { v } from 'convex/values'
 import type { GameState, GraphMap, PlayerId, RulesetConfig } from 'risk-engine'
 import { internal, components } from './_generated/api'
@@ -32,7 +37,7 @@ export function applyTimeoutTurnResolution(args: {
 }
 
 async function processExpiredTurnForGame(
-  ctx: any,
+  ctx: MutationCtx,
   args: {
     gameId: Id<'games'>
     expectedPlayerId: string
@@ -40,12 +45,16 @@ async function processExpiredTurnForGame(
   },
 ) {
   try {
+    // SAFETY: timeout arguments carry the scheduled engine ID as a string; executeGameTransition
+    // rejects a stale or mismatched current player before applying any engine action.
+    const expectedPlayerId = args.expectedPlayerId as PlayerId
+
     await executeGameTransition(ctx, {
       gameId: args.gameId,
-      source: { type: 'system_timeout', playerId: args.expectedPlayerId as PlayerId },
+      source: { type: 'system_timeout', playerId: expectedPlayerId },
       intent: {
         type: 'timeout',
-        expectedPlayerId: args.expectedPlayerId as PlayerId,
+        expectedPlayerId,
         expectedTurnStartedAt: args.expectedTurnStartedAt,
       },
     })
