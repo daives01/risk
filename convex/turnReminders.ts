@@ -95,7 +95,7 @@ export async function rescheduleUserReminders(ctx: MutationCtx, userId: string) 
 
     if (state?.turn.currentPlayerId !== seat.enginePlayerId) continue
 
-    for (const job of game.turnReminderJobIds ?? []) await ctx.scheduler.cancel(job)
+    await cancelPendingReminderJobs(ctx, game.turnReminderJobIds ?? [])
     await ctx.db.patch(game._id, {
       turnReminderJobIds: await scheduleTurnReminders(
         ctx,
@@ -105,5 +105,16 @@ export async function rescheduleUserReminders(ctx: MutationCtx, userId: string) 
         game.turnDeadlineAt,
       ),
     })
+  }
+}
+
+export async function cancelPendingReminderJobs(
+  ctx: MutationCtx,
+  jobs: Id<'_scheduled_functions'>[],
+) {
+  for (const id of jobs) {
+    const job = await ctx.db.system.get(id)
+
+    if (job?.state.kind === 'pending') await ctx.scheduler.cancel(id)
   }
 }

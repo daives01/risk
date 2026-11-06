@@ -1,4 +1,4 @@
-import { scheduleTurnReminders } from './turnReminders'
+import { cancelPendingReminderJobs, scheduleTurnReminders } from './turnReminders'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import type { FunctionArgs } from 'convex/server'
@@ -396,7 +396,7 @@ export async function executeGameTransition(
   let turnReminderJobIds = game.turnReminderJobIds
 
   if (timing.shouldNotify || isGameOver) {
-    for (const job of turnReminderJobIds ?? []) await ctx.scheduler.cancel(job)
+    await cancelPendingReminderJobs(ctx, turnReminderJobIds ?? [])
     turnReminderJobIds =
       timing.turnStartedAt && timing.turnDeadlineAt
         ? await scheduleTurnReminders(

@@ -88,3 +88,66 @@ test('stale reminder emails are skipped before contacting the provider', async (
     }),
   ).toEqual({ sent: false, reason: 'stale_turn' })
 })
+
+test('completed reminder jobs do not block settings changes or turn completion', async () => {
+  const { t, gameId, currentPlayerId, stateVersion } = await seedPreRefactorAsyncGame()
+
+  const completedJob = await t.run(async (ctx) => {
+    const start = Date.now()
+    await ctx.db.patch(gameId, { turnStartedAt: start, turnDeadlineAt: start + 72 * 3600000 })
+    // A stale timeout is a harmless registered mutation used to create a completed job.
+
+    return await ctx.scheduler.runAfter(0, internal.asyncTurns.processExpiredTurn, {
+      gameId,
+      expectedPlayerId: currentPlayerId,
+      expectedTurnStartedAt: -1,
+    })
+  })
+
+  await new Promise((resolve) => setTimeout(resolve, 10))
+  await t.finishInProgressScheduledFunctions()
+  expect(await t.run(async (ctx) => (await ctx.db.system.get(completedJob))?.state.kind)).toBe(
+    'success',
+  )
+  await t.run(async (ctx) => {
+    await ctx.db.patch(gameId, { turnReminderJobIds: [completedJob] })
+
+    const player = await ctx.db
+      .query('gamePlayers')
+      .withIndex('by_gameId', (q) => q.eq('gameId', gameId))
+      .filter((q) => q.eq(q.field('enginePlayerId'), currentPlayerId))
+      .first()
+
+    if (!player) throw new Error('Missing fixture player')
+    await rescheduleUserReminders(ctx, player.userId)
+    const game = await ctx.db.get(gameId)
+    await ctx.db.patch(gameId, {
+      turnReminderJobIds: [...(game?.turnReminderJobIds ?? []), completedJob],
+    })
+  })
+  await t.mutation((ctx) =>
+    executeGameTransition(ctx, {
+      gameId,
+      source: {
+        type: 'user',
+        playerId: currentPlayerId,
+        actingUserId: 'smoke-user-alpha',
+        wasDelegated: false,
+      },
+      intent: { type: 'action', action: { type: 'EndAttackPhase' }, expectedVersion: stateVersion },
+    }),
+  )
+  await t.mutation((ctx) =>
+    executeGameTransition(ctx, {
+      gameId,
+      source: {
+        type: 'user',
+        playerId: currentPlayerId,
+        actingUserId: 'smoke-user-alpha',
+        wasDelegated: false,
+      },
+      intent: { type: 'action', action: { type: 'EndTurn' }, expectedVersion: stateVersion + 1 },
+    }),
+  )
+  expect(await t.run(async (ctx) => (await ctx.db.get(gameId))?.turnStartedAt)).toBeGreaterThan(0)
+})
