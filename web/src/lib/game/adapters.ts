@@ -1,36 +1,17 @@
-import type { GraphMap } from "risk-engine";
-import type { HandCard, MapVisual, PlayerRef, PublicState } from "@/lib/game/types";
+import type { FunctionReturnType } from 'convex/server'
+import type { api } from '@backend/_generated/api'
+import { readGraphMap } from '../../../../convex/typeAdapters'
 
-type ViewLike = {
-  players?: PlayerRef[];
-  state?: unknown;
-  mapId?: string;
-  status?: string;
-  winningPlayerId?: string | null;
-  winningTeamId?: string | null;
-  teamModeEnabled?: boolean;
-  teamCount?: number | null;
-  teamNames?: Record<string, string> | null;
-  effectiveRuleset?: unknown;
-};
+type PlayerView = FunctionReturnType<typeof api.games.getGameViewAsPlayer>
 
-type PlayerViewLike = ViewLike & {
-  myEnginePlayerId?: string | null;
-  myHand?: HandCard[] | null;
-  teammateHands?: Record<string, HandCard[]> | null;
-  delegatableTurnHand?: HandCard[] | null;
-};
+type PublicView = FunctionReturnType<typeof api.games.getGameView>
 
-type MapDocLike = {
-  graphMap?: GraphMap;
-  visual?: MapVisual;
-  imageUrl?: string | null;
-};
+type MapDoc = FunctionReturnType<typeof api.maps.getByMapId>
 
-export function adaptView(playerView: unknown, publicView: unknown) {
-  const resolvedPlayerView = (playerView ?? null) as PlayerViewLike | null;
-  const resolvedPublicView = (publicView ?? null) as ViewLike | null;
-  const view = (resolvedPlayerView ?? resolvedPublicView) as ViewLike | null;
+export function adaptView(playerView: PlayerView | undefined, publicView: PublicView | undefined) {
+  const resolvedPlayerView = playerView ?? null
+  const resolvedPublicView = publicView ?? null
+  const view = resolvedPlayerView ?? resolvedPublicView
 
   return {
     view,
@@ -39,26 +20,28 @@ export function adaptView(playerView: unknown, publicView: unknown) {
     teammateHands: resolvedPlayerView?.teammateHands ?? null,
     delegatableTurnHand: resolvedPlayerView?.delegatableTurnHand ?? null,
     playerMap: view?.players ?? [],
-    state: (view?.state ?? null) as PublicState | null,
-  };
+    state: view?.state ?? null,
+  }
 }
 
-export function adaptMapDoc(mapDoc: unknown) {
-  const resolved = (mapDoc ?? null) as MapDocLike | null;
+export function adaptMapDoc(mapDoc: MapDoc | undefined) {
+  const resolved = mapDoc ?? null
+
   const visual = resolved?.visual
     ? {
-      ...resolved.visual,
-      nodeScale:
-        typeof resolved.visual.nodeScale === "number" &&
+        ...resolved.visual,
+        nodeScale:
+          typeof resolved.visual.nodeScale === 'number' &&
           Number.isFinite(resolved.visual.nodeScale) &&
           resolved.visual.nodeScale > 0
-          ? resolved.visual.nodeScale
-          : 1,
-    }
-    : undefined;
+            ? resolved.visual.nodeScale
+            : 1,
+      }
+    : undefined
+
   return {
-    graphMap: resolved?.graphMap,
+    graphMap: resolved ? readGraphMap(resolved.graphMap) : undefined,
     mapVisual: visual,
     mapImageUrl: resolved?.imageUrl ?? null,
-  };
+  }
 }

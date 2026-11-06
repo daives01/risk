@@ -1,7 +1,7 @@
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -9,7 +9,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <p className="text-xs uppercase tracking-[0.15em] text-primary">{title}</p>
       <div className="space-y-2 text-sm leading-relaxed text-muted-foreground">{children}</div>
     </section>
-  );
+  )
 }
 
 function Q({ q, children }: { q: string; children: React.ReactNode }) {
@@ -17,17 +17,19 @@ function Q({ q, children }: { q: string; children: React.ReactNode }) {
     <details className="group border-b border-border/50 pb-3 last:border-b-0 last:pb-0">
       <summary className="cursor-pointer list-none font-medium text-foreground transition hover:text-primary [&::-webkit-details-marker]:hidden">
         <span className="flex items-center gap-2">
-          <span className="inline-block text-[10px] text-muted-foreground transition-transform group-open:rotate-90">▶</span>
+          <span className="inline-block text-[10px] text-muted-foreground transition-transform group-open:rotate-90">
+            ▶
+          </span>
           {q}
         </span>
       </summary>
       <div className="mt-1.5 space-y-1 pl-[18px]">{children}</div>
     </details>
-  );
+  )
 }
 
 export default function FaqPage() {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
 
   return (
     <div className="page-shell soft-grid">
@@ -35,7 +37,7 @@ export default function FaqPage() {
         <Card className="glass-panel border-0 py-0">
           <CardHeader className="space-y-4 py-6">
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
                 <ArrowLeft className="size-4" />
               </Button>
               <CardTitle className="hero-title">
@@ -55,9 +57,9 @@ export default function FaqPage() {
               </Q>
               <Q q="How do I start a game?">
                 <p>
-                  From the home page, click <strong>Create game</strong> to set up a new lobby. Share
-                  the invite code with friends, or make it public so others can join. Once everyone is
-                  ready, the host starts the game.
+                  From the home page, click <strong>Create game</strong> to set up a new lobby.
+                  Share the invite code with friends, or make it public so others can join. Once
+                  everyone is ready, the host starts the game.
                 </p>
               </Q>
               <Q q="How many players can play?">
@@ -85,7 +87,7 @@ export default function FaqPage() {
               </Q>
               <Q q="How are reinforcements calculated?">
                 <p>
-                  You receive the greater of <strong>3 troops</strong> or{" "}
+                  You receive the greater of <strong>3 troops</strong> or{' '}
                   <strong>⌊territories owned ÷ 3⌋</strong> each turn. On top of that, controlling
                   every territory in a continent awards that continent&apos;s bonus.
                 </p>
@@ -95,10 +97,10 @@ export default function FaqPage() {
             <Section title="Combat">
               <Q q="How does attacking work?">
                 <p>
-                  The attacker rolls up to <strong>3 dice</strong> (must have at least one more troop
-                  than dice used). The defender rolls up to <strong>2 dice</strong>. Highest dice are
-                  compared pair by pair — ties go to the defender. Losers remove one troop per lost
-                  comparison.
+                  The attacker rolls up to <strong>3 dice</strong> (must have at least one more
+                  troop than dice used). The defender rolls up to <strong>2 dice</strong>. Highest
+                  dice are compared pair by pair — ties go to the defender. Losers remove one troop
+                  per lost comparison.
                 </p>
               </Q>
               <Q q="Can I choose how many dice to roll?">
@@ -119,10 +121,10 @@ export default function FaqPage() {
               </Q>
               <Q q="How does card trading work?">
                 <p>
-                  Trade a set of 3 cards for bonus troops. Valid sets are{" "}
-                  <strong>three of a kind</strong> or <strong>one of each type</strong>.
-                  Wilds can substitute for any type. If you hold <strong>5 or more cards</strong>,
-                  you must trade before reinforcing.
+                  Trade a set of 3 cards for bonus troops. Valid sets are{' '}
+                  <strong>three of a kind</strong> or <strong>one of each type</strong>. Wilds can
+                  substitute for any type. If you hold <strong>5 or more cards</strong>, you must
+                  trade before reinforcing.
                 </p>
               </Q>
               <Q q="What are the trade-in values?">
@@ -145,8 +147,8 @@ export default function FaqPage() {
                 <p>
                   At the end of your turn you can move troops between your territories. By default,
                   you can fortify between any two <strong>connected</strong> territories (not just
-                  adjacent) and make multiple moves per turn. At least 1 troop must remain on
-                  the source territory.
+                  adjacent) and make multiple moves per turn. At least 1 troop must remain on the
+                  source territory.
                 </p>
               </Q>
             </Section>
@@ -154,28 +156,28 @@ export default function FaqPage() {
             <Section title="Teams">
               <Q q="How do teams work?">
                 <p>
-                  When teams are enabled, you cannot attack your teammates. The win condition is{" "}
+                  When teams are enabled, you cannot attack your teammates. The win condition is{' '}
                   <strong>last team standing</strong> — your team wins when all opposing teams are
                   eliminated.
                 </p>
               </Q>
               <Q q="Can I help my teammates?">
                 <p>
-                  Depending on game settings, you may be able to{" "}
-                  <strong>place reinforcements on teammate territories</strong> and{" "}
-                  <strong>fortify troops to or through teammate territories</strong>. Check the lobby
-                  rules panel to see which options are enabled.
+                  Depending on game settings, you may be able to{' '}
+                  <strong>place reinforcements on teammate territories</strong> and{' '}
+                  <strong>fortify troops to or through teammate territories</strong>. Check the
+                  lobby rules panel to see which options are enabled.
                 </p>
               </Q>
               <Q q="How do continent bonuses work with teams?">
                 <p>
-                  When a team controls every territory in a continent, the bonus goes to the{" "}
+                  When a team controls every territory in a continent, the bonus goes to the{' '}
                   <strong>majority holder</strong> — the teammate who owns the most territories in
                   that continent. If tied, the player earlier in <strong>turn order</strong> wins
                   the tiebreak. Only one player receives the full bonus; it is not split.
                 </p>
                 <p>
-                  Alternatively, the game host can set continent bonuses to{" "}
+                  Alternatively, the game host can set continent bonuses to{' '}
                   <strong>individual mode</strong>, where each player only earns bonuses for
                   continents they personally control (all territories), regardless of teammates.
                 </p>
@@ -192,8 +194,8 @@ export default function FaqPage() {
             <Section title="Setup &amp; Map">
               <Q q="How are territories distributed?">
                 <p>
-                  Territories are distributed via <strong>round-robin</strong> assignment by default,
-                  ensuring even distribution. Some maps include{" "}
+                  Territories are distributed via <strong>round-robin</strong> assignment by
+                  default, ensuring even distribution. Some maps include{' '}
                   <strong>neutral territories</strong> (unowned at start) that must be conquered
                   during the game.
                 </p>
@@ -219,5 +221,5 @@ export default function FaqPage() {
         </Card>
       </div>
     </div>
-  );
+  )
 }

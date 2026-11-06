@@ -1,10 +1,10 @@
-import { internalAction } from "./_generated/server";
-import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { internalAction } from './_generated/server'
+import { v } from 'convex/values'
+import { internal } from './_generated/api'
 
-export const sendTurnNotifications: any = internalAction({
+export const sendTurnNotifications = internalAction({
   args: {
-    gameId: v.id("games"),
+    gameId: v.id('games'),
     expectedPlayerId: v.string(),
     turnStartedAt: v.number(),
   },
@@ -23,23 +23,23 @@ export const sendTurnNotifications: any = internalAction({
     ctx,
     args,
   ): Promise<{
-    email: { sent: boolean; reason?: string };
-    slack: { sent: boolean; reason?: string; providerTs?: string | null };
+    email: { sent: boolean; reason?: string }
+    slack: { sent: boolean; reason?: string; providerTs?: string | null }
   }> => {
-    const [emailResult, slackResult]: any = await Promise.all([
-      ctx.runAction((internal as any).asyncTurns.sendYourTurnEmail, args).catch((error) => ({
+    const [emailResult, slackResult] = await Promise.all([
+      ctx.runAction(internal.asyncTurns.sendYourTurnEmail, args).catch((error) => ({
         sent: false,
         reason: error instanceof Error ? error.message : String(error),
       })),
-      ctx.runAction((internal as any).slackNotifications.sendYourTurnSlack, args).catch((error) => ({
+      ctx.runAction(internal.slackNotifications.sendYourTurnSlack, args).catch((error) => ({
         sent: false,
         reason: error instanceof Error ? error.message : String(error),
       })),
-    ]);
+    ])
 
     return {
       email: emailResult,
       slack: slackResult,
-    };
+    }
   },
-});
+})

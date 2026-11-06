@@ -1,32 +1,32 @@
-import { useEffect } from "react";
-import { Link } from "react-router-dom";
-import { authClient } from "@/lib/auth-client";
-import { AsciiGlobe } from "@/pages/landing/AsciiGlobe";
+import { useEffect } from 'react'
+import { Link } from 'react-router-dom'
+import { authClient } from '@/lib/auth-client'
+import { AsciiGlobe } from '@/pages/landing/AsciiGlobe'
 
 export default function LandingPage() {
-  const { data: session } = authClient.useSession();
+  const { data: session } = authClient.useSession()
 
   useEffect(() => {
-    document.title = "Legally Distinct Global Domination";
+    document.title = 'Legally Distinct Global Domination'
 
-    const { body, documentElement } = document;
-    const previousBodyOverflow = body.style.overflow;
-    const previousBodyOverscroll = body.style.overscrollBehavior;
-    const previousHtmlOverflow = documentElement.style.overflow;
-    const previousHtmlOverscroll = documentElement.style.overscrollBehavior;
+    const { body, documentElement } = document
+    const previousBodyOverflow = body.style.overflow
+    const previousBodyOverscroll = body.style.overscrollBehavior
+    const previousHtmlOverflow = documentElement.style.overflow
+    const previousHtmlOverscroll = documentElement.style.overscrollBehavior
 
-    body.style.overflow = "hidden";
-    body.style.overscrollBehavior = "none";
-    documentElement.style.overflow = "hidden";
-    documentElement.style.overscrollBehavior = "none";
+    body.style.overflow = 'hidden'
+    body.style.overscrollBehavior = 'none'
+    documentElement.style.overflow = 'hidden'
+    documentElement.style.overscrollBehavior = 'none'
 
     return () => {
-      body.style.overflow = previousBodyOverflow;
-      body.style.overscrollBehavior = previousBodyOverscroll;
-      documentElement.style.overflow = previousHtmlOverflow;
-      documentElement.style.overscrollBehavior = previousHtmlOverscroll;
-    };
-  }, []);
+      body.style.overflow = previousBodyOverflow
+      body.style.overscrollBehavior = previousBodyOverscroll
+      documentElement.style.overflow = previousHtmlOverflow
+      documentElement.style.overscrollBehavior = previousHtmlOverscroll
+    }
+  }, [])
 
   return (
     <div className="soft-grid fixed inset-0 isolate flex h-dvh max-h-dvh flex-col overflow-hidden bg-[--app-bg] overscroll-none landscape:flex-row">
@@ -39,17 +39,16 @@ export default function LandingPage() {
           </h1>
 
           <p className="mx-auto mt-6 max-w-[20rem] text-sm leading-[1.65] text-[--app-text]/80 text-pretty landscape:mx-0 landscape:max-w-[30rem] landscape:text-base">
-            Command armies, forge alliances, and conquer every territory in
-            this classic game of global strategy. Play with your coworkers with
-            async turns.
+            Command armies, forge alliances, and conquer every territory in this classic game of
+            global strategy. Play with your coworkers with async turns.
           </p>
 
           <div className="pointer-events-auto fixed right-4 top-4 z-20 mt-0 landscape:static landscape:mt-8">
             <Link
-              to={session ? "/home" : "/login"}
+              to={session ? '/home' : '/login'}
               className="inline-flex h-12 w-32 items-center justify-center border border-[--app-accent] bg-[--app-accent] px-7 text-sm font-semibold tracking-[0.08em] text-[--app-bg] shadow-[0_10px_30px_rgba(11,13,16,0.35)] transition-all hover:brightness-110"
             >
-              {session ? "LAUNCH" : "LOG IN"}
+              {session ? 'LAUNCH' : 'LOG IN'}
             </Link>
           </div>
         </div>
@@ -61,5 +60,5 @@ export default function LandingPage() {
         </div>
       </div>
     </div>
-  );
+  )
 }

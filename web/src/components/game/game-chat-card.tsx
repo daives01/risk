@@ -1,58 +1,56 @@
-import { Pencil, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChatComposer } from "@/components/game/chat-composer";
-import { ChatMessageText } from "@/components/game/chat-message-text";
-import {
-  buildChatMentionResolver,
-  type ChatMentionMap,
-} from "@/lib/game/chat-mentions";
-import type { ChatHoverTag } from "@/lib/game/highlighting";
-import type { ChatChannel, ChatMessage, PlayerRef } from "@/lib/game/types";
+import { Pencil, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef } from 'react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ChatComposer } from '@/components/game/chat-composer'
+import { ChatMessageText } from '@/components/game/chat-message-text'
+import { buildChatMentionResolver, type ChatMentionMap } from '@/lib/game/chat-mentions'
+import type { ChatHoverTag } from '@/lib/game/highlighting'
+import type { ChatChannel, ChatMessage, PlayerRef } from '@/lib/game/types'
 
 interface GameChatCardProps {
-  messages: ChatMessage[];
-  activeChannel: ChatChannel;
-  activeRecipientEnginePlayerId: string | null;
-  playerOptions: PlayerRef[];
-  teamNames: Record<string, string>;
-  graphMap: ChatMentionMap;
-  myEnginePlayerId?: string | null;
-  teamGameEnabled: boolean;
-  teamAvailable: boolean;
-  canSend: boolean;
-  draftText: string;
-  editingMessageId: string | null;
-  editingChannel: ChatChannel | null;
-  onSetDraftText: (value: string) => void;
-  onSelectChannel: (channel: ChatChannel, recipientEnginePlayerId?: string | null) => void;
-  onToggleChannel: () => void;
-  onStartEditMessage: (message: ChatMessage) => void;
-  onCancelEditMessage: () => void;
-  onDeleteMessage: (messageId: string) => void;
-  onSend: () => void;
-  onHoverTag: (tag: ChatHoverTag) => void;
-  onLeaveTag: () => void;
-  onClickTag: (tag: Exclude<ChatHoverTag, null>) => void;
+  messages: ChatMessage[]
+  activeChannel: ChatChannel
+  activeRecipientEnginePlayerId: string | null
+  playerOptions: PlayerRef[]
+  teamNames: Record<string, string>
+  graphMap: ChatMentionMap
+  myEnginePlayerId?: string | null
+  teamGameEnabled: boolean
+  teamAvailable: boolean
+  canSend: boolean
+  draftText: string
+  editingMessageId: string | null
+  editingChannel: ChatChannel | null
+  onSetDraftText: (value: string) => void
+  onSelectChannel: (channel: ChatChannel, recipientEnginePlayerId?: string | null) => void
+  onToggleChannel: () => void
+  onStartEditMessage: (message: ChatMessage) => void
+  onCancelEditMessage: () => void
+  onDeleteMessage: (messageId: ChatMessage['_id']) => void
+  onSend: () => void
+  onHoverTag: (tag: ChatHoverTag) => void
+  onLeaveTag: () => void
+  onClickTag: (tag: Exclude<ChatHoverTag, null>) => void
 }
 
 function formatChatTimestamp(timestamp: number, today: Date) {
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) return "";
+  const date = new Date(timestamp)
+
+  if (Number.isNaN(date.getTime())) return ''
 
   if (date.toDateString() !== today.toDateString()) {
-    return date.toLocaleDateString("en-US", {
-      month: "2-digit",
-      day: "2-digit",
-      year: "2-digit",
-    });
+    return date.toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: '2-digit',
+    })
   }
 
-  return date.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 export function GameChatCard({
@@ -80,26 +78,28 @@ export function GameChatCard({
   onLeaveTag,
   onClickTag,
 }: GameChatCardProps) {
-  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null)
 
   const messagesWithTimestamps = useMemo(() => {
-    const today = new Date();
+    const today = new Date()
+
     return messages.map((message) => ({
       ...message,
       timestampLabel: formatChatTimestamp(message.createdAt, today),
-    }));
-  }, [messages]);
+    }))
+  }, [messages])
 
   const chatMentionResolver = useMemo(
     () => buildChatMentionResolver(playerOptions, teamNames, graphMap),
     [graphMap, playerOptions, teamNames],
-  );
+  )
 
   useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-    container.scrollTop = container.scrollHeight;
-  }, [messages.length]);
+    const container = messagesContainerRef.current
+
+    if (!container) return
+    container.scrollTop = container.scrollHeight
+  }, [messages.length])
 
   return (
     <Card className="glass-panel h-[min(30rem,50vh)] gap-2 border-0 py-0 xl:h-[min(34rem,50vh)]">
@@ -114,24 +114,25 @@ export function GameChatCard({
           <div className="mt-auto space-y-1">
             {messages.length === 0 && <p className="text-muted-foreground">No messages yet.</p>}
             {messagesWithTimestamps.map((message) => {
-              const timestampLabel = message.timestampLabel;
-              const isTeamMessage = message.channel === "team";
-              const isDmMessage = message.channel === "dm";
-              const isSpecialMessage = isTeamMessage || isDmMessage;
-              const displaySender = message.isMine ? "You" : message.senderDisplayName;
+              const timestampLabel = message.timestampLabel
+              const isTeamMessage = message.channel === 'team'
+              const isDmMessage = message.channel === 'dm'
+              const isSpecialMessage = isTeamMessage || isDmMessage
+              const displaySender = message.isMine ? 'You' : message.senderDisplayName
+
               const scopeLabel = isTeamMessage
-                ? "[team]"
+                ? '[team]'
                 : isDmMessage
                   ? message.isMine
-                    ? `[to ${message.recipientDisplayName ?? "player"}]`
-                    : "[to you]"
-                  : null;
+                    ? `[to ${message.recipientDisplayName ?? 'player'}]`
+                    : '[to you]'
+                  : null
 
               return (
                 <div
                   key={message._id}
                   className={`group relative text-left ${
-                    isSpecialMessage ? "text-amber-400" : "text-foreground"
+                    isSpecialMessage ? 'text-amber-400' : 'text-foreground'
                   }`}
                 >
                   {message.isMine && canSend && (
@@ -139,7 +140,7 @@ export function GameChatCard({
                       <Button
                         type="button"
                         size="icon-xs"
-                        variant={editingMessageId === message._id ? "default" : "ghost"}
+                        variant={editingMessageId === message._id ? 'default' : 'ghost'}
                         aria-label="Edit message"
                         onClick={() => onStartEditMessage(message)}
                       >
@@ -157,9 +158,11 @@ export function GameChatCard({
                     </span>
                   )}
                   <p className="break-normal [overflow-wrap:anywhere]">
-                    {timestampLabel ? <span className="inline-block w-[4.75rem]">{timestampLabel}</span> : null}
+                    {timestampLabel ? (
+                      <span className="inline-block w-[4.75rem]">{timestampLabel}</span>
+                    ) : null}
                     {scopeLabel ? <>{scopeLabel} </> : null}
-                    <span className="font-semibold">{displaySender}:</span>{" "}
+                    <span className="font-semibold">{displaySender}:</span>{' '}
                     <ChatMessageText
                       text={message.text}
                       resolver={chatMentionResolver}
@@ -167,10 +170,12 @@ export function GameChatCard({
                       onLeaveTag={onLeaveTag}
                       onClickTag={onClickTag}
                     />
-                    {message.editedAt ? <span className="ml-1 text-[0.72rem] text-muted-foreground">(edited)</span> : null}
+                    {message.editedAt ? (
+                      <span className="ml-1 text-[0.72rem] text-muted-foreground">(edited)</span>
+                    ) : null}
                   </p>
                 </div>
-              );
+              )
             })}
           </div>
         </div>
@@ -195,5 +200,5 @@ export function GameChatCard({
         />
       </CardContent>
     </Card>
-  );
+  )
 }

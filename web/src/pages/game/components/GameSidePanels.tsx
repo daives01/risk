@@ -1,50 +1,50 @@
-import { GameChatCard, GamePlayersCard } from "@/components/game/game-panels";
-import type { ChatMentionMap } from "@/lib/game/chat-mentions";
-import type { ChatHoverTag, HighlightFilter } from "@/lib/game/highlighting";
-import type { PlayerPanelStats } from "@/lib/game/player-stats";
-import type { ChatChannel, ChatMessage, HandCard, PlayerRef, PublicState } from "@/lib/game/types";
+import { GameChatCard, GamePlayersCard } from '@/components/game/game-panels'
+import type { ChatMentionMap } from '@/lib/game/chat-mentions'
+import type { ChatHoverTag, HighlightFilter } from '@/lib/game/highlighting'
+import type { PlayerPanelStats } from '@/lib/game/player-stats'
+import type { ChatChannel, ChatMessage, HandCard, PlayerRef, PublicState } from '@/lib/game/types'
 
 interface GameSidePanelsProps {
-  playerStats: PlayerPanelStats[];
-  resolvedDisplayState: PublicState;
-  playerMap: PlayerRef[];
-  graphMap: ChatMentionMap;
-  teamModeEnabled: boolean;
-  teamNames: Record<string, string>;
-  showTurnTimer: boolean;
-  turnTimerLabel: string | null;
-  highlightFilter: HighlightFilter;
-  onTogglePlayerHighlight: (playerId: string) => void;
-  onToggleTeamHighlight: (teamId: string) => void;
-  getPlayerColor: (playerId: string, turnOrder: string[]) => string;
-  getPlayerName: (enginePlayerId: string, players: PlayerRef[]) => string;
-  myEnginePlayerId: string | undefined;
-  myHand: HandCard[] | null;
-  teammateHands: Record<string, HandCard[]> | null;
-  canResign: boolean;
-  onResign: () => void;
-  delegatablePlayerId: string | null;
-  delegatedPlayerId: string | null;
-  onStartDelegation: (playerId: string) => void;
-  onStopDelegation: () => void;
-  chatMessages: ChatMessage[];
-  chatChannel: ChatChannel;
-  chatRecipientEnginePlayerId: string | null;
-  canUseTeamChat: boolean;
-  canSendChat: boolean;
-  chatDraft: string;
-  chatEditingMessageId: string | null;
-  chatEditingChannel: ChatChannel | null;
-  onSetChatDraft: (value: string) => void;
-  onSelectChannel: (channel: ChatChannel, recipientEnginePlayerId?: string | null) => void;
-  onToggleChannel: () => void;
-  onStartEditMessage: (message: ChatMessage) => void;
-  onCancelEditMessage: () => void;
-  onDeleteMessage: (messageId: string) => void;
-  onSendMessage: () => void;
-  onHoverChatTag: (tag: ChatHoverTag) => void;
-  onLeaveChatTag: () => void;
-  onClickChatTag: (tag: Exclude<ChatHoverTag, null>) => void;
+  playerStats: PlayerPanelStats[]
+  resolvedDisplayState: PublicState
+  playerMap: PlayerRef[]
+  graphMap: ChatMentionMap
+  teamModeEnabled: boolean
+  teamNames: Record<string, string>
+  showTurnTimer: boolean
+  turnTimerLabel: string | null
+  highlightFilter: HighlightFilter
+  onTogglePlayerHighlight: (playerId: string) => void
+  onToggleTeamHighlight: (teamId: string) => void
+  getPlayerColor: (playerId: string, turnOrder: string[]) => string
+  getPlayerName: (enginePlayerId: string, players: PlayerRef[]) => string
+  myEnginePlayerId: string | undefined
+  myHand: HandCard[] | null
+  teammateHands: Record<string, HandCard[]> | null
+  canResign: boolean
+  onResign: () => void
+  delegatablePlayerId: string | null
+  delegatedPlayerId: string | null
+  onStartDelegation: (playerId: string) => void
+  onStopDelegation: () => void
+  chatMessages: ChatMessage[]
+  chatChannel: ChatChannel
+  chatRecipientEnginePlayerId: string | null
+  canUseTeamChat: boolean
+  canSendChat: boolean
+  chatDraft: string
+  chatEditingMessageId: string | null
+  chatEditingChannel: ChatChannel | null
+  onSetChatDraft: (value: string) => void
+  onSelectChannel: (channel: ChatChannel, recipientEnginePlayerId?: string | null) => void
+  onToggleChannel: () => void
+  onStartEditMessage: (message: ChatMessage) => void
+  onCancelEditMessage: () => void
+  onDeleteMessage: (messageId: ChatMessage['_id']) => void
+  onSendMessage: () => void
+  onHoverChatTag: (tag: ChatHoverTag) => void
+  onLeaveChatTag: () => void
+  onClickChatTag: (tag: Exclude<ChatHoverTag, null>) => void
 }
 
 export function GameSidePanels({
@@ -144,5 +144,5 @@ export function GameSidePanels({
         />
       </div>
     </>
-  );
+  )
 }

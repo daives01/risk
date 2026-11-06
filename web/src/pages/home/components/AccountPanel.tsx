@@ -1,127 +1,134 @@
-import { useState, useEffect } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { useNavigate } from "react-router-dom";
-import { api } from "@backend/_generated/api";
-import { authClient } from "@/lib/auth-client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
+import { useState, useEffect } from 'react'
+import { useMutation, useQuery } from 'convex/react'
+import { useNavigate } from 'react-router-dom'
+import { api } from '@backend/_generated/api'
+import { authClient } from '@/lib/auth-client'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 
 type AccountPanelProps = {
-  session: {
-    user: {
-      email: string;
-      name: string;
-    };
-  };
-  isAdmin: boolean | undefined;
-};
+  session: typeof authClient.$Infer.Session
+  isAdmin: boolean | undefined
+}
 
 export function AccountPanel({ session, isAdmin }: AccountPanelProps) {
-  const navigate = useNavigate();
-  const settings = useQuery(api.userSettings.getMySettings, {});
-  const setTurnEmailSetting = useMutation(api.userSettings.setEmailTurnNotificationsEnabled);
+  const navigate = useNavigate()
+  const settings = useQuery(api.userSettings.getMySettings, {})
+  const setTurnEmailSetting = useMutation(api.userSettings.setEmailTurnNotificationsEnabled)
 
-  const saveTimeZone = useMutation(api.userSettings.setTimeZone);
-  const [timeZoneDraft, setTimeZoneDraft] = useState<string | null>(null);
-  const [timeZoneError, setTimeZoneError] = useState<string | null>(null);
+  const saveTimeZone = useMutation(api.userSettings.setTimeZone)
+  const [timeZoneDraft, setTimeZoneDraft] = useState<string | null>(null)
+  const [timeZoneError, setTimeZoneError] = useState<string | null>(null)
 
+  const sessionUsername = session.user.username ?? ''
 
-  const sessionUsername = (session.user as { username?: string | null }).username ?? "";
+  const [profileUsername, setProfileUsername] = useState('')
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileError, setProfileError] = useState<string | null>(null)
+  const [profileSuccess, setProfileSuccess] = useState<string | null>(null)
 
-  const [profileUsername, setProfileUsername] = useState("");
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
-
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordSaving, setPasswordSaving] = useState(false);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
-  const [emailSettingSaving, setEmailSettingSaving] = useState(false);
-  const [emailSettingError, setEmailSettingError] = useState<string | null>(null);
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null)
+  const [emailSettingSaving, setEmailSettingSaving] = useState(false)
+  const [emailSettingError, setEmailSettingError] = useState<string | null>(null)
 
   useEffect(() => {
-    setProfileUsername(sessionUsername || session.user.name || "");
-  }, [session, sessionUsername]);
+    setProfileUsername(sessionUsername || session.user.name || '')
+  }, [session, sessionUsername])
 
   async function submitProfile(event: React.FormEvent) {
-    event.preventDefault();
-    const nextUsername = profileUsername.trim();
+    event.preventDefault()
+    const nextUsername = profileUsername.trim()
 
     if (nextUsername.length < 3) {
-      setProfileError("Username must be at least 3 characters.");
-      setProfileSuccess(null);
-      return;
+      setProfileError('Username must be at least 3 characters.')
+      setProfileSuccess(null)
+
+      return
     }
 
-    setProfileSaving(true);
-    setProfileError(null);
-    setProfileSuccess(null);
+    setProfileSaving(true)
+    setProfileError(null)
+    setProfileSuccess(null)
+
     try {
       const result = await authClient.updateUser({
         username: nextUsername,
         displayUsername: nextUsername,
         name: nextUsername,
-      });
+      })
+
       if (result.error) {
-        setProfileError(result.error.message ?? "Unable to update account details.");
-        return;
+        setProfileError(result.error.message ?? 'Unable to update account details.')
+
+        return
       }
-      setProfileSuccess("Account details updated.");
+
+      setProfileSuccess('Account details updated.')
     } finally {
-      setProfileSaving(false);
+      setProfileSaving(false)
     }
   }
 
   async function submitPassword(event: React.FormEvent) {
-    event.preventDefault();
+    event.preventDefault()
 
     if (!currentPassword || !newPassword) {
-      setPasswordError("Current and new password are required.");
-      setPasswordSuccess(null);
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setPasswordError("New password and confirmation must match.");
-      setPasswordSuccess(null);
-      return;
+      setPasswordError('Current and new password are required.')
+      setPasswordSuccess(null)
+
+      return
     }
 
-    setPasswordSaving(true);
-    setPasswordError(null);
-    setPasswordSuccess(null);
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New password and confirmation must match.')
+      setPasswordSuccess(null)
+
+      return
+    }
+
+    setPasswordSaving(true)
+    setPasswordError(null)
+    setPasswordSuccess(null)
+
     try {
       const result = await authClient.changePassword({
         currentPassword,
         newPassword,
-      });
+      })
+
       if (result.error) {
-        setPasswordError(result.error.message ?? "Unable to change password.");
-        return;
+        setPasswordError(result.error.message ?? 'Unable to change password.')
+
+        return
       }
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      setPasswordSuccess("Password updated.");
+
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setPasswordSuccess('Password updated.')
     } finally {
-      setPasswordSaving(false);
+      setPasswordSaving(false)
     }
   }
 
   async function toggleTurnEmails(enabled: boolean) {
-    setEmailSettingError(null);
-    setEmailSettingSaving(true);
+    setEmailSettingError(null)
+    setEmailSettingSaving(true)
+
     try {
-      await setTurnEmailSetting({ enabled });
+      await setTurnEmailSetting({ enabled })
     } catch (error) {
       setEmailSettingError(
-        error instanceof Error ? error.message : "Unable to update notifications.",
-      );
+        error instanceof Error ? error.message : 'Unable to update notifications.',
+      )
     } finally {
-      setEmailSettingSaving(false);
+      setEmailSettingSaving(false)
     }
   }
 
@@ -156,7 +163,7 @@ export function AccountPanel({ session, isAdmin }: AccountPanelProps) {
         {profileError && <p className="text-sm text-red-400">{profileError}</p>}
         {profileSuccess && <p className="text-sm text-emerald-400">{profileSuccess}</p>}
         <Button type="submit" variant="outline" disabled={profileSaving}>
-          {profileSaving ? "Saving..." : "Save profile"}
+          {profileSaving ? 'Saving...' : 'Save profile'}
         </Button>
 
         <hr className="border-border/50" />
@@ -203,13 +210,8 @@ export function AccountPanel({ session, isAdmin }: AccountPanelProps) {
 
         {passwordError && <p className="text-sm text-red-400">{passwordError}</p>}
         {passwordSuccess && <p className="text-sm text-emerald-400">{passwordSuccess}</p>}
-        <Button
-          type="button"
-          variant="outline"
-          disabled={passwordSaving}
-          onClick={submitPassword}
-        >
-          {passwordSaving ? "Updating..." : "Update password"}
+        <Button type="button" variant="outline" disabled={passwordSaving} onClick={submitPassword}>
+          {passwordSaving ? 'Updating...' : 'Update password'}
         </Button>
       </form>
 
@@ -221,22 +223,47 @@ export function AccountPanel({ session, isAdmin }: AccountPanelProps) {
             <Switch
               checked={settings?.emailTurnNotificationsEnabled ?? false}
               onCheckedChange={(checked) => {
-                void toggleTurnEmails(checked);
+                void toggleTurnEmails(checked)
               }}
               disabled={emailSettingSaving || settings === undefined}
             />
           </label>
           <label className="block space-y-2 text-sm">
             <span>Timezone</span>
-            <Input list="notification-timezones" value={timeZoneDraft ?? settings?.timeZone ?? ""} onChange={e => setTimeZoneDraft(e.target.value)} placeholder="America/Denver" />
-            <datalist id="notification-timezones">{Intl.supportedValuesOf("timeZone").map(zone => <option key={zone} value={zone} />)}</datalist>
+            <Input
+              list="notification-timezones"
+              value={timeZoneDraft ?? settings?.timeZone ?? ''}
+              onChange={(e) => setTimeZoneDraft(e.target.value)}
+              placeholder="America/Denver"
+            />
+            <datalist id="notification-timezones">
+              {Intl.supportedValuesOf('timeZone').map((zone) => (
+                <option key={zone} value={zone} />
+              ))}
+            </datalist>
           </label>
-          <Button type="button" variant="outline" disabled={!timeZoneDraft} onClick={() => {
-            setTimeZoneError(null);
-            void saveTimeZone({ timeZone: timeZoneDraft! }).then(() => setTimeZoneDraft(null)).catch(() => setTimeZoneError("Choose a valid timezone, such as America/Denver."));
-          }}>Save timezone</Button>
-          <p className="text-xs text-muted-foreground">Defaults to your system timezone once. Turn reminders arrive between 8 a.m. and 8 p.m. in this timezone.</p>
-          {timeZoneError && <p role="alert" className="text-sm text-red-400">{timeZoneError}</p>}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!timeZoneDraft}
+            onClick={() => {
+              setTimeZoneError(null)
+              void saveTimeZone({ timeZone: timeZoneDraft! })
+                .then(() => setTimeZoneDraft(null))
+                .catch(() => setTimeZoneError('Choose a valid timezone, such as America/Denver.'))
+            }}
+          >
+            Save timezone
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Defaults to your system timezone once. Turn reminders arrive between 8 a.m. and 8 p.m.
+            in this timezone.
+          </p>
+          {timeZoneError && (
+            <p role="alert" className="text-sm text-red-400">
+              {timeZoneError}
+            </p>
+          )}
           {emailSettingError && <p className="text-sm text-red-400">{emailSettingError}</p>}
         </div>
 
@@ -248,8 +275,8 @@ export function AccountPanel({ session, isAdmin }: AccountPanelProps) {
             </Button>
             {isAdmin && (
               <>
-                <Button onClick={() => navigate("/admin/maps")}>Open map editor</Button>
-                <Button variant="outline" onClick={() => navigate("/admin/slack")}>
+                <Button onClick={() => navigate('/admin/maps')}>Open map editor</Button>
+                <Button variant="outline" onClick={() => navigate('/admin/slack')}>
                   Open Slack admin
                 </Button>
               </>
@@ -258,5 +285,5 @@ export function AccountPanel({ session, isAdmin }: AccountPanelProps) {
         </div>
       </div>
     </div>
-  );
+  )
 }

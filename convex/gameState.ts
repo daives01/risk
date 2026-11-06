@@ -1,18 +1,20 @@
-import type { GameState } from "risk-engine";
-import type { Id } from "./_generated/dataModel";
-import type { TimelinePublicState } from "./historyTimeline";
-import { readGameStateNullable } from "./typeAdapters";
+import type { GameState } from 'risk-engine'
+import type { MutationCtx, QueryCtx } from './_generated/server'
+import type { Id } from './_generated/dataModel'
+import type { TimelinePublicState } from './historyTimeline'
+import { readGameStateNullable, readPublicGameStateNullable } from './typeAdapters'
 
-export const GAME_STATE_SNAPSHOT_INTERVAL = 100;
+export const GAME_STATE_SNAPSHOT_INTERVAL = 100
 
 export function publicGameStateProjection(state: GameState): TimelinePublicState {
-  const handSizes: Record<string, number> = {};
+  const handSizes: Record<string, number> = {}
+
   for (const [pid, hand] of Object.entries(state.hands)) {
-    handSizes[pid] = hand.length;
+    handSizes[pid] = hand.length
   }
 
   return {
-    players: state.players as Record<string, { status: string; teamId?: string }>,
+    players: state.players,
     turnOrder: [...state.turnOrder],
     territories: Object.fromEntries(
       Object.entries(state.territories).map(([territoryId, territory]) => [
@@ -30,71 +32,91 @@ export function publicGameStateProjection(state: GameState): TimelinePublicState
     discardCount: state.deck.discard.length,
     handSizes,
     stateVersion: state.stateVersion,
-  };
+  }
 }
 
-export async function getGameStateDoc(ctx: any, gameId: Id<"games">) {
+export async function getGameStateDoc(ctx: Pick<QueryCtx, 'db'>, gameId: Id<'games'>) {
   return await ctx.db
-    .query("gameStates")
-    .withIndex("by_gameId", (q: any) => q.eq("gameId", gameId))
-    .unique();
+    .query('gameStates')
+    .withIndex('by_gameId', (q) => q.eq('gameId', gameId))
+    .unique()
 }
 
 export async function readCurrentPrivateGameState(
-  ctx: any,
-  game: { _id: Id<"games"> },
+  ctx: Pick<QueryCtx, 'db'>,
+  game: { _id: Id<'games'> },
 ) {
-  const gameState = await getGameStateDoc(ctx, game._id);
-  return readGameStateNullable(gameState?.privateState);
+  const gameState = await getGameStateDoc(ctx, game._id)
+
+  return readGameStateNullable(gameState?.privateState)
 }
 
 export async function upsertCurrentGameState(
-  ctx: any,
+  ctx: Pick<MutationCtx, 'db'>,
   args: {
-    gameId: Id<"games">;
-    state: GameState;
-    updatedAt: number;
+    gameId: Id<'games'>
+    state: GameState
+    updatedAt: number
   },
 ) {
-  const existing = await getGameStateDoc(ctx, args.gameId);
+  const existing = await getGameStateDoc(ctx, args.gameId)
+
   const value = {
     gameId: args.gameId,
     version: args.state.stateVersion,
     privateState: args.state,
     publicState: publicGameStateProjection(args.state),
     updatedAt: args.updatedAt,
-  };
+  }
 
   if (existing) {
-    await ctx.db.patch(existing._id, value);
-    return existing._id;
+    await ctx.db.patch(existing._id, value)
+
+    return existing._id
   }
-  return await ctx.db.insert("gameStates", value);
+
+  return await ctx.db.insert('gameStates', value)
 }
 
 export function shouldStoreGameStateSnapshot(index: number) {
-  return index === -1 || index % GAME_STATE_SNAPSHOT_INTERVAL === 0;
+  return index === -1 || index % GAME_STATE_SNAPSHOT_INTERVAL === 0
 }
 
 export async function insertGameStateSnapshotIfMissing(
-  ctx: any,
+  ctx: Pick<MutationCtx, 'db'>,
   args: {
-    gameId: Id<"games">;
-    index: number;
-    state: GameState;
-    createdAt: number;
+    gameId: Id<'games'>
+    index: number
+    state: GameState
+    createdAt: number
   },
 ) {
-  if (!shouldStoreGameStateSnapshot(args.index)) return null;
+  if (!shouldStoreGameStateSnapshot(args.index)) return null
+
   const existing = await ctx.db
-    .query("gameStateSnapshots")
-    .withIndex("by_gameId_index", (q: any) => q.eq("gameId", args.gameId).eq("index", args.index))
-    .unique();
-  if (existing) return existing._id;
-  return await ctx.db.insert("gameStateSnapshots", {
+    .query('gameStateSnapshots')
+    .withIndex('by_gameId_index', (q) => q.eq('gameId', args.gameId).eq('index', args.index))
+    .unique()
+
+  if (existing) return existing._id
+
+  return await ctx.db.insert('gameStateSnapshots', {
     gameId: args.gameId,
     index: args.index,
     publicState: publicGameStateProjection(args.state),
     createdAt: args.createdAt,
-  });
+  })
+}
+
+// Parse private state first even when a public cache exists, matching both game views.
+export function selectCurrentGameState(
+  gameState: { privateState?: unknown; publicState?: unknown } | null,
+) {
+  const privateState = readGameStateNullable(gameState?.privateState)
+
+  const publicState =
+    readPublicGameStateNullable(gameState?.publicState) ??
+    (privateState ? publicGameStateProjection(privateState) : null)
+
+  return { privateState, publicState }
 }

@@ -1,74 +1,69 @@
-import { useEffect, useRef, useState } from "react";
-import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
-import { useMutation, useQuery } from "convex/react";
-import type { OptimisticLocalStore } from "convex/browser";
-import type { FunctionReturnType } from "convex/server";
-import { ArrowLeft, Copy, Play, Shuffle, Trash2, UserRoundPlus, X } from "lucide-react";
-import { PLAYER_COLOR_NAME_BY_HEX } from "risk-engine";
-import { api } from "@backend/_generated/api";
-import type { Id } from "@backend/_generated/dataModel";
-import { authClient } from "@/lib/auth-client";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { canEditLobbyPlayerColor, getLobbyColorOptions } from "@/lib/lobby-player-colors";
+import { useEffect, useRef, useState } from 'react'
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useMutation, useQuery } from 'convex/react'
+import type { OptimisticLocalStore } from 'convex/browser'
+import type { FunctionArgs, FunctionReturnType } from 'convex/server'
+import { ArrowLeft, Copy, Play, Shuffle, Trash2, UserRoundPlus, X } from 'lucide-react'
+import { api } from '@backend/_generated/api'
+import type { Id } from '@backend/_generated/dataModel'
+import { authClient } from '@/lib/auth-client'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import {
+  getLobbyPlayerColorLabel,
+  canEditLobbyPlayerColor,
+  getLobbyColorOptions,
+} from '@/lib/lobby-player-colors'
+import {
+  FORTIFY_MODE_OPTIONS,
+  MAX_FORTIFY_OPTIONS,
+  TIMING_MODE_OPTIONS,
+  findLobbyOption,
+  type GameTimingMode,
+} from '@/lib/lobby-rule-options'
 import {
   CARD_INCREMENT_PRESET_ENTRIES,
   CARD_INCREMENT_PRESETS,
   resolveCardIncrementPresetKey,
   type CardIncrementPresetKey,
-} from "@/lib/game/ruleset-summary";
+} from '@/lib/game/ruleset-summary'
 
-type RulesetOverridesInput = {
-  fortify: { fortifyMode: "adjacent" | "connected"; maxFortifiesPerTurn?: number };
-  cards: { forcedTradeHandSize: number; tradeValues: number[]; tradeValueOverflow: "repeatLast" | "continueByFive" };
-  teams: {
-    allowPlaceOnTeammate: boolean;
-    allowFortifyWithTeammate: boolean;
-    allowFortifyThroughTeammates: boolean;
-  };
-};
+type RulesetOverridesInput = NonNullable<
+  FunctionArgs<typeof api.lobby.setRulesetOverrides>['rulesetOverrides']
+>
 
-const FORTIFY_MODE_OPTIONS = [
-  { value: "connected", label: "Connected" },
-  { value: "adjacent", label: "Adjacent" },
-] as const;
+const TEAM_NAME_MAX_LENGTH = 24
 
-const MAX_FORTIFY_OPTIONS = [
-  { value: "unlimited", label: "Unlimited" },
-  { value: "0", label: "0" },
-  { value: "1", label: "1" },
-  { value: "2", label: "2" },
-  { value: "3", label: "3" },
-] as const;
+type LobbyQuery = FunctionReturnType<typeof api.lobby.getLobby>
 
-const TEAM_NAME_MAX_LENGTH = 24;
+type LobbyData = Exclude<LobbyQuery, null>
 
-const TIMING_MODE_OPTIONS = [
-  { value: "realtime", label: "Realtime (no turn timer)" },
-  { value: "async_1d", label: "Async (1 day / turn)" },
-  { value: "async_3d", label: "Async (3 days / turn)" },
-] as const;
+type LobbyPlayer = LobbyData['players'][number]
 
-type GameTimingMode = (typeof TIMING_MODE_OPTIONS)[number]["value"];
-type LobbyQuery = FunctionReturnType<typeof api.lobby.getLobby>;
-type LobbyData = Exclude<LobbyQuery, null>;
-type LobbyPlayer = LobbyData["players"][number];
-type SlackWorkspaceListQuery = FunctionReturnType<typeof api.slackAdmin.listMyWorkspaceOptions>;
-type SlackWorkspaceListItem = SlackWorkspaceListQuery[number];
+type SlackWorkspaceListQuery = FunctionReturnType<typeof api.slackAdmin.listMyWorkspaceOptions>
+
+type SlackWorkspaceListItem = SlackWorkspaceListQuery[number]
 
 function updateLobbyQuery(
   localStore: OptimisticLocalStore,
-  gameId: Id<"games">,
+  gameId: Id<'games'>,
   updater: (lobby: LobbyData) => LobbyData,
 ) {
-  const queryArgs = { gameId } as const;
-  const lobby = localStore.getQuery(api.lobby.getLobby, queryArgs) as LobbyQuery | undefined;
-  if (!lobby) return;
-  localStore.setQuery(api.lobby.getLobby, queryArgs, updater(lobby));
+  const queryArgs = { gameId }
+  const lobby = localStore.getQuery(api.lobby.getLobby, queryArgs)
+
+  if (!lobby) return
+  localStore.setQuery(api.lobby.getLobby, queryArgs, updater(lobby))
 }
 
 function RulesSwitch({
@@ -77,17 +72,22 @@ function RulesSwitch({
   onCheckedChange,
   disabled,
 }: {
-  label: string;
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  disabled?: boolean;
+  label: string
+  checked: boolean
+  onCheckedChange: (checked: boolean) => void
+  disabled?: boolean
 }) {
   return (
     <label className="flex items-center justify-between gap-3 border border-border/75 bg-background/65 px-3 py-2">
       <span className="text-sm text-foreground">{label}</span>
-      <Switch aria-label={label} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
+      <Switch
+        aria-label={label}
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        disabled={disabled}
+      />
     </label>
-  );
+  )
 }
 
 function PlayerColorPicker({
@@ -95,26 +95,37 @@ function PlayerColorPicker({
   options,
   onChange,
 }: {
-  value: string;
-  options: ReturnType<typeof getLobbyColorOptions>;
-  onChange: (nextColor: string) => void;
+  value: string
+  options: ReturnType<typeof getLobbyColorOptions>
+  onChange: (nextColor: string) => void
 }) {
-  const activeOption = options.find((option) => option.color === value);
-  const activeLabel = activeOption?.name ?? value;
+  const activeOption = options.find((option) => option.color === value)
+  const activeLabel = activeOption?.name ?? value
 
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-8 min-w-[136px] justify-start gap-2 text-xs">
-          <span className="size-3 rounded-full border border-white/40" style={{ backgroundColor: value }} />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 min-w-[136px] justify-start gap-2 text-xs"
+        >
+          <span
+            className="size-3 rounded-full border border-white/40"
+            style={{ backgroundColor: value }}
+          />
           <span className="truncate">{activeLabel}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-52">
-        <p className="mb-2 text-[11px] uppercase tracking-[0.1em] text-muted-foreground">Player Color</p>
+        <p className="mb-2 text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
+          Player Color
+        </p>
         <div className="grid grid-cols-5 gap-1.5">
           {options.map((option) => {
-            const selected = option.color === value;
+            const selected = option.color === value
+
             return (
               <button
                 key={option.color}
@@ -123,153 +134,178 @@ function PlayerColorPicker({
                 disabled={option.disabled}
                 onClick={() => onChange(option.color)}
                 className={`relative size-7 overflow-hidden border transition ${
-                  selected ? "border-primary ring-2 ring-primary/35" : "border-white/35"
-                } ${option.disabled ? "cursor-not-allowed" : ""}`}
+                  selected ? 'border-primary ring-2 ring-primary/35' : 'border-white/35'
+                } ${option.disabled ? 'cursor-not-allowed' : ''}`}
                 style={{ backgroundColor: option.color }}
               >
                 <span className="sr-only">{option.name}</span>
                 {option.disabled ? (
-                  <span className="absolute inset-0 flex items-center justify-center bg-black/35" aria-hidden="true">
+                  <span
+                    className="absolute inset-0 flex items-center justify-center bg-black/35"
+                    aria-hidden="true"
+                  >
                     <X className="size-4 text-white" />
                   </span>
                 ) : null}
               </button>
-            );
+            )
           })}
         </div>
       </PopoverContent>
     </Popover>
-  );
+  )
 }
 
 export default function LobbyPage() {
-  const { gameId } = useParams<{ gameId: string }>();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { data: session, isPending: sessionPending } = authClient.useSession();
+  const { gameId: routeGameId } = useParams<{ gameId: string }>()
+  // SAFETY: Route text crosses the SDK's nominal ID boundary here. Convex's v.id validator,
+  // document lookup, and authorization remain authoritative on the server.
+  const gameId = routeGameId as Id<'games'> | undefined
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { data: session, isPending: sessionPending } = authClient.useSession()
 
-  const lobby = useQuery(api.lobby.getLobby, gameId ? { gameId: gameId as Id<"games"> } : "skip");
+  const lobby = useQuery(api.lobby.getLobby, gameId ? { gameId } : 'skip')
+
   const slackWorkspaceOptions = useQuery(
     api.slackAdmin.listMyWorkspaceOptions,
-    session ? {} : "skip",
-  );
-  const kickPlayer = useMutation(api.lobby.kickPlayer);
-  const startGame = useMutation(api.lobby.startGame);
-  const setPlayerTeam = useMutation(api.lobby.setPlayerTeam).withOptimisticUpdate((localStore, args) => {
-    updateLobbyQuery(localStore, args.gameId, (lobbyData) => ({
-      ...lobbyData,
-      players: lobbyData.players.map((player: LobbyPlayer) =>
-        player.userId === args.userId ? { ...player, teamId: args.teamId } : player,
-      ),
-    }));
-  });
-  const rebalanceTeams = useMutation(api.lobby.rebalanceTeams);
-  const reassignPlayerColors = useMutation(api.lobby.reassignPlayerColors);
-  const setTeamCountMutation = useMutation(api.lobby.setTeamCount).withOptimisticUpdate((localStore, args) => {
-    updateLobbyQuery(localStore, args.gameId, (lobbyData) => {
-      const teamIds = Array.from({ length: args.teamCount }, (_, index) => `team-${index + 1}`);
-      const previousTeamNames = (lobbyData.game.teamNames as Record<string, string> | null) ?? {};
-      const nextTeamNames = Object.fromEntries(
-        teamIds.map((teamId, index) => [teamId, previousTeamNames[teamId] ?? `Team ${index + 1}`]),
-      );
+    session ? {} : 'skip',
+  )
 
-      return {
+  const kickPlayer = useMutation(api.lobby.kickPlayer)
+  const startGame = useMutation(api.lobby.startGame)
+
+  const setPlayerTeam = useMutation(api.lobby.setPlayerTeam).withOptimisticUpdate(
+    (localStore, args) => {
+      updateLobbyQuery(localStore, args.gameId, (lobbyData) => ({
+        ...lobbyData,
+        players: lobbyData.players.map((player: LobbyPlayer) =>
+          player.userId === args.userId ? { ...player, teamId: args.teamId } : player,
+        ),
+      }))
+    },
+  )
+
+  const rebalanceTeams = useMutation(api.lobby.rebalanceTeams)
+  const reassignPlayerColors = useMutation(api.lobby.reassignPlayerColors)
+
+  const setTeamCountMutation = useMutation(api.lobby.setTeamCount).withOptimisticUpdate(
+    (localStore, args) => {
+      updateLobbyQuery(localStore, args.gameId, (lobbyData) => {
+        const teamIds = Array.from({ length: args.teamCount }, (_, index) => `team-${index + 1}`)
+        const previousTeamNames = lobbyData.game.teamNames ?? {}
+
+        const nextTeamNames = Object.fromEntries(
+          teamIds.map((teamId, index) => [
+            teamId,
+            previousTeamNames[teamId] ?? `Team ${index + 1}`,
+          ]),
+        )
+
+        return {
+          ...lobbyData,
+          game: {
+            ...lobbyData.game,
+            teamCount: args.teamCount,
+            teamNames: nextTeamNames,
+          },
+          players: lobbyData.players.map((player: LobbyPlayer) =>
+            player.teamId && !teamIds.includes(player.teamId)
+              ? { ...player, teamId: null }
+              : player,
+          ),
+        }
+      })
+    },
+  )
+
+  const setTeamNameMutation = useMutation(api.lobby.setTeamName).withOptimisticUpdate(
+    (localStore, args) => {
+      updateLobbyQuery(localStore, args.gameId, (lobbyData) => ({
         ...lobbyData,
         game: {
           ...lobbyData.game,
-          teamCount: args.teamCount,
-          teamNames: nextTeamNames,
+          teamNames: {
+            ...(lobbyData.game.teamNames ?? {}),
+            [args.teamId]: args.name.trim(),
+          },
         },
-        players: lobbyData.players.map((player: LobbyPlayer) =>
-          player.teamId && !teamIds.includes(player.teamId)
-            ? { ...player, teamId: null }
-            : player,
-        ),
-      };
-    });
-  });
-  const setTeamNameMutation = useMutation(api.lobby.setTeamName).withOptimisticUpdate((localStore, args) => {
-    updateLobbyQuery(localStore, args.gameId, (lobbyData) => ({
-      ...lobbyData,
-      game: {
-        ...lobbyData.game,
-        teamNames: {
-          ...((lobbyData.game.teamNames as Record<string, string> | null) ?? {}),
-          [args.teamId]: args.name.trim(),
-        },
-      },
-    }));
-  });
-  const setRulesetOverrides = useMutation(api.lobby.setRulesetOverrides);
-  const setSlackNotifications = useMutation(api.lobby.setSlackNotifications);
-  const setPlayerColor = useMutation(api.lobby.setPlayerColor);
-  const joinGameByInvite = useMutation(api.lobby.joinGameByInvite);
-  const deleteGame = useMutation(api.lobby.deleteGame);
+      }))
+    },
+  )
 
-  const [copied, setCopied] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const [deletingGame, setDeletingGame] = useState(false);
-  const [joining, setJoining] = useState(false);
-  const [rebalancing, setRebalancing] = useState(false);
-  const [reassigningColors, setReassigningColors] = useState(false);
-  const [savingRules, setSavingRules] = useState(false);
-  const [fortifyMode, setFortifyMode] = useState<"adjacent" | "connected">("connected");
-  const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | "unlimited">(3);
-  const [forcedTradeHandSize, setForcedTradeHandSize] = useState(5);
-  const [cardIncrementPreset, setCardIncrementPreset] = useState<CardIncrementPresetKey>("classic");
-  const [allowPlaceOnTeammate, setAllowPlaceOnTeammate] = useState(true);
-  const [allowFortifyWithTeammate, setAllowFortifyWithTeammate] = useState(true);
-  const [allowFortifyThroughTeammates, setAllowFortifyThroughTeammates] = useState(true);
-  const [timingModeDraft, setTimingModeDraft] = useState<GameTimingMode>("realtime");
-  const [excludeWeekendsDraft, setExcludeWeekendsDraft] = useState(false);
-  const [teamCountDraft, setTeamCountDraft] = useState(2);
-  const [slackNotificationsEnabledDraft, setSlackNotificationsEnabledDraft] = useState(false);
-  const [slackTeamIdDraft, setSlackTeamIdDraft] = useState<string | null>(null);
-  const [teamNameDrafts, setTeamNameDrafts] = useState<Record<string, string>>({});
-  const [pendingColorByUserId, setPendingColorByUserId] = useState<Record<string, string>>({});
-  const colorRequestSeqByUserIdRef = useRef<Record<string, number>>({});
-  const [error, setError] = useState<string | null>(null);
+  const setRulesetOverrides = useMutation(api.lobby.setRulesetOverrides)
+  const setSlackNotifications = useMutation(api.lobby.setSlackNotifications)
+  const setPlayerColor = useMutation(api.lobby.setPlayerColor)
+  const joinGameByInvite = useMutation(api.lobby.joinGameByInvite)
+  const deleteGame = useMutation(api.lobby.deleteGame)
+
+  const [copied, setCopied] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const [deletingGame, setDeletingGame] = useState(false)
+  const [joining, setJoining] = useState(false)
+  const [rebalancing, setRebalancing] = useState(false)
+  const [reassigningColors, setReassigningColors] = useState(false)
+  const [savingRules, setSavingRules] = useState(false)
+  const [fortifyMode, setFortifyMode] = useState<'adjacent' | 'connected'>('connected')
+  const [maxFortifiesPerTurn, setMaxFortifiesPerTurn] = useState<number | 'unlimited'>(3)
+  const [forcedTradeHandSize, setForcedTradeHandSize] = useState(5)
+  const [cardIncrementPreset, setCardIncrementPreset] = useState<CardIncrementPresetKey>('classic')
+  const [allowPlaceOnTeammate, setAllowPlaceOnTeammate] = useState(true)
+  const [allowFortifyWithTeammate, setAllowFortifyWithTeammate] = useState(true)
+  const [allowFortifyThroughTeammates, setAllowFortifyThroughTeammates] = useState(true)
+  const [timingModeDraft, setTimingModeDraft] = useState<GameTimingMode>('realtime')
+  const [excludeWeekendsDraft, setExcludeWeekendsDraft] = useState(false)
+  const [teamCountDraft, setTeamCountDraft] = useState(2)
+  const [slackNotificationsEnabledDraft, setSlackNotificationsEnabledDraft] = useState(false)
+  const [slackTeamIdDraft, setSlackTeamIdDraft] = useState<string | null>(null)
+  const [teamNameDrafts, setTeamNameDrafts] = useState<Record<string, string>>({})
+  const [pendingColorByUserId, setPendingColorByUserId] = useState<Record<string, string>>({})
+  const colorRequestSeqByUserIdRef = useRef<Record<string, number>>({})
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!lobby) return;
-    const overrides = lobby.game.rulesetOverrides as Partial<RulesetOverridesInput> | null;
-    const nextFortifyMode = overrides?.fortify?.fortifyMode ?? "connected";
-    setFortifyMode(nextFortifyMode);
+    if (!lobby) return
+    const overrides = lobby.game.rulesetOverrides
+    const nextFortifyMode = overrides?.fortify?.fortifyMode ?? 'connected'
+    setFortifyMode(nextFortifyMode)
     setMaxFortifiesPerTurn(
       overrides?.fortify?.maxFortifiesPerTurn === undefined
         ? 3
         : overrides.fortify.maxFortifiesPerTurn,
-    );
-    setForcedTradeHandSize(overrides?.cards?.forcedTradeHandSize ?? 5);
+    )
+    setForcedTradeHandSize(overrides?.cards?.forcedTradeHandSize ?? 5)
     setCardIncrementPreset(
-      resolveCardIncrementPresetKey(overrides?.cards?.tradeValues, overrides?.cards?.tradeValueOverflow),
-    );
-    setAllowPlaceOnTeammate(overrides?.teams?.allowPlaceOnTeammate ?? true);
-    setAllowFortifyWithTeammate(overrides?.teams?.allowFortifyWithTeammate ?? true);
+      resolveCardIncrementPresetKey(
+        overrides?.cards?.tradeValues,
+        overrides?.cards?.tradeValueOverflow,
+      ),
+    )
+    setAllowPlaceOnTeammate(overrides?.teams?.allowPlaceOnTeammate ?? true)
+    setAllowFortifyWithTeammate(overrides?.teams?.allowFortifyWithTeammate ?? true)
     setAllowFortifyThroughTeammates(
-      nextFortifyMode === "connected" && (overrides?.teams?.allowFortifyThroughTeammates ?? true),
-    );
-    setTimingModeDraft(((lobby.game as { timingMode?: GameTimingMode }).timingMode ?? "realtime") as GameTimingMode);
-    setExcludeWeekendsDraft((lobby.game as { excludeWeekends?: boolean }).excludeWeekends ?? false);
-    setTeamCountDraft(lobby.game.teamCount ?? 2);
-    setSlackNotificationsEnabledDraft(
-      (lobby.game as { slackNotificationsEnabled?: boolean }).slackNotificationsEnabled ?? false,
-    );
-    setSlackTeamIdDraft((lobby.game as { slackTeamId?: string | null }).slackTeamId ?? null);
-    setTeamNameDrafts((lobby.game.teamNames as Record<string, string> | null) ?? {});
-  }, [lobby]);
+      nextFortifyMode === 'connected' && (overrides?.teams?.allowFortifyThroughTeammates ?? true),
+    )
+    setTimingModeDraft(lobby.game.timingMode ?? 'realtime')
+    setExcludeWeekendsDraft(lobby.game.excludeWeekends ?? false)
+    setTeamCountDraft(lobby.game.teamCount ?? 2)
+    setSlackNotificationsEnabledDraft(lobby.game.slackNotificationsEnabled ?? false)
+    setSlackTeamIdDraft(lobby.game.slackTeamId ?? null)
+    setTeamNameDrafts(lobby.game.teamNames ?? {})
+  }, [lobby])
 
   if (sessionPending) {
-    return <div className="page-shell flex items-center justify-center">Loading...</div>;
+    return <div className="page-shell flex items-center justify-center">Loading...</div>
   }
 
   if (!session) {
-    const redirectPath = `${location.pathname}${location.search}${location.hash}`;
-    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />;
+    const redirectPath = `${location.pathname}${location.search}${location.hash}`
+
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />
   }
 
   if (lobby === undefined) {
-    return <div className="page-shell flex items-center justify-center">Loading lobby...</div>;
+    return <div className="page-shell flex items-center justify-center">Loading lobby...</div>
   }
 
   if (lobby === null) {
@@ -278,225 +314,273 @@ export default function LobbyPage() {
         <Card className="glass-panel w-full max-w-md border-0 py-0">
           <CardContent className="py-8 text-center">
             <p className="text-muted-foreground">Game not found.</p>
-            <Button variant="outline" className="mt-4" onClick={() => navigate("/")}>Go home</Button>
+            <Button variant="outline" className="mt-4" onClick={() => navigate('/')}>
+              Go home
+            </Button>
           </CardContent>
         </Card>
       </div>
-    );
+    )
   }
 
-  if (lobby.game.status === "active" || lobby.game.status === "finished") {
-    return <Navigate to={`/play/${gameId}`} replace />;
+  if (lobby.game.status === 'active' || lobby.game.status === 'finished') {
+    return <Navigate to={`/play/${gameId}`} replace />
   }
 
-  const userId = session.user.id;
-  const isInGame = lobby.players.some((player: LobbyPlayer) => player.userId === userId);
-  const isHost = lobby.game.createdBy === userId;
-  const teamModeEnabled = lobby.game.teamModeEnabled;
-  const turnDeadlineAt = (lobby.game as { turnDeadlineAt?: number | null }).turnDeadlineAt ?? null;
-  const inviteUrl = lobby.inviteCode ? `${window.location.origin}/join/${lobby.inviteCode}` : null;
-  const teamCount = lobby.game.teamCount ?? 2;
+  const userId = session.user.id
+  const isInGame = lobby.players.some((player: LobbyPlayer) => player.userId === userId)
+  const isHost = lobby.game.createdBy === userId
+  const teamModeEnabled = lobby.game.teamModeEnabled
+  const turnDeadlineAt = lobby.game.turnDeadlineAt ?? null
+  const inviteUrl = lobby.inviteCode ? `${window.location.origin}/join/${lobby.inviteCode}` : null
+  const teamCount = lobby.game.teamCount ?? 2
+
+  const teamCountOptions = Array.from(
+    { length: Math.max(1, lobby.players.length - 1) },
+    (_, index) => index + 2,
+  )
+
   const teamIds = teamModeEnabled
     ? Array.from({ length: teamCount }, (_, index) => `team-${index + 1}`)
-    : [];
-  const teamNames = (lobby.game.teamNames as Record<string, string> | null) ?? {};
+    : []
+
+  const teamNames = lobby.game.teamNames ?? {}
+
   const defaultTeamLabelById = Object.fromEntries(
     teamIds.map((teamId, index) => [teamId, `Team ${index + 1}`]),
-  );
+  )
+
   const teamLabel = (teamId: string) =>
-    teamNames[teamId] ?? teamNameDrafts[teamId] ?? defaultTeamLabelById[teamId] ?? teamId;
+    teamNames[teamId] ?? teamNameDrafts[teamId] ?? defaultTeamLabelById[teamId] ?? teamId
+
   const teamSizes = Object.fromEntries(
-    teamIds.map((teamId) => [teamId, lobby.players.filter((player: LobbyPlayer) => player.teamId === teamId).length]),
-  );
-  const playersMissingTeam = lobby.players.filter((player: LobbyPlayer) => !player.teamId).length;
-  const minTeamSize = teamIds.length > 0 ? Math.min(...teamIds.map((teamId) => teamSizes[teamId] ?? 0)) : 0;
-  const maxTeamSize = teamIds.length > 0 ? Math.max(...teamIds.map((teamId) => teamSizes[teamId] ?? 0)) : 0;
-  const nonDivisibleWarning = teamModeEnabled && lobby.players.length > 0 && (lobby.players.length % teamCount !== 0);
-  const teamSetupValid = !teamModeEnabled || (
-    playersMissingTeam === 0 &&
-    teamIds.every((teamId) => (teamSizes[teamId] ?? 0) > 0) &&
-    maxTeamSize - minTeamSize <= 1
-  );
-  const lobbyIsFull = lobby.players.length >= lobby.game.maxPlayers;
+    teamIds.map((teamId) => [
+      teamId,
+      lobby.players.filter((player: LobbyPlayer) => player.teamId === teamId).length,
+    ]),
+  )
+
+  const playersMissingTeam = lobby.players.filter((player: LobbyPlayer) => !player.teamId).length
+
+  const minTeamSize =
+    teamIds.length > 0 ? Math.min(...teamIds.map((teamId) => teamSizes[teamId] ?? 0)) : 0
+
+  const maxTeamSize =
+    teamIds.length > 0 ? Math.max(...teamIds.map((teamId) => teamSizes[teamId] ?? 0)) : 0
+
+  const nonDivisibleWarning =
+    teamModeEnabled && lobby.players.length > 0 && lobby.players.length % teamCount !== 0
+
+  const teamSetupValid =
+    !teamModeEnabled ||
+    (playersMissingTeam === 0 &&
+      teamIds.every((teamId) => (teamSizes[teamId] ?? 0) > 0) &&
+      maxTeamSize - minTeamSize <= 1)
+
+  const lobbyIsFull = lobby.players.length >= lobby.game.maxPlayers
+
   const timingModeLabel =
-    TIMING_MODE_OPTIONS.find((option) => option.value === timingModeDraft)?.label ?? timingModeDraft;
-  const cardIncrementLabel = CARD_INCREMENT_PRESETS[cardIncrementPreset].label;
+    TIMING_MODE_OPTIONS.find((option) => option.value === timingModeDraft)?.label ?? timingModeDraft
+
+  const cardIncrementLabel = CARD_INCREMENT_PRESETS[cardIncrementPreset].label
 
   async function copyInvite() {
-    if (!inviteUrl) return;
-    await navigator.clipboard.writeText(inviteUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    if (!inviteUrl) return
+    await navigator.clipboard.writeText(inviteUrl)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1800)
   }
 
   async function handleStart() {
-    if (!gameId) return;
-    setError(null);
-    setStarting(true);
+    if (!gameId) return
+    setError(null)
+    setStarting(true)
+
     try {
-      await startGame({ gameId: gameId as Id<"games"> });
+      await startGame({ gameId })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start game");
+      setError(err instanceof Error ? err.message : 'Failed to start game')
     } finally {
-      setStarting(false);
+      setStarting(false)
     }
   }
 
   async function handleKick(targetUserId: string) {
-    if (!gameId) return;
+    if (!gameId) return
+
     try {
-      await kickPlayer({ gameId: gameId as Id<"games">, userId: targetUserId });
+      await kickPlayer({ gameId, userId: targetUserId })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to kick player");
+      setError(err instanceof Error ? err.message : 'Failed to kick player')
     }
   }
 
   async function handleJoinLobby() {
-    const inviteCode = lobby?.inviteCode;
-    if (!inviteCode || isInGame) return;
-    setError(null);
-    setJoining(true);
+    const inviteCode = lobby?.inviteCode
+
+    if (!inviteCode || isInGame) return
+    setError(null)
+    setJoining(true)
+
     try {
-      await joinGameByInvite({ code: inviteCode });
+      await joinGameByInvite({ code: inviteCode })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to join lobby");
+      setError(err instanceof Error ? err.message : 'Failed to join lobby')
     } finally {
-      setJoining(false);
+      setJoining(false)
     }
   }
 
   async function handleDeleteGame() {
-    if (!gameId || !isHost || deletingGame) return;
-    const confirmed = window.confirm("Delete this game lobby? This cannot be undone.");
-    if (!confirmed) return;
+    if (!gameId || !isHost || deletingGame) return
+    const confirmed = window.confirm('Delete this game lobby? This cannot be undone.')
 
-    setError(null);
-    setDeletingGame(true);
+    if (!confirmed) return
+
+    setError(null)
+    setDeletingGame(true)
+
     try {
-      await deleteGame({ gameId: gameId as Id<"games"> });
-      navigate("/", { replace: true });
+      await deleteGame({ gameId })
+      navigate('/', { replace: true })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete game");
+      setError(err instanceof Error ? err.message : 'Failed to delete game')
     } finally {
-      setDeletingGame(false);
+      setDeletingGame(false)
     }
   }
 
   async function handleTeamChange(targetUserId: string, teamId: string) {
-    if (!gameId) return;
+    if (!gameId || !teamIds.includes(teamId)) return
+
     try {
-      await setPlayerTeam({ gameId: gameId as Id<"games">, userId: targetUserId, teamId });
+      await setPlayerTeam({ gameId, userId: targetUserId, teamId })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to set team");
+      setError(err instanceof Error ? err.message : 'Failed to set team')
     }
   }
 
   async function handleTeamCountChange(nextTeamCount: number) {
-    if (!gameId) return;
-    setError(null);
-    setTeamCountDraft(nextTeamCount);
+    if (!gameId) return
+    setError(null)
+    setTeamCountDraft(nextTeamCount)
+
     try {
       await setTeamCountMutation({
-        gameId: gameId as Id<"games">,
+        gameId,
         teamCount: nextTeamCount,
-      });
+      })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to set team count");
+      setError(err instanceof Error ? err.message : 'Failed to set team count')
     }
   }
 
   async function handleTeamNameBlur(teamId: string) {
-    if (!gameId || !isHost) return;
-    const draft = teamNameDrafts[teamId];
-    if (!draft) return;
+    if (!gameId || !isHost) return
+    const draft = teamNameDrafts[teamId]
+
+    if (!draft) return
+
     if (draft.trim().length > TEAM_NAME_MAX_LENGTH) {
-      setError(`Team name must be ${TEAM_NAME_MAX_LENGTH} characters or fewer.`);
-      return;
+      setError(`Team name must be ${TEAM_NAME_MAX_LENGTH} characters or fewer.`)
+
+      return
     }
 
-    setError(null);
+    setError(null)
+
     try {
       await setTeamNameMutation({
-        gameId: gameId as Id<"games">,
+        gameId,
         teamId,
         name: draft,
-      });
+      })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to set team name");
+      setError(err instanceof Error ? err.message : 'Failed to set team name')
     }
   }
 
   async function handleRebalance() {
-    if (!gameId) return;
-    setError(null);
-    setRebalancing(true);
+    if (!gameId) return
+    setError(null)
+    setRebalancing(true)
+
     try {
-      await rebalanceTeams({ gameId: gameId as Id<"games"> });
+      await rebalanceTeams({ gameId })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to rebalance teams");
+      setError(err instanceof Error ? err.message : 'Failed to rebalance teams')
     } finally {
-      setRebalancing(false);
+      setRebalancing(false)
     }
   }
 
   async function handleReassignColors() {
-    if (!gameId) return;
-    setError(null);
-    setReassigningColors(true);
+    if (!gameId) return
+    setError(null)
+    setReassigningColors(true)
+
     try {
-      await reassignPlayerColors({ gameId: gameId as Id<"games"> });
+      await reassignPlayerColors({ gameId })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to reassign colors");
+      setError(err instanceof Error ? err.message : 'Failed to reassign colors')
     } finally {
-      setReassigningColors(false);
+      setReassigningColors(false)
     }
   }
 
   async function handleColorChange(targetUserId: string, color: string) {
-    if (!gameId) return;
-    setError(null);
-    const nextSeq = (colorRequestSeqByUserIdRef.current[targetUserId] ?? 0) + 1;
-    colorRequestSeqByUserIdRef.current[targetUserId] = nextSeq;
-    setPendingColorByUserId((prev) => ({ ...prev, [targetUserId]: color }));
+    if (!gameId) return
+    setError(null)
+    const nextSeq = (colorRequestSeqByUserIdRef.current[targetUserId] ?? 0) + 1
+    colorRequestSeqByUserIdRef.current[targetUserId] = nextSeq
+    setPendingColorByUserId((prev) => ({ ...prev, [targetUserId]: color }))
+
     try {
       await setPlayerColor({
-        gameId: gameId as Id<"games">,
+        gameId,
         userId: targetUserId,
         color,
-      });
+      })
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to set player color");
+      setError(err instanceof Error ? err.message : 'Failed to set player color')
     } finally {
       setPendingColorByUserId((prev) => {
         if (colorRequestSeqByUserIdRef.current[targetUserId] !== nextSeq) {
-          return prev;
+          return prev
         }
-        const next = { ...prev };
-        delete next[targetUserId];
-        return next;
-      });
+
+        const next = { ...prev }
+        delete next[targetUserId]
+
+        return next
+      })
     }
   }
 
   async function handleSaveRules() {
-    if (!gameId) return;
+    if (!gameId) return
+
     if (
       slackWorkspaceOptions &&
       slackWorkspaceOptions.length > 0 &&
       slackNotificationsEnabledDraft &&
       !slackTeamIdDraft
     ) {
-      setError("Select a Slack workspace or disable Slack notifications.");
-      return;
+      setError('Select a Slack workspace or disable Slack notifications.')
+
+      return
     }
-    setError(null);
-    setSavingRules(true);
+
+    setError(null)
+    setSavingRules(true)
+
     try {
+      const fortify: RulesetOverridesInput['fortify'] = { fortifyMode }
+
+      if (maxFortifiesPerTurn !== 'unlimited') fortify.maxFortifiesPerTurn = maxFortifiesPerTurn
+
       const rulesetOverrides: RulesetOverridesInput = {
-        fortify: {
-          fortifyMode,
-          ...(maxFortifiesPerTurn === "unlimited" ? {} : { maxFortifiesPerTurn }),
-        },
+        fortify,
         cards: {
           forcedTradeHandSize,
           tradeValues: [...CARD_INCREMENT_PRESETS[cardIncrementPreset].tradeValues],
@@ -507,22 +591,27 @@ export default function LobbyPage() {
           allowFortifyWithTeammate,
           allowFortifyThroughTeammates,
         },
-      };
+      }
+
       await setRulesetOverrides({
-        gameId: gameId as Id<"games">,
+        gameId,
         rulesetOverrides,
         timingMode: timingModeDraft,
         excludeWeekends: excludeWeekendsDraft,
-      });
-      await setSlackNotifications({
-        gameId: gameId as Id<"games">,
+      })
+
+      const slackArgs: FunctionArgs<typeof api.lobby.setSlackNotifications> = {
+        gameId,
         enabled: slackNotificationsEnabledDraft,
-        ...(slackNotificationsEnabledDraft && slackTeamIdDraft ? { slackTeamId: slackTeamIdDraft } : {}),
-      });
+      }
+
+      if (slackNotificationsEnabledDraft && slackTeamIdDraft)
+        slackArgs.slackTeamId = slackTeamIdDraft
+      await setSlackNotifications(slackArgs)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save rules");
+      setError(err instanceof Error ? err.message : 'Failed to save rules')
     } finally {
-      setSavingRules(false);
+      setSavingRules(false)
     }
   }
 
@@ -537,30 +626,40 @@ export default function LobbyPage() {
                 size="sm"
                 title="Back to home"
                 aria-label="Back to home"
-                onClick={() => navigate("/")}
+                onClick={() => navigate('/')}
               >
                 <ArrowLeft className="size-4" />
               </Button>
               <div className="min-w-0">
                 <CardTitle className="hero-title">{lobby.game.name}</CardTitle>
-                <p className="text-sm text-muted-foreground">Waiting for players ({lobby.players.length}/{lobby.game.maxPlayers})</p>
+                <p className="text-sm text-muted-foreground">
+                  Waiting for players ({lobby.players.length}/{lobby.game.maxPlayers})
+                </p>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-5 pb-6">
-            {error && <p className="rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+            {error && (
+              <p className="rounded-md border border-destructive/35 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </p>
+            )}
 
             {inviteUrl && (
               <div className="space-y-2 rounded-lg border bg-background/75 p-3">
                 <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Invite</p>
                 <div className="flex gap-2">
-                  <code className="flex-1 truncate rounded-md border bg-muted/60 px-3 py-2 text-sm">{inviteUrl}</code>
+                  <code className="flex-1 truncate rounded-md border bg-muted/60 px-3 py-2 text-sm">
+                    {inviteUrl}
+                  </code>
                   <Button type="button" variant="outline" onClick={copyInvite} className="w-24">
                     <Copy className="size-4" />
-                    <span className="inline-block text-center">{copied ? "Copied" : "Copy"}</span>
+                    <span className="inline-block text-center">{copied ? 'Copied' : 'Copy'}</span>
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">Code: <span className="font-mono font-semibold">{lobby.inviteCode}</span></p>
+                <p className="text-xs text-muted-foreground">
+                  Code: <span className="font-mono font-semibold">{lobby.inviteCode}</span>
+                </p>
               </div>
             )}
 
@@ -574,21 +673,28 @@ export default function LobbyPage() {
                         {canEditLobbyPlayerColor(isHost, userId, player.userId) ? (
                           <PlayerColorPicker
                             value={pendingColorByUserId[player.userId] ?? player.color}
-                            options={getLobbyColorOptions(lobby.players, player.userId, pendingColorByUserId)}
+                            options={getLobbyColorOptions(
+                              lobby.players,
+                              player.userId,
+                              pendingColorByUserId,
+                            )}
                             onChange={(value) => {
-                              void handleColorChange(player.userId, value);
+                              void handleColorChange(player.userId, value)
                             }}
                           />
                         ) : (
                           <span className="inline-flex h-8 min-w-[136px] items-center gap-2 rounded-md border bg-muted px-2 py-1 text-xs text-muted-foreground">
-                            <span className="size-3 rounded-full border border-white/40" style={{ backgroundColor: player.color }} />
+                            <span
+                              className="size-3 rounded-full border border-white/40"
+                              style={{ backgroundColor: player.color }}
+                            />
                             <span className="truncate">
-                              {PLAYER_COLOR_NAME_BY_HEX[player.color as keyof typeof PLAYER_COLOR_NAME_BY_HEX] ?? player.color}
+                              {getLobbyPlayerColorLabel(player.color)}
                             </span>
                           </span>
                         )}
                         <span className="truncate font-medium">{player.displayName}</span>
-                        {isHost && player.role !== "host" && (
+                        {isHost && player.role !== 'host' && (
                           <Button
                             size="icon"
                             variant="ghost"
@@ -600,15 +706,21 @@ export default function LobbyPage() {
                             <X className="size-3.5" />
                           </Button>
                         )}
-                        {player.role === "host" && <span className="rounded-md bg-primary/15 px-1.5 py-0.5 text-xs text-primary">host</span>}
-                        {player.userId === userId && <span className="text-xs text-muted-foreground">you</span>}
+                        {player.role === 'host' && (
+                          <span className="rounded-md bg-primary/15 px-1.5 py-0.5 text-xs text-primary">
+                            host
+                          </span>
+                        )}
+                        {player.userId === userId && (
+                          <span className="text-xs text-muted-foreground">you</span>
+                        )}
                       </div>
                       {teamModeEnabled &&
                         (isHost ? (
                           <Select
                             value={player.teamId ?? undefined}
                             onValueChange={(value) => {
-                              void handleTeamChange(player.userId, value);
+                              void handleTeamChange(player.userId, value)
                             }}
                           >
                             <SelectTrigger className="h-8 w-[160px] shrink-0 text-xs">
@@ -624,7 +736,7 @@ export default function LobbyPage() {
                           </Select>
                         ) : (
                           <span className="inline-flex shrink-0 rounded-md border bg-muted px-2 py-1 text-xs text-muted-foreground">
-                            {player.teamId ? teamLabel(player.teamId) : "No team"}
+                            {player.teamId ? teamLabel(player.teamId) : 'No team'}
                           </span>
                         ))}
                     </div>
@@ -643,30 +755,44 @@ export default function LobbyPage() {
                         value={String(teamCountDraft)}
                         disabled={!isHost}
                         onValueChange={(value) => {
-                          void handleTeamCountChange(Number(value));
+                          const count = teamCountOptions.find((count) => String(count) === value)
+
+                          if (count !== undefined) void handleTeamCountChange(count)
                         }}
                       >
                         <SelectTrigger className="h-8 w-[64px] text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {Array.from({ length: Math.max(1, lobby.players.length - 1) }, (_, index) => index + 2).map((count) => (
+                          {teamCountOptions.map((count) => (
                             <SelectItem key={count} value={String(count)}>
                               {count}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">Teams</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">
+                        Teams
+                      </p>
                     </div>
                     {isHost && (
                       <div className="ml-auto flex flex-wrap items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={handleReassignColors} disabled={reassigningColors}>
-                          {reassigningColors ? "Reassigning..." : "Reassign colors"}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleReassignColors}
+                          disabled={reassigningColors}
+                        >
+                          {reassigningColors ? 'Reassigning...' : 'Reassign colors'}
                         </Button>
-                        <Button variant="outline" size="sm" onClick={handleRebalance} disabled={rebalancing}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRebalance}
+                          disabled={rebalancing}
+                        >
                           <Shuffle className="size-4" />
-                          {rebalancing ? "Rebalancing..." : "Auto rebalance"}
+                          {rebalancing ? 'Rebalancing...' : 'Auto rebalance'}
                         </Button>
                       </div>
                     )}
@@ -679,11 +805,11 @@ export default function LobbyPage() {
                             type="text"
                             value={teamNameDrafts[teamId] ?? teamLabel(teamId)}
                             onChange={(event) => {
-                              const value = event.target.value.slice(0, TEAM_NAME_MAX_LENGTH);
-                              setTeamNameDrafts((prev) => ({ ...prev, [teamId]: value }));
+                              const value = event.target.value.slice(0, TEAM_NAME_MAX_LENGTH)
+                              setTeamNameDrafts((prev) => ({ ...prev, [teamId]: value }))
                             }}
                             onBlur={() => {
-                              void handleTeamNameBlur(teamId);
+                              void handleTeamNameBlur(teamId)
                             }}
                             maxLength={TEAM_NAME_MAX_LENGTH}
                             className="h-8 w-[220px] text-xs sm:w-[360px]"
@@ -699,7 +825,11 @@ export default function LobbyPage() {
                       </div>
                     ))}
                   </div>
-                  {nonDivisibleWarning && <p className="text-xs text-amber-600">Player count does not divide evenly across teams.</p>}
+                  {nonDivisibleWarning && (
+                    <p className="text-xs text-amber-600">
+                      Player count does not divide evenly across teams.
+                    </p>
+                  )}
                   {!teamSetupValid && (
                     <p className="text-xs text-destructive">
                       Assign every player and keep teams balanced (difference at most 1).
@@ -710,17 +840,27 @@ export default function LobbyPage() {
             )}
 
             <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Game Rules</p>
+              <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">
+                Game Rules
+              </p>
               <div className="space-y-3 rounded-lg border bg-background/75 p-3">
                 {isHost ? (
                   <>
                     <div className="space-y-2 text-xs">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">Game Flow</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">
+                        Game Flow
+                      </p>
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-muted-foreground">Card reward increment</span>
                         <Select
                           value={cardIncrementPreset}
-                          onValueChange={(value) => setCardIncrementPreset(value as CardIncrementPresetKey)}
+                          onValueChange={(value) => {
+                            const preset = CARD_INCREMENT_PRESET_ENTRIES.find(
+                              ([key]) => key === value,
+                            )
+
+                            if (preset) setCardIncrementPreset(preset[0])
+                          }}
                         >
                           <SelectTrigger className="h-8 w-[220px] text-xs sm:w-[360px]">
                             <SelectValue />
@@ -739,10 +879,13 @@ export default function LobbyPage() {
                         <Select
                           value={timingModeDraft}
                           onValueChange={(value) => {
-                            const nextMode = value as GameTimingMode;
-                            setTimingModeDraft(nextMode);
-                            if (nextMode === "realtime") {
-                              setExcludeWeekendsDraft(false);
+                            const nextMode = findLobbyOption(TIMING_MODE_OPTIONS, value)
+
+                            if (!nextMode) return
+                            setTimingModeDraft(nextMode)
+
+                            if (nextMode === 'realtime') {
+                              setExcludeWeekendsDraft(false)
                             }
                           }}
                         >
@@ -758,12 +901,17 @@ export default function LobbyPage() {
                           </SelectContent>
                         </Select>
                       </div>
-                      {timingModeDraft !== "realtime" && (
+                      {timingModeDraft !== 'realtime' && (
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-muted-foreground">Exclude weekends (EU mode)</span>
                           <label className="flex h-8 w-[220px] items-center justify-between rounded-md border border-border/75 bg-background/65 px-3 sm:w-[360px]">
-                            <span className="text-xs text-foreground">{excludeWeekendsDraft ? "On" : "Off"}</span>
-                            <Switch checked={excludeWeekendsDraft} onCheckedChange={setExcludeWeekendsDraft} />
+                            <span className="text-xs text-foreground">
+                              {excludeWeekendsDraft ? 'On' : 'Off'}
+                            </span>
+                            <Switch
+                              checked={excludeWeekendsDraft}
+                              onCheckedChange={setExcludeWeekendsDraft}
+                            />
                           </label>
                         </div>
                       )}
@@ -779,16 +927,21 @@ export default function LobbyPage() {
                         />
                       </div>
 
-                      <p className="pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">Fortify Rules</p>
+                      <p className="pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">
+                        Fortify Rules
+                      </p>
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-muted-foreground">Fortify mode</span>
                         <Select
                           value={fortifyMode}
                           onValueChange={(value) => {
-                            const nextMode = value as "adjacent" | "connected";
-                            setFortifyMode(nextMode);
-                            if (nextMode === "adjacent") {
-                              setAllowFortifyThroughTeammates(false);
+                            const nextMode = findLobbyOption(FORTIFY_MODE_OPTIONS, value)
+
+                            if (!nextMode) return
+                            setFortifyMode(nextMode)
+
+                            if (nextMode === 'adjacent') {
+                              setAllowFortifyThroughTeammates(false)
                             }
                           }}
                         >
@@ -808,9 +961,14 @@ export default function LobbyPage() {
                         <span className="text-muted-foreground">Fortifies per turn</span>
                         <Select
                           value={String(maxFortifiesPerTurn)}
-                          onValueChange={(value) =>
-                            setMaxFortifiesPerTurn(value === "unlimited" ? "unlimited" : Number(value))
-                          }
+                          onValueChange={(value) => {
+                            const option = findLobbyOption(MAX_FORTIFY_OPTIONS, value)
+
+                            if (option)
+                              setMaxFortifiesPerTurn(
+                                option === 'unlimited' ? 'unlimited' : Number(option),
+                              )
+                          }}
                         >
                           <SelectTrigger className="h-8 w-[220px] text-xs sm:w-[360px]">
                             <SelectValue />
@@ -827,12 +985,15 @@ export default function LobbyPage() {
                     </div>
                     {turnDeadlineAt && (
                       <p className="text-xs text-muted-foreground">
-                        Current deadline: {new Date(turnDeadlineAt).toLocaleString()} ({new Date(turnDeadlineAt).toUTCString()})
+                        Current deadline: {new Date(turnDeadlineAt).toLocaleString()} (
+                        {new Date(turnDeadlineAt).toUTCString()})
                       </p>
                     )}
                     {teamModeEnabled && (
                       <div className="space-y-2">
-                        <p className="pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">Team Rules</p>
+                        <p className="pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">
+                          Team Rules
+                        </p>
                         <RulesSwitch
                           checked={allowPlaceOnTeammate}
                           onCheckedChange={setAllowPlaceOnTeammate}
@@ -845,7 +1006,7 @@ export default function LobbyPage() {
                         />
                         <RulesSwitch
                           checked={allowFortifyThroughTeammates}
-                          disabled={fortifyMode === "adjacent"}
+                          disabled={fortifyMode === 'adjacent'}
                           onCheckedChange={setAllowFortifyThroughTeammates}
                           label="Allow fortify through teammate chain"
                         />
@@ -853,14 +1014,19 @@ export default function LobbyPage() {
                     )}
                     {slackWorkspaceOptions && slackWorkspaceOptions.length > 0 && (
                       <div className="space-y-2 pt-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">Slack Notifications</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">
+                          Slack Notifications
+                        </p>
                         <label className="flex items-center justify-between gap-3 border border-border/75 bg-background/65 px-3 py-2">
-                          <span className="text-sm text-foreground">Notify Slack on turn changes</span>
+                          <span className="text-sm text-foreground">
+                            Notify Slack on turn changes
+                          </span>
                           <Switch
                             checked={slackNotificationsEnabledDraft}
                             onCheckedChange={(checked) => {
-                              setSlackNotificationsEnabledDraft(checked);
-                              if (!checked) setSlackTeamIdDraft(null);
+                              setSlackNotificationsEnabledDraft(checked)
+
+                              if (!checked) setSlackTeamIdDraft(null)
                             }}
                           />
                         </label>
@@ -869,17 +1035,26 @@ export default function LobbyPage() {
                             <span className="text-muted-foreground">Workspace</span>
                             <Select
                               value={slackTeamIdDraft ?? undefined}
-                              onValueChange={(value) => setSlackTeamIdDraft(value)}
+                              onValueChange={(value) => {
+                                if (
+                                  slackWorkspaceOptions?.some(
+                                    (workspace) => workspace.teamId === value,
+                                  )
+                                )
+                                  setSlackTeamIdDraft(value)
+                              }}
                             >
                               <SelectTrigger className="h-8 w-[220px] text-xs sm:w-[360px]">
                                 <SelectValue placeholder="Select workspace" />
                               </SelectTrigger>
                               <SelectContent>
-                                {(slackWorkspaceOptions ?? []).map((workspace: SlackWorkspaceListItem) => (
-                                  <SelectItem key={workspace.teamId} value={workspace.teamId}>
-                                    {workspace.teamName}
-                                  </SelectItem>
-                                ))}
+                                {(slackWorkspaceOptions ?? []).map(
+                                  (workspace: SlackWorkspaceListItem) => (
+                                    <SelectItem key={workspace.teamId} value={workspace.teamId}>
+                                      {workspace.teamName}
+                                    </SelectItem>
+                                  ),
+                                )}
                               </SelectContent>
                             </Select>
                           </div>
@@ -887,14 +1062,21 @@ export default function LobbyPage() {
                       </div>
                     )}
                     <div className="pt-1">
-                      <Button variant="outline" size="sm" onClick={handleSaveRules} disabled={savingRules}>
-                        {savingRules ? "Saving..." : "Save Rules"}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSaveRules}
+                        disabled={savingRules}
+                      >
+                        {savingRules ? 'Saving...' : 'Save Rules'}
                       </Button>
                     </div>
                   </>
                 ) : (
                   <div className="space-y-1 text-xs">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">Game Flow</p>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">
+                      Game Flow
+                    </p>
                     <p>
                       <span className="text-muted-foreground">Card reward increment: </span>
                       <span className="text-foreground">{cardIncrementLabel}</span>
@@ -903,13 +1085,17 @@ export default function LobbyPage() {
                       <span className="text-muted-foreground">Turn timing: </span>
                       <span className="text-foreground">{timingModeLabel}</span>
                     </p>
-                    {timingModeDraft !== "realtime" && (
+                    {timingModeDraft !== 'realtime' && (
                       <p>
                         <span className="text-muted-foreground">Exclude weekends (EU mode): </span>
-                        <span className="text-foreground">{excludeWeekendsDraft ? "On" : "Off"}</span>
+                        <span className="text-foreground">
+                          {excludeWeekendsDraft ? 'On' : 'Off'}
+                        </span>
                       </p>
                     )}
-                    <p className="pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">Fortify Rules</p>
+                    <p className="pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">
+                      Fortify Rules
+                    </p>
                     <p>
                       <span className="text-muted-foreground">Fortify mode: </span>
                       <span className="text-foreground">{fortifyMode}</span>
@@ -924,38 +1110,56 @@ export default function LobbyPage() {
                     </p>
                     {teamModeEnabled && (
                       <>
-                        <p className="pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">Team Rules</p>
+                        <p className="pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">
+                          Team Rules
+                        </p>
                         <p>
                           <span className="text-muted-foreground">Allow place on teammate: </span>
-                          <span className="text-foreground">{allowPlaceOnTeammate ? "Yes" : "No"}</span>
+                          <span className="text-foreground">
+                            {allowPlaceOnTeammate ? 'Yes' : 'No'}
+                          </span>
                         </p>
                         <p>
-                          <span className="text-muted-foreground">Allow fortifying teammates: </span>
-                          <span className="text-foreground">{allowFortifyWithTeammate ? "Yes" : "No"}</span>
+                          <span className="text-muted-foreground">
+                            {'Allow fortifying teammates: '}
+                          </span>
+                          <span className="text-foreground">
+                            {allowFortifyWithTeammate ? 'Yes' : 'No'}
+                          </span>
                         </p>
                         <p>
-                          <span className="text-muted-foreground">Allow fortify through teammate chain: </span>
-                          <span className="text-foreground">{allowFortifyThroughTeammates ? "Yes" : "No"}</span>
+                          <span className="text-muted-foreground">
+                            {'Allow fortify through teammate chain: '}
+                          </span>
+                          <span className="text-foreground">
+                            {allowFortifyThroughTeammates ? 'Yes' : 'No'}
+                          </span>
                         </p>
                       </>
                     )}
                     {turnDeadlineAt && (
                       <p>
                         <span className="text-muted-foreground">Current deadline: </span>
-                        <span className="text-foreground">{new Date(turnDeadlineAt).toLocaleString()}</span>
+                        <span className="text-foreground">
+                          {new Date(turnDeadlineAt).toLocaleString()}
+                        </span>
                       </p>
                     )}
                     {slackWorkspaceOptions && slackWorkspaceOptions.length > 0 && (
                       <>
-                        <p className="pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">Slack Notifications</p>
+                        <p className="pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground/80">
+                          Slack Notifications
+                        </p>
                         <p>
                           <span className="text-muted-foreground">Enabled: </span>
-                          <span className="text-foreground">{slackNotificationsEnabledDraft ? "Yes" : "No"}</span>
+                          <span className="text-foreground">
+                            {slackNotificationsEnabledDraft ? 'Yes' : 'No'}
+                          </span>
                         </p>
                         {slackNotificationsEnabledDraft && (
                           <p>
                             <span className="text-muted-foreground">Workspace: </span>
-                            <span className="text-foreground">{slackTeamIdDraft ?? "Unknown"}</span>
+                            <span className="text-foreground">{slackTeamIdDraft ?? 'Unknown'}</span>
                           </p>
                         )}
                       </>
@@ -967,15 +1171,19 @@ export default function LobbyPage() {
 
             <div className="flex flex-col gap-2 sm:flex-row">
               {isHost && (
-                <Button className="flex-1" disabled={starting || lobby.players.length < 2 || !teamSetupValid} onClick={handleStart}>
+                <Button
+                  className="flex-1"
+                  disabled={starting || lobby.players.length < 2 || !teamSetupValid}
+                  onClick={handleStart}
+                >
                   <Play className="size-4" />
                   {starting
-                    ? "Starting..."
+                    ? 'Starting...'
                     : lobby.players.length < 2
-                      ? "Need 2+ players"
+                      ? 'Need 2+ players'
                       : !teamSetupValid
-                        ? "Fix Team Setup"
-                        : "Start Game"}
+                        ? 'Fix Team Setup'
+                        : 'Start Game'}
                 </Button>
               )}
               {isHost && (
@@ -986,7 +1194,7 @@ export default function LobbyPage() {
                   onClick={handleDeleteGame}
                 >
                   <Trash2 className="size-4" />
-                  {deletingGame ? "Deleting..." : "Delete Game"}
+                  {deletingGame ? 'Deleting...' : 'Delete Game'}
                 </Button>
               )}
               {!isInGame && (
@@ -996,7 +1204,7 @@ export default function LobbyPage() {
                   onClick={handleJoinLobby}
                 >
                   <UserRoundPlus className="size-4" />
-                  {joining ? "Joining..." : lobbyIsFull ? "Lobby Full" : "Join Lobby"}
+                  {joining ? 'Joining...' : lobbyIsFull ? 'Lobby Full' : 'Join Lobby'}
                 </Button>
               )}
             </div>
@@ -1004,5 +1212,5 @@ export default function LobbyPage() {
         </Card>
       </div>
     </div>
-  );
+  )
 }

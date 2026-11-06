@@ -1,34 +1,34 @@
-import { useQuery } from "convex/react";
-import { api } from "@backend/_generated/api";
-import type { Id } from "@backend/_generated/dataModel";
-import type { ChatMessage } from "@/lib/game/types";
+import { useQuery } from 'convex/react'
+import { api } from '@backend/_generated/api'
+import type { Id } from '@backend/_generated/dataModel'
 
 export function useGameViewQueries(
-  session: unknown,
+  hasSession: boolean,
   sessionPending: boolean,
-  typedGameId: Id<"games"> | undefined,
+  typedGameId: Id<'games'> | undefined,
 ) {
   const playerView = useQuery(
     api.games.getGameViewAsPlayer,
-    session && typedGameId ? { gameId: typedGameId } : "skip",
-  );
+    hasSession && typedGameId ? { gameId: typedGameId } : 'skip',
+  )
+
   const publicView = useQuery(
     api.games.getGameView,
-    !sessionPending && !session && typedGameId ? { gameId: typedGameId } : "skip",
-  );
+    !sessionPending && !hasSession && typedGameId ? { gameId: typedGameId } : 'skip',
+  )
 
   return {
     playerView,
     publicView,
-  };
+  }
 }
 
 export function useGameRuntimeQueries(
-  typedGameId: Id<"games"> | undefined,
+  typedGameId: Id<'games'> | undefined,
   isAuthenticated: boolean,
   mapId?: string,
 ) {
-  const mapDoc = useQuery(api.maps.getByMapId, mapId ? { mapId } : "skip");
+  const mapDoc = useQuery(api.maps.getByMapId, mapId ? { mapId } : 'skip')
 
   const chatMessages = useQuery(
     api.gameChat.listVisibleMessages,
@@ -37,11 +37,11 @@ export function useGameRuntimeQueries(
           gameId: typedGameId,
           limit: 60,
         }
-      : "skip",
-  ) as ChatMessage[] | undefined;
+      : 'skip',
+  )
 
   return {
     mapDoc,
     chatMessages,
-  };
+  }
 }
