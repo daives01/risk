@@ -17,39 +17,17 @@ function escapeHtml(value: string): string {
 }
 
 function appEmailHtml(args: AppEmailArgs): string {
-  const detailRowsHtml = (args.detailRows ?? [])
-    .map(
-      (row) => `
-        <tr>
-          <td style="padding: 8px 12px; border: 1px solid #323844; color: #8b95a7; width: 140px; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase;">${escapeHtml(row.label)}</td>
-          <td style="padding: 8px 12px; border: 1px solid #323844; color: #e4e8ee; font-size: 14px;">${escapeHtml(row.value)}</td>
-        </tr>
-      `,
-    )
-    .join("");
-
-  return `
-    <div style="background: #0b0d10; padding: 24px 12px; color: #e4e8ee;">
-      <div style="margin: 0 auto; width: 100%; max-width: 560px; border: 1px solid #323844; background: #0f1216; font-family: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;">
-        <div style="padding: 14px 16px; border-bottom: 1px solid #323844;">
-          <div style="font-size: 20px; letter-spacing: 0.16em; color: #f2bf62; text-transform: uppercase;">Legally Distinct Global Domination</div>
-        </div>
-
-        <div style="padding: 20px 16px 16px;">
-          <h2 style="margin: 0 0 12px; color: #e4e8ee; font-size: 22px; line-height: 1.25;">${escapeHtml(args.title)}</h2>
-          <p style="margin: 0 0 14px; color: #e4e8ee; font-size: 14px; line-height: 1.6;">${escapeHtml(args.intro)}</p>
-          ${detailRowsHtml
-      ? `<table role="presentation" cellspacing="0" cellpadding="0" style="width: 100%; border-collapse: collapse; margin: 0 0 16px;">${detailRowsHtml}</table>`
-      : ""
-    }
-          <a href="${escapeHtml(args.ctaUrl)}" style="display: inline-block; padding: 10px 16px; border: 1px solid #f2bf62; color: #f2bf62; text-decoration: none; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase;">
-            ${escapeHtml(args.ctaLabel)}
-          </a>
-          <p style="margin: 16px 0 0; color: #8b95a7; font-size: 13px; line-height: 1.5;">${escapeHtml(args.footer)}</p>
-        </div>
-      </div>
-    </div>
-  `;
+  const details = (args.detailRows ?? []).map(row => `<p style="margin:0 0 16px;color:#444444;">${escapeHtml(row.value)}</p>`).join("");
+  return `<!doctype html><html><head><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><style>:root{color-scheme:light only}body,.email{background:#ffffff!important;color:#202020!important}</style></head>
+  <body style="margin:0;background:#ffffff;color:#202020;">
+  <div class="email" style="max-width:540px;margin:auto;padding:32px 24px;background:#ffffff;color:#202020;font:16px/1.65 Arial,sans-serif;">
+    <p style="font-size:12px;color:#777777;margin:0 0 32px;">Legally Distinct Global Domination</p>
+    <h1 style="font-size:26px;line-height:1.25;margin:0 0 16px;">${escapeHtml(args.title)}</h1>
+    <p style="margin:0 0 24px;">${escapeHtml(args.intro)}</p>
+    ${details}
+    <a href="${escapeHtml(args.ctaUrl)}" style="display:inline-block;background:#202020;color:#ffffff;border-radius:5px;padding:11px 18px;text-decoration:none;font-size:14px;font-weight:600;">${escapeHtml(args.ctaLabel)}</a>
+    <p style="margin:32px 0 0;font-size:12px;color:#777777;">${escapeHtml(args.footer)}</p>
+  </div></body></html>`;
 }
 
 export function verificationEmailHtml(url: string): string {
@@ -101,7 +79,11 @@ export function eliminationEmailHtml(args: {
       : "You have been eliminated from the game.",
     ctaLabel: "View Game",
     ctaUrl: args.gameUrl,
-    detailRows: [{ label: "Status", value: "Eliminated" }],
+
     footer: "You can disable elimination emails from your account settings.",
   });
+}
+
+export function turnReminderEmailHtml(args: { gameName: string; gameUrl: string; deadlineLabel: string; title: string }): string {
+  return appEmailHtml({ title: args.title, intro: `Finish your turn in ${args.gameName} by ${args.deadlineLabel}.`, ctaLabel: "Finish your turn", ctaUrl: args.gameUrl, footer: "You can disable turn emails from your account settings." });
 }

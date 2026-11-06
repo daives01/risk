@@ -1,3 +1,4 @@
+import { scheduleTurnReminders } from "./turnReminders";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -1006,6 +1007,7 @@ export const startGame = mutation({
       turnStartedAt,
       turnDeadlineAt: turnDeadlineAt ?? undefined,
       turnTimeoutJobId,
+      turnReminderJobIds: turnDeadlineAt ? await scheduleTurnReminders(ctx, gameId, engineState.turn.currentPlayerId, turnStartedAt, turnDeadlineAt) : [],
     });
 
     if (isAsyncTimingMode((game.timingMode ?? "realtime") as GameTimingMode)) {

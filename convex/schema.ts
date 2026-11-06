@@ -104,6 +104,8 @@ export default defineSchema({
     winningTeamId: v.optional(v.string()),
     turnStartedAt: v.optional(v.number()),
     turnDeadlineAt: v.optional(v.number()),
+    turnReminderSentKinds: v.optional(v.array(v.string())),
+    turnReminderJobIds: v.optional(v.array(v.id("_scheduled_functions"))),
     turnTimeoutJobId: v.optional(v.id("_scheduled_functions")),
     slackTeamId: v.optional(v.string()),
     slackNotificationsEnabled: v.optional(v.boolean()),
@@ -209,6 +211,7 @@ export default defineSchema({
   userSettings: defineTable({
     userId: v.string(),
     emailTurnNotificationsEnabled: v.boolean(),
+    timeZone: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_userId", ["userId"]),

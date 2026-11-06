@@ -1,3 +1,4 @@
+import { scheduleTurnReminders } from "./turnReminders";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
@@ -245,7 +246,15 @@ export async function executeGameTransition(
   });
   await upsertCurrentGameState(ctx, { gameId: args.gameId, state: nextState, updatedAt: now });
   const isGameOver = nextState.turn.phase === "GameOver";
+  let turnReminderJobIds = game.turnReminderJobIds;
+  if (timing.shouldNotify || isGameOver) {
+    for (const job of turnReminderJobIds ?? []) await ctx.scheduler.cancel(job);
+    turnReminderJobIds = timing.turnStartedAt && timing.turnDeadlineAt
+      ? await scheduleTurnReminders(ctx, args.gameId, nextState.turn.currentPlayerId, timing.turnStartedAt, timing.turnDeadlineAt) : [];
+  }
   await ctx.db.patch(args.gameId, {
+    turnReminderJobIds,
+    ...(timing.shouldNotify || isGameOver ? { turnReminderSentKinds: [] } : {}),
     turnStartedAt: timing.turnStartedAt, turnDeadlineAt: timing.turnDeadlineAt, turnTimeoutJobId,
     ...(isGameOver ? { status: "finished" as const, finishedAt: now, ...winnerFrom(allEvents) } : {}),
   });

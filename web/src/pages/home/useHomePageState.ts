@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useConvexAuth, useQuery } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { api } from "@backend/_generated/api";
 import { authClient } from "@/lib/auth-client";
 import { useHomeKeyboardShortcuts } from "@/pages/home/useHomeKeyboardShortcuts";
@@ -13,6 +13,14 @@ export function useHomePageState() {
   const { data: session, isPending } = authClient.useSession();
   const { isLoading: isConvexAuthLoading, isAuthenticated: isConvexAuthenticated } = useConvexAuth();
   const isAuthenticated = Boolean(session) && isConvexAuthenticated;
+
+  const settings = useQuery(api.userSettings.getMySettings, isAuthenticated ? {} : "skip");
+  const saveTimeZone = useMutation(api.userSettings.setTimeZone);
+  useEffect(() => {
+    if (settings && !settings.timeZone) {
+      void saveTimeZone({ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, onlyIfUnset: true }).catch(() => {});
+    }
+  }, [settings, saveTimeZone]);
 
   const games = useQuery(api.games.listMyGames, isAuthenticated ? {} : "skip") as MyGameType[] | undefined;
   const publicGames = useQuery(api.games.listPublicGames, isAuthenticated ? { limit: 24 } : "skip") as PublicGameType[] | undefined;
