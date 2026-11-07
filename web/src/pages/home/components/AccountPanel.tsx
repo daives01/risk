@@ -256,8 +256,7 @@ export function AccountPanel({ session, isAdmin }: AccountPanelProps) {
             Save timezone
           </Button>
           <p className="text-xs text-muted-foreground">
-            Defaults to your system timezone once. Turn reminders arrive between 8 a.m. and 8 p.m.
-            in this timezone.
+            Reminders arrive between 8 a.m. and 8 p.m.
           </p>
           {timeZoneError && (
             <p role="alert" className="text-sm text-red-400">
