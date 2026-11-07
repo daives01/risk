@@ -17,6 +17,10 @@ export function AccountPanel({ session, isAdmin }: AccountPanelProps) {
   const settings = useQuery(api.userSettings.getMySettings, {})
   const setTurnEmailSetting = useMutation(api.userSettings.setEmailTurnNotificationsEnabled)
 
+  const saveTimeZone = useMutation(api.userSettings.setTimeZone)
+  const [timeZoneDraft, setTimeZoneDraft] = useState<string | null>(null)
+  const [timeZoneError, setTimeZoneError] = useState<string | null>(null)
+
   const sessionUsername = session.user.username ?? ''
 
   const [profileUsername, setProfileUsername] = useState('')
@@ -224,6 +228,42 @@ export function AccountPanel({ session, isAdmin }: AccountPanelProps) {
               disabled={emailSettingSaving || settings === undefined}
             />
           </label>
+          <label className="block space-y-2 text-sm">
+            <span>Timezone</span>
+            <Input
+              list="notification-timezones"
+              value={timeZoneDraft ?? settings?.timeZone ?? ''}
+              onChange={(e) => setTimeZoneDraft(e.target.value)}
+              placeholder="America/Denver"
+            />
+            <datalist id="notification-timezones">
+              {Intl.supportedValuesOf('timeZone').map((zone) => (
+                <option key={zone} value={zone} />
+              ))}
+            </datalist>
+          </label>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!timeZoneDraft}
+            onClick={() => {
+              setTimeZoneError(null)
+              void saveTimeZone({ timeZone: timeZoneDraft! })
+                .then(() => setTimeZoneDraft(null))
+                .catch(() => setTimeZoneError('Choose a valid timezone, such as America/Denver.'))
+            }}
+          >
+            Save timezone
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Defaults to your system timezone once. Turn reminders arrive between 8 a.m. and 8 p.m.
+            in this timezone.
+          </p>
+          {timeZoneError && (
+            <p role="alert" className="text-sm text-red-400">
+              {timeZoneError}
+            </p>
+          )}
           {emailSettingError && <p className="text-sm text-red-400">{emailSettingError}</p>}
         </div>
 

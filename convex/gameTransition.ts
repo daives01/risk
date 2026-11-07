@@ -1,3 +1,4 @@
+import { cancelPendingReminderJobs, scheduleTurnReminders } from './turnReminders'
 import { internal } from './_generated/api'
 import type { Doc, Id } from './_generated/dataModel'
 import type { FunctionArgs } from 'convex/server'
@@ -392,9 +393,27 @@ export async function executeGameTransition(
   await upsertCurrentGameState(ctx, { gameId: args.gameId, state: nextState, updatedAt: now })
   const isGameOver = nextState.turn.phase === 'GameOver'
 
+  let turnReminderJobIds = game.turnReminderJobIds
+
+  if (timing.shouldNotify || isGameOver) {
+    await cancelPendingReminderJobs(ctx, turnReminderJobIds ?? [])
+    turnReminderJobIds =
+      timing.turnStartedAt && timing.turnDeadlineAt
+        ? await scheduleTurnReminders(
+            ctx,
+            args.gameId,
+            nextState.turn.currentPlayerId,
+            timing.turnStartedAt,
+            timing.turnDeadlineAt,
+          )
+        : []
+  }
+
   const gamePatch: Partial<
     Pick<
       Doc<'games'>,
+      | 'turnReminderJobIds'
+      | 'turnReminderSentKinds'
       | 'turnStartedAt'
       | 'turnDeadlineAt'
       | 'turnTimeoutJobId'
@@ -404,6 +423,8 @@ export async function executeGameTransition(
       | 'winningTeamId'
     >
   > = {
+    turnReminderJobIds,
+    turnReminderSentKinds: timing.shouldNotify || isGameOver ? [] : game.turnReminderSentKinds,
     turnStartedAt: timing.turnStartedAt,
     turnDeadlineAt: timing.turnDeadlineAt,
     turnTimeoutJobId,

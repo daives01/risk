@@ -9,7 +9,8 @@ import type { GameState, GraphMap, PlayerId, RulesetConfig } from 'risk-engine'
 import { internal, components } from './_generated/api'
 import type { Id } from './_generated/dataModel'
 import { isAsyncTimingMode } from './gameTiming'
-import { yourTurnEmailHtml } from './emails'
+import { DEFAULT_TIME_ZONE } from './turnReminderTiming'
+import { yourTurnEmailHtml, turnReminderEmailHtml } from './emails'
 import { readGameStateNullable } from './typeAdapters'
 import { getGameStateDoc } from './gameState'
 import { applyTimeoutPolicy, executeGameTransition, GameTransitionRejected } from './gameTransition'
@@ -94,6 +95,8 @@ export const sendYourTurnEmail = internalAction({
     gameId: v.id('games'),
     expectedPlayerId: v.string(),
     turnStartedAt: v.number(),
+    reminder: v.optional(v.boolean()),
+    kind: v.optional(v.union(v.literal('morning'), v.literal('final'))),
   },
   handler: async (ctx, args) => {
     const game = await ctx.runQuery(internal.asyncTurns.getGameForNotification, {
@@ -112,6 +115,8 @@ export const sendYourTurnEmail = internalAction({
       return { sent: false, reason: 'stale_turn' }
     }
 
+    if (args.reminder && (!game.turnDeadlineAt || game.turnDeadlineAt <= Date.now()))
+      return { sent: false, reason: 'expired' }
     const state = readGameStateNullable(game.state)
 
     if (!state || state.turn.currentPlayerId !== args.expectedPlayerId) {
@@ -154,17 +159,40 @@ export const sendYourTurnEmail = internalAction({
     const gameUrl = `${siteUrl}/play/${game._id}`
 
     const turnDeadlineLabel = game.turnDeadlineAt
-      ? new Date(game.turnDeadlineAt).toUTCString()
+      ? new Intl.DateTimeFormat('en-US', {
+          timeZone: settings.timeZone,
+          dateStyle: 'full',
+          timeStyle: 'short',
+        }).format(game.turnDeadlineAt) + ` (${settings.timeZone})`
       : null
+
+    const remaining = Math.max(1, Math.ceil(((game.turnDeadlineAt ?? 0) - Date.now()) / 3600000))
+
+    const localDate = (at: number) =>
+      new Intl.DateTimeFormat('en-CA', { timeZone: settings.timeZone }).format(at)
+
+    const reminderTitle =
+      args.kind === 'final'
+        ? `Your turn ends in ${remaining} ${remaining === 1 ? 'hour' : 'hours'}`
+        : localDate(game.turnDeadlineAt ?? 0) === localDate(Date.now())
+          ? 'Your turn expires today'
+          : 'Your turn expires tomorrow'
 
     await ctx.runAction(internal.sendEmail.sendEmail, {
       to: email,
-      subject: `Your turn: ${game.name}`,
-      html: yourTurnEmailHtml({
-        gameName: game.name,
-        gameUrl,
-        turnDeadlineLabel,
-      }),
+      subject: args.reminder ? `${reminderTitle}: ${game.name}` : `Your turn: ${game.name}`,
+      html: args.reminder
+        ? turnReminderEmailHtml({
+            gameName: game.name,
+            gameUrl,
+            deadlineLabel: turnDeadlineLabel!,
+            title: reminderTitle,
+          })
+        : yourTurnEmailHtml({
+            gameName: game.name,
+            gameUrl,
+            turnDeadlineLabel,
+          }),
     })
 
     return { sent: true }
@@ -202,6 +230,7 @@ export const getUserTurnEmailSetting = internalQuery({
       .unique()
 
     return {
+      timeZone: settings?.timeZone ?? DEFAULT_TIME_ZONE,
       emailTurnNotificationsEnabled: settings?.emailTurnNotificationsEnabled ?? true,
     }
   },
